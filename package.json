@@ -1,0 +1,28 @@
+{
+  "name": "chordpro-vscode",
+  "displayName": "chordpro vscode",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.99.0"
+  },
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "extension.renderChordPro",
+        "title": "Render ChordPro PDF"
+      }
+    ]
+  },
+  "activationEvents": [
+    "onCommand:extension.renderChordPro"
+  ],
+  "devDependencies": {
+    "@types/vscode": "^1.99.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "eslint": "^9.23.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1"
+  }
+}
