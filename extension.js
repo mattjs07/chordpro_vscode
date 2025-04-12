@@ -16,11 +16,14 @@ function renderChordProLogic(context, showPanel = false) {
     const fileBasenameNoExtension = path.basename(filePath, path.extname(filePath));
     const firstLine = editor.document.lineAt(0).text;
 
-    const optionsMatch = firstLine.match(/{options\s*=\s*(.*)}/);
-    const suffixMatch = firstLine.match(/{suffix\s*=\s*(.*)}/);
+    const optionsMatch = firstLine.match(/^#'? {?\s*(option|options)\s*\s*=\s*(.*)\s*}/);
+    const suffixMatch = firstLine.match(/^#'? {?\s*suffix\s*=\s*(["']?)(\S+)\1\s*}/);
 
     let options = optionsMatch?.[1]?.trim() || '';
     let suffix = suffixMatch?.[1]?.trim() || '';
+    
+    // Remove all whitespace characters from the suffix
+    suffix = suffix.replace(/\s+/g, '');
 
     const scriptPath = path.join(context.extensionPath, 'resources', 'bash_for_chordpro_task.sh');
     if (!fs.existsSync(scriptPath)) {
