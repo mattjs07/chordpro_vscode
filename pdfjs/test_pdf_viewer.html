@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF.mjs Test</title>
+  <link rel="stylesheet" href="web/viewer.css" />
+</head>
+<body>
+  <h2>Testing PDF.mjs Locally</h2>
+
+  <!-- Use type="module" for script tags that load ES modules -->
+  <script type="module">
+    // Import pdf.mjs as an ES module
+    import * as pdfjsLib from './build/pdf.mjs';  //<!-- Ensure correct path to your pdf.mjs file -->
+    
+    console.log("PDF.mjs loaded:", pdfjsLib);
+
+    // Set the worker source path for pdf.mjs
+    pdfjsLib.GlobalWorkerOptions.workerSrc = './build/pdf.worker.mjs';  //<!-- Ensure correct path to your pdf.worker.mjs file -->
+
+    // Specify the PDF file you want to test
+    const pdfUrl = 'test_pdf.pdf'; // Update this to the actual path of your local PDF file
+
+    // Fetch and render the PDF
+    const loadingTask = pdfjsLib.getDocument(pdfUrl);
+    loadingTask.promise.then(function(pdf) {
+      console.log("PDF loaded with", pdf.numPages, "pages");
+
+      // Render each page of the PDF (just the first page in this example)
+      pdf.getPage(1).then(function(page) {
+        const scale = 1.5;
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        document.body.appendChild(canvas);
+        page.render({ canvasContext: context, viewport });
+      });
+    }).catch(function(error) {
+      console.error("Error loading PDF:", error);
+    });
+  </script>
+</body>
+</html>

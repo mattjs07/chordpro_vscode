@@ -12,7 +12,24 @@
         "command": "extension.renderChordPro",
         "title": "Render ChordPro PDF"
       }
-    ]
+    ],
+    "keybindings": [
+      {
+        "command": "extension.renderChordPro",
+        "key": "ctrl+shift+b",
+        "when": "editorLangId == 'chordpro'"
+      }
+    ],
+    "configuration": {
+      "title": "ChordPro VSCode",
+      "properties": {
+        "chordpro.buildOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically render ChordPro PDF on file save."
+        }
+      }
+    }
   },
   "activationEvents": [
     "onCommand:extension.renderChordPro"
@@ -24,5 +41,10 @@
     "eslint": "^9.23.0",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mattjs07/chordpro_vscode.git"
+  },
+  "license": "0BSD"
 }
