@@ -1,67 +1,65 @@
 {
-  "settings": {
-    "titles": "center",
-    "columns": 1,
-    "suppress-empty-chords": true,
-    "suppress-empty-lyrics": true,
-    "inline-chords": false,
-    "chords-under": false,
-    "lyrics-only": false,
-    "transpose": 0,
-    "enharmonic-transpose": true,
-    "chords-canonical": false,
-    "choruslabels": true,
-    "truesf": false
+  "name": "chordpro-vscode",
+  "displayName": "chordpro vscode",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.99.0"
   },
-
-  "pdf": {
-    "fontconfig": {
-      "serif": {
-        "": "Times-Roman",
-        "bold": "Times-Bold",
-        "italic": "Times-Italic",
-        "bolditalic": "Times-BoldItalic"
-      },
-      "sans": {
-        "": "Helvetica",
-        "bold": "Helvetica-Bold",
-        "italic": "Helvetica-Oblique",
-        "bolditalic": "Helvetica-BoldOblique"
-      },
-      "mono": {
-        "": "Courier",
-        "bold": "Courier-Bold",
-        "italic": "Courier-Oblique",
-        "bolditalic": "Courier-BoldOblique"
-      }
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "extension.renderChordPro",
+        "title": "Render ChordPro PDF"
     },
-
-    "fonts": {
-      "text": {
-        "name": "serif",
-        "size": 11
-      },
-      "chord": {
-        "name": "sans",
-        "size": 10
-      },
-      "comment": {
-        "name": "italic",
-        "size": 10
-      },
-      "title": {
-        "name": "bold",
-        "size": 14
-      },
-      "subtitle": {
-        "name": "italic",
-        "size": 12
+    {
+        "command": "extension.openChordProMinimalTemplate",
+        "title": "Open ChordPro Minimal Template"
+    },
+    {
+        "command": "extension.openChordProExampleTemplate",
+        "title": "Open ChordPro Example Template"
+    },
+    {
+        "command": "extension.openChordProTemplate",
+        "title": "Open ChordPro Template"
+    }
+    ],
+    "keybindings": [
+      {
+        "command": "extension.renderChordPro",
+        "key": "ctrl+shift+b",
+        "when": "editorLangId == 'chordpro'"
+      }
+    ],
+    "configuration": {
+      "title": "ChordPro VSCode",
+      "properties": {
+        "chordpro.buildOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically render ChordPro PDF on file save."
+        }
       }
     }
   },
-
-  "user": {
-    "name": "Your Name",
-    "fullname": "Your Full Name"
-  }
+  "activationEvents": [
+        "onCommand:extension.renderChordPro",
+        "onCommand:extension.openChordProMinimalTemplate",
+        "onCommand:extension.openChordProExampleTemplate",
+        "onCommand:extension.openChordProTemplate"
+    ],
+  "devDependencies": {
+    "@types/vscode": "^1.99.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "eslint": "^9.23.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mattjs07/chordpro_vscode.git"
+  },
+  "license": "0BSD"
 }
