@@ -2,9 +2,11 @@
 # Check https://www.chordpro.org/chordpro/using-chordpro/ for details!
 # For no options or suffix, don't write anything after =. Can even delete those lines.
 # Output supersedes suffix
+# Default config is modern1, can specify another (e.g "dark"), or a path to your config.json file.
 
 # {options =}
 # {suffix =}
 # {output =}
+# {config =}
 
 {title: }

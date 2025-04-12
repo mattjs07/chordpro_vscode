@@ -39,7 +39,7 @@ function renderChordProLogic(context) {
     let config_path = '';
 
     // Iterate over all lines in the document
-    for (let i = 0; i < Math.min(10, document.lineCount); i++) {
+    for (let i = 0; i < Math.min(25, document.lineCount); i++) {
         const line = document.lineAt(i).text;
 
         // Match for options
