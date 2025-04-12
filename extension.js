@@ -3,7 +3,7 @@ const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-function renderChordProLogic(context, showPanel = false) {
+function renderChordProLogic(context) {
     const editor = vscode.window.activeTextEditor;
 
     if (!editor) {
@@ -11,19 +11,45 @@ function renderChordProLogic(context, showPanel = false) {
         return;
     }
 
+    const document = editor.document;
     const filePath = editor.document.uri.fsPath;
     const fileDirname = path.dirname(filePath);
     const fileBasenameNoExtension = path.basename(filePath, path.extname(filePath));
-    const firstLine = editor.document.lineAt(0).text;
 
-    const optionsMatch = firstLine.match(/^#'? {?\s*(option|options)\s*\s*=\s*(.*)\s*}/);
-    const suffixMatch = firstLine.match(/^#'? {?\s*suffix\s*=\s*(["']?)(\S+)\1\s*}/);
+    let options = '';
+    let suffix = '';
+    let outputFile = '';
 
-    let options = optionsMatch?.[1]?.trim() || '';
-    let suffix = suffixMatch?.[1]?.trim() || '';
-    
+    // Iterate over all lines in the document
+    for (let i = 0; i < Math.min(10, document.lineCount); i++) {
+        const line = document.lineAt(i).text;
+
+        // Match for options
+        const optionsMatch = line.match(/^#'? {?\s*(option|options)\s*=\s*(.*)\s*}/);
+        if (optionsMatch) {
+            options = optionsMatch[2].trim();
+        }
+
+        // Match for suffix
+        const suffixMatch = line.match(/^#'? {?\s*suffix\s*=\s*(["']?)(\S+)\1\s*}/);
+        if (suffixMatch) {
+            suffix = suffixMatch[2].trim().replace(/\s+/g, '');
+        }
+
+        // Match for output
+        const outputMatch = line.match(/^#'? {?\s*output\s*=\s*(["']?)(\S+)\1\s*}/);
+        if (outputMatch) {
+            outputFile = outputMatch[2].trim();
+        }
+    }
+
     // Remove all whitespace characters from the suffix
     suffix = suffix.replace(/\s+/g, '');
+
+    // If no output filename is specified, construct it using the base name and suffix
+    if (!outputFile) {
+        outputFile = suffix ? `${fileBasenameNoExtension}_${suffix}.pdf` : `${fileBasenameNoExtension}.pdf`;
+    }
 
     const scriptPath = path.join(context.extensionPath, 'resources', 'bash_for_chordpro_task.sh');
     if (!fs.existsSync(scriptPath)) {
@@ -31,12 +57,16 @@ function renderChordProLogic(context, showPanel = false) {
         return;
     }
 
-    let command = `bash "${scriptPath}" "${filePath}" "${fileDirname}/${fileBasenameNoExtension}"`;
-    if (options) command += ` ${options}`;
-    if (suffix) command += ` ${suffix}`;
+    // Build the command string to execute the bash script
+    let command = `bash "${scriptPath}" "${filePath}" "${fileDirname}/${outputFile}"`;
+    if (options) {
+        // Ensure options are quoted in case they contain spaces
+        command += ` "${options}"`;
+    }
 
-    console.log('Running command: ', command);
+    console.log('Running command: ', command);  // For debugging purposes, remove or comment this in production
 
+    // Execute the command
     exec(command, (error, stdout, stderr) => {
         if (error) {
             vscode.window.showErrorMessage(`Error: ${error.message}`);
@@ -48,82 +78,24 @@ function renderChordProLogic(context, showPanel = false) {
         }
 
         vscode.window.showInformationMessage(`ChordPro PDF rendered.`);
-
-        if (showPanel) {
-            const outputSuffix = suffix ? `_${suffix}` : '';
-            const outputPdfPath = `${fileDirname}/${fileBasenameNoExtension}${outputSuffix}.pdf`;
-
-            if (!fs.existsSync(outputPdfPath)) {
-                vscode.window.showErrorMessage(`PDF not found at ${outputPdfPath}`);
-                return;
-            }
-
-            const panel = vscode.window.createWebviewPanel(
-                'chordpro.pdfPreview',               // Identifies the type of the webview. Used internally
-                'ChordPro PDF Preview',              // Title of the panel displayed to the user
-                vscode.ViewColumn.Beside,            // Editor column to show the new webview panel in
-                {
-                    enableScripts: false,            // Whether the webview can run scripts
-                    localResourceRoots: [            // 👈 This is where you add it
-                        vscode.Uri.file(fileDirname) // 👈 This grants access to the folder with the PDF
-                    ]
-                }
-            );
-
-            const pdfUri = vscode.Uri.file(outputPdfPath);
-            const pdfWebviewUri = panel.webview.asWebviewUri(pdfUri);
-
-            // 🔍 Log paths for debugging
-            console.log('PDF URI:', outputPdfPath);
-            console.log('Webview URI:', pdfWebviewUri.toString());
-
-            console.log('PDF URI:', outputPdfPath);
-            console.log('Webview URI:', pdfWebviewUri.toString());
-
-            panel.webview.html = `
-                <!DOCTYPE html>
-                <html lang="en">
-                <head>
-                    <meta charset="UTF-8">
-                    <style>
-                        html, body, iframe {
-                            margin: 0;
-                            padding: 0;
-                            width: 100%;
-                            height: 100%;
-                            border: none;
-                        }
-                    </style>
-                </head>
-                <body>
-                    <iframe src="${pdfWebviewUri}" frameborder="0"></iframe>
-                </body>
-                </html>
-            `;
-        }
     });
 }
 
 function activate(context) {
     const renderOnly = vscode.commands.registerCommand('extension.renderChordPro', function () {
-        renderChordProLogic(context, false);
+        renderChordProLogic(context);
     });
 
-    const renderAndShow = vscode.commands.registerCommand('extension.renderChordProInSidePanel', function () {
-        renderChordProLogic(context, true);
-    });
-
-    // Build on save if setting is enabled
     const onSaveDisposable = vscode.workspace.onDidSaveTextDocument((document) => {
         const config = vscode.workspace.getConfiguration('chordpro');
         const isEnabled = config.get('buildOnSave', false);
 
         if (isEnabled && document.languageId === 'chordpro') {
-            renderChordProLogic(context, false);
+            renderChordProLogic(context);
         }
     });
 
-    context.subscriptions.push(renderOnly, renderAndShow, onSaveDisposable);
+    context.subscriptions.push(renderOnly, onSaveDisposable);
 }
 
 function deactivate() {}
