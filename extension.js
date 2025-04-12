@@ -3,6 +3,23 @@ const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+
+// Function to open a ChordPro template
+function openChordProTemplate(context, templateName) {
+    const templatePath = path.join(context.extensionPath, 'templates', `${templateName}_template.txt`);
+
+    fs.readFile(templatePath, 'utf8', (err, data) => {
+        if (err) {
+            vscode.window.showErrorMessage(`Failed to read ${templateName} template file.`);
+            return;
+        }
+
+        vscode.workspace.openTextDocument({ content: data, language: 'text' }).then(doc => {
+            vscode.window.showTextDocument(doc);
+        });
+    });
+}
+
 function renderChordProLogic(context) {
     const editor = vscode.window.activeTextEditor;
 
@@ -82,10 +99,27 @@ function renderChordProLogic(context) {
 }
 
 function activate(context) {
+    // Register the renderChordPro command
     const renderOnly = vscode.commands.registerCommand('extension.renderChordPro', function () {
         renderChordProLogic(context);
     });
 
+    // Register the openChordProMinimalTemplate command
+    const openChordProMinimalTemplate = vscode.commands.registerCommand('extension.openChordProMinimalTemplate', function () {
+        openChordProTemplate(context, 'minimal');
+    });
+
+    // Register the openChordProExampleTemplate command
+    const openChordProExampleTemplate = vscode.commands.registerCommand('extension.openChordProExampleTemplate', function () {
+        openChordProTemplate(context, 'example');
+    });
+
+    // Register the openChordProTemplate command
+    const openChordProTemplateCommand = vscode.commands.registerCommand('extension.openChordProTemplate', function () {
+        openChordProTemplate(context, 'default');
+    });
+
+    // Register save event listener
     const onSaveDisposable = vscode.workspace.onDidSaveTextDocument((document) => {
         const config = vscode.workspace.getConfiguration('chordpro');
         const isEnabled = config.get('buildOnSave', false);
@@ -95,8 +129,16 @@ function activate(context) {
         }
     });
 
-    context.subscriptions.push(renderOnly, onSaveDisposable);
+    // Add disposables to context.subscriptions
+    context.subscriptions.push(
+        renderOnly,
+        openChordProMinimalTemplate,
+        openChordProExampleTemplate,
+        openChordProTemplateCommand,
+        onSaveDisposable
+    );
 }
+
 
 function deactivate() {}
 

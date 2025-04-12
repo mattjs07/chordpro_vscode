@@ -1,0 +1,59 @@
+# Define the options if any for the rendering.
+# Check https://www.chordpro.org/chordpro/using-chordpro/ for details!
+# For no options or suffix, don't write anything after =. Can even delete those lines.
+# Output supersedes suffix
+
+# {options = -l}
+# {suffix = "lyrics_only"}
+# {output =}
+
+{title: The Beatles - Yesterday}
+
+
+{define: F  base-fret 1 frets 1 3 3 2 1 1 fingers 1 3 4 2 1 1}
+{define: Bb  base-fret 1 frets x 1 3 3 3 1 fingers x 1 2 3 4 1}
+{define: Gm  base-fret 3 frets 1 3 3 1 1 1 fingers 1 3 4 1 1 1}
+
+{start_of_verse}
+[F]Yesterday [Em]all my [A]troubles seemed so [Dm]far away. [Dm] [Dm/C] 
+[Bb]Now it [C]looks as though they're [F]here to stay. [F] [F/E]
+[Dm]Oh, I [G]believe in [Bb]yes[F]terday.
+{end_of_verse}
+
+{start_of_verse}
+[F]Suddenly, [Em]I'm not [A]half the man I [Dm]used to be. [Dm] [Dm/C]
+[Bb]There's a [C]shadow hanging [F]over me. [F] [F/E]
+[Dm]Oh, yester[G]day came [Bb]sudd[F]enly.
+{end_of_verse}
+
+{start_of_chorus}
+[Em]Why [A]she [Dm]had [C]to [Bb]go?
+[A]I don[Gm]'t know, she [C]wouldn't [F]say.
+[Em]I [A]said [Dm]some[C]thing [Bb]wrong.
+[A]Now I [Gm]long [C]for yesterd[F]ay.
+{end_of_chorus}
+
+{start_of_verse}
+[F]Yesterday [Em]love was [A]such an easy [Dm]game to play. [Dm] [Dm/C] 
+[Bb]Now I [D]need a place to [F]hide away [F] [F/E].
+[Dm]Oh, I bel[G]ieve in [Bd]yester[F]day.
+{end_of_verse}
+
+{start_of_chorus}
+[Em]Why [A]she [Dm]had [C]to [Bb]go?
+[A]I don[Gm]'t know, she [C]wouldn't [F]say.
+[Em]I [A]said [Dm]some[C]thing [Bb]wrong.
+[A]Now I [Gm]long [C]for yesterd[F]ay.
+{end_of_chorus}
+
+{start_of_verse}
+[F]Yesterday [Em]love was [A]such an easy [Dm]game to play. [Dm] [Dm/C] 
+[Bb]Now I [D]need a place to [F]hide away [F] [F/E].
+[Dm]Oh, I bel[G]ieve in [Bd]yester[F]day.
+{end_of_verse}
+
+
+[G]Mm mm [C]mm mm [Bb]mm [F]mm mm. 
+
+
+

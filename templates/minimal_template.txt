@@ -1,0 +1,10 @@
+# Define the options if any for the rendering.
+# Check https://www.chordpro.org/chordpro/using-chordpro/ for details!
+# For no options or suffix, don't write anything after =. Can even delete those lines.
+# Output supersedes suffix
+
+# {options =}
+# {suffix =}
+# {output =}
+
+{title: }

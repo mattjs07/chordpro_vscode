@@ -11,7 +11,19 @@
       {
         "command": "extension.renderChordPro",
         "title": "Render ChordPro PDF"
-      }
+    },
+    {
+        "command": "extension.openChordProMinimalTemplate",
+        "title": "Open ChordPro Minimal Template"
+    },
+    {
+        "command": "extension.openChordProExampleTemplate",
+        "title": "Open ChordPro Example Template"
+    },
+    {
+        "command": "extension.openChordProTemplate",
+        "title": "Open ChordPro Template"
+    }
     ],
     "keybindings": [
       {
@@ -32,8 +44,11 @@
     }
   },
   "activationEvents": [
-    "onCommand:extension.renderChordPro"
-  ],
+        "onCommand:extension.renderChordPro",
+        "onCommand:extension.openChordProMinimalTemplate",
+        "onCommand:extension.openChordProExampleTemplate",
+        "onCommand:extension.openChordProTemplate"
+    ],
   "devDependencies": {
     "@types/vscode": "^1.99.0",
     "@types/mocha": "^10.0.10",
