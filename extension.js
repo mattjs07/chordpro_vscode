@@ -36,6 +36,7 @@ function renderChordProLogic(context) {
     let options = '';
     let suffix = '';
     let outputFile = '';
+    let config_path = '';
 
     // Iterate over all lines in the document
     for (let i = 0; i < Math.min(10, document.lineCount); i++) {
@@ -58,10 +59,22 @@ function renderChordProLogic(context) {
         if (outputMatch) {
             outputFile = outputMatch[2].trim();
         }
+        
+        // Match for config
+        const configMatch = line.match(/^#'? {?\s*config\s*=\s*(["']?)(\S+)\1\s*}/);
+        if (configMatch && configMatch[2]) {
+            config_path = configMatch[2].trim();
+        }
     }
 
-    // Remove all whitespace characters from the suffix
+    // Remove all whitespace characters from the suffix and configpath
     suffix = suffix.replace(/\s+/g, '');
+    config_path = config_path.replace(/\s+/g, '');
+
+    // If no config  is specified, default will be modern1
+    if (!config_path) {
+        config_path = 'modern1';
+    }
 
     // If no output filename is specified, construct it using the base name and suffix
     if (!outputFile) {
@@ -75,7 +88,7 @@ function renderChordProLogic(context) {
     }
 
     // Build the command string to execute the bash script
-    let command = `bash "${scriptPath}" "${filePath}" "${fileDirname}/${outputFile}"`;
+    let command = `bash "${scriptPath}" "${filePath}" "${fileDirname}/${outputFile}" "${config_path}"`;
     if (options) {
         // Ensure options are quoted in case they contain spaces
         command += ` "${options}"`;
