@@ -20,6 +20,17 @@ function openChordProTemplate(context, templateName) {
     });
 }
 
+function resolveConfigPath(configPath, fileDirname) {
+    // Check if configPath ends with '.json'
+    if (configPath.endsWith('.json')) {
+        // It's a file path; resolve it relative to the script's directory
+        return path.resolve(fileDirname, configPath);
+    } else {
+        // It's a named profile; return as-is
+        return configPath;
+    }
+}
+
 function renderChordProLogic(context) {
     const editor = vscode.window.activeTextEditor;
 
@@ -76,6 +87,9 @@ function renderChordProLogic(context) {
         config_path = 'modern1';
     }
 
+    // Resolve the config path (relative or absolute)
+    config_path = resolveConfigPath(config_path, fileDirname);
+
     // If no output filename is specified, construct it using the base name and suffix
     if (!outputFile) {
         outputFile = suffix ? `${fileBasenameNoExtension}_${suffix}.pdf` : `${fileBasenameNoExtension}.pdf`;
@@ -93,6 +107,8 @@ function renderChordProLogic(context) {
         // Ensure options are quoted in case they contain spaces
         command += ` "${options}"`;
     }
+
+    console.log('File Directory:', fileDirname);
 
     console.log('Running command: ', command);  // For debugging purposes, remove or comment this in production
 
