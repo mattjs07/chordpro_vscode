@@ -1,65 +1,63 @@
-# chordpro-vscode README
+# chordpro-vscode
 
-This extension allows you to edit and render chordpro files.
+This extension allows you to edit and render chordpro files in vscode. While easily passing rendering parameters directly in source code.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
 
-For example if there is an image subfolder under your extension project workspace:
+- [x] Allows to compile chordpro files with the function "Render ChordPro PDF"
+- [x] Keyboard shortcut for rendering .cho : Ctrl+Shift+B
+- [x] Possibility to activate "Build on save" from extension settings.
+- [x] Write rendering parameters directly in source code. 
+- [ ] Render and open pdf document in side pannel.
+- [ ] Preview result in side panel.
+- [ ] Synthax highlighting.
 
-\!\[feature X\]\(images/feature-x.png\)
+## Functions
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
-
+- "Render ChordPro PDF"
+  - Compile and renders your `.cho` file, fetching parameters from the first 25 lines of the file. 
+- "Open ChordPro Minimal Template"
+  - Minimal template to write a compatible `.cho` file.
+- "Open ChordPro Example Template"
+  - Example of Yesterday by The Beatles.
+  
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+  Install Chordpro  from  [official website](https://www.chordpro.org/chordpro/chordpro-installation/) and make sure to **add chordpro to system PATH**.
 
-## Extension Settings
+## Advices
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
+- Use `.cho` extension for your chordpro files to make sure the extension recognizes the language (for functions to work).
+- Combine this extension with the VScode extension [ChordPro by ricardomfmsousa](https://marketplace.visualstudio.com/items/?itemName=ricardomfmsousa.chordpro)  to enjoy synthax highlighting!
 
 ## Release Notes
 
-Users appreciate release notes as you update your extension.
+### 0.0.1
 
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
+Beta product with basic functions.
 
 ---
 
-## Working with Markdown
+## Working with chordpro_vscode
 
-You can author your README using Visual Studio Code.  Here are some useful editor keyboard shortcuts:
+1. You can open an example or minimal template through functions
+  - "Open ChordPro Minimal Template"
+  - "Open ChordPro Example Template"
+2. Configure your rendering parameters:
+   - All parameters can be written quoted or not.
+   - Config can be one of the [preset config](https://www.chordpro.org/chordpro/chordpro-configuration-presets/#preset-configurations) OR a path to your config.json file (either absolute or relative to your .cho file folder)
 
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux)
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux)
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets
+ ```
+# {options = -l}
+# {suffix = "lyrics_only"}
+# {output =}
+# {config ="dark"}
+```
+3. Render your .cho file using "Render ChordPro PDF"
+4. From file explorer, open PDF in side panel.
+5. From now on "Render ChordPro PDF" and Ctrl+s (if activate build on save) will update automatically the opened PDF. 
 
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+*Note*: If change suffix or output name, need to open the new pdf file.
 
 **Enjoy!**
