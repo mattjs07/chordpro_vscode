@@ -12,6 +12,8 @@ This extension allows you to edit and render chordpro files in vscode. While eas
 - [ ] Render and open pdf document in side pannel.
 - [ ] Preview result in side panel.
 - [ ] Synthax highlighting.
+- [ ] Ultimate Guitarto and from ChordPro converter based on [ChordSheetJS](https://github.com/martijnversluis/ChordSheetJS)
+- [ ] Auto-scrolling
 
 ## Functions
 
@@ -61,3 +63,14 @@ Beta product with basic functions.
 *Note*: If change suffix or output name, need to open the new pdf file.
 
 **Enjoy!**
+
+
+## For those looking for online tools: 
+
+Some great websites exist such as:
+- [Songcraft.io](https://songcraft.io/). (**This is truely great**)
+  - Many awesome functionalities (BPM, autoscrollling, visual editor, chord progressions, chord dragging, tuner, version history, music and lyrics writings helping tools, collaboration)
+  - 5 free songs, then minimum 4e / month
+- [Chordly.io](https://chordly.io/)
+  - Metronome, autoplay 
+  - Entirely free as of 2025-04-13
