@@ -1,6 +1,7 @@
 {
   "name": "chordpro-vscode",
   "displayName": "chordpro vscode",
+  "publisher": "mattjs07",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.99.0"
