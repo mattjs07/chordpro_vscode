@@ -1,6 +1,6 @@
 # chordpro-vscode
 
-Edit, render, and build ChordPro songs in VSCode — with PDF preview, an interactive chord builder, auto-completion, syntax highlighting, auto-scroll preview, visual tab editor, and a guided rendering configurator.
+Edit, render, and build ChordPro songs in VSCode — with PDF preview, an interactive chord builder, auto-completion, syntax highlighting, auto-scroll preview, visual tab editor, chord diagram hover, and a guided rendering configurator.
 
 ## Features
 
@@ -13,7 +13,8 @@ Edit, render, and build ChordPro songs in VSCode — with PDF preview, an intera
 - [x] **Tab Editor** — visual 6-string grid to write tablature without typing dashes (`Ctrl+Alt+T`)
 - [x] **Chord Analyzer** — opens Oolimo chord analyzer in a side panel (`Ctrl+Alt+A`)
 - [x] **Auto-completion** — type `{` for directive suggestions, `[` for chord suggestions
-- [x] Chords saved in the Chord Builder appear first in the `[` completion list
+- [x] Chords defined in the file (`{define:}`) and saved in the Chord Builder appear first in the `[` completion list
+- [x] **Chord Diagram Hover** — hover over any `[chord]` token to see a fretboard diagram
 - [x] **Syntax highlighting** — chords, directives, sections, comments
 - [x] **Transpose** — shift all chords (or a selection) up/down by semitones, with musical interval labels
 - [ ] Ultimate Guitar to/from ChordPro converter
@@ -35,6 +36,15 @@ Edit, render, and build ChordPro songs in VSCode — with PDF preview, an intera
 | Configure ChordPro Rendering | — | Guided UI to set config, options, suffix, output (also via ⚙ CodeLens) |
 | Transpose Chords | — | Transpose all chords (or a selection) by any number of semitones |
 
+## Chord Diagram Hover
+
+Hover over any `[chord]` token in your `.cho` file to see a fretboard diagram popup.
+
+- Diagrams are shown for a built-in library of ~100 common chords (all roots × major, minor, 7th, maj7, sus, dim, aug, 6, 9, 11, 13, m7b5, mmaj7, 69, and more)
+- **`{define:}` blocks in the file take priority** — if a chord is defined in the file, that exact fingering is shown instead of the built-in default
+- Chords saved via the Chord Builder also override the built-in library (priority: file defines > Chord Builder > built-in)
+- If no diagram is available, the chord name is shown in bold
+
 ## Chord Builder
 
 Open the **Chord Builder** panel (`Ctrl+Alt+D` or from the panel at the bottom).
@@ -44,6 +54,7 @@ Open the **Chord Builder** panel (`Ctrl+Alt+D` or from the panel at the bottom).
 - Click a suggestion to fill the name field, or type your own
 - Click **Insert definition** to insert the `{define: ...}` block into the active editor
 - Saved chords appear at the top of the `[` auto-completion list
+- Chords defined via `{define:}` in the file are also recognised — they appear in completions, the insert-from-list picker, and the hover diagram without needing to re-save them in the Chord Builder
 
 ## Tab Editor
 
@@ -60,7 +71,7 @@ Open the **Tab Editor** (`Ctrl+Alt+T`). A visual 6-string grid appears beside th
 
 ## Auto-scroll Preview
 
-Press `Ctrl+Alt+S` to render the current song as HTML and open it in a side panel.
+Press `Ctrl+Alt+S` to render the current song as HTML and open it in **performance mode** — a clean, distraction-free side panel designed for playing along.
 
 - The song is parsed and rendered directly — no ChordPro CLI needed for this view
 - A floating control bar at the bottom lets you play/pause and adjust speed
@@ -153,6 +164,12 @@ Install ChordPro from the [official website](https://www.chordpro.org/chordpro/c
 - The `config` preset `modern1` is a good default; try `dark` for a dark-themed PDF
 
 ## Release Notes
+
+### 1.0.0
+- Added **Chord Diagram Hover** — hover over any `[chord]` token to see an SVG fretboard popup
+- Built-in fingering library covering ~100 chords: all roots × major, minor, 7th, maj7, sus2/4, add9, dim, dim7, aug, 5, 6, m6, 9, maj9, 11, 13, maj13, 69, 7sus4, 7b9, 7#9, 7b5, 7#5, m7b5, mmaj7
+- `{define:}` blocks in the file are parsed automatically — their fingerings appear in the hover diagram, chord completions, and insert-from-list picker without any manual save step
+- Chord Builder saved chords also override the built-in library (priority: file defines > Chord Builder > built-in)
 
 ### 0.9.0
 - Added **Transpose Chords** command (command palette: "Transpose Chords")

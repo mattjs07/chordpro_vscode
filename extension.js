@@ -22,6 +22,338 @@ function openChordProTemplate(context, templateName) {
 }
 
 // ─────────────────────────────────────────────
+// Chord diagram hover — database + SVG generator
+// ─────────────────────────────────────────────
+
+// frets: [lowE, A, D, G, B, highE]  -1=muted  0=open  N=fret number
+const CHORD_DB = {
+    // C family
+    'C':     [-1, 3, 2, 0, 1, 0],
+    'Cm':    [-1, 3, 5, 5, 4, 3],
+    'C7':    [-1, 3, 2, 3, 1, 0],
+    'Cmaj7': [-1, 3, 2, 0, 0, 0],
+    'Cadd9': [-1, 3, 2, 0, 3, 3],
+    'Csus2': [-1, 3, 0, 0, 1, 0],
+    // D family
+    'D':     [-1, -1, 0, 2, 3, 2],
+    'Dm':    [-1, -1, 0, 2, 3, 1],
+    'D7':    [-1, -1, 0, 2, 1, 2],
+    'Dmaj7': [-1, -1, 0, 2, 2, 2],
+    'Dadd9': [-1, -1, 0, 2, 3, 0],
+    'Dsus2': [-1, -1, 0, 2, 3, 0],
+    'Dsus4': [-1, -1, 0, 2, 3, 3],
+    'Dm7':   [-1, -1, 0, 2, 1, 1],
+    // E family
+    'E':     [ 0, 2, 2, 1, 0, 0],
+    'Em':    [ 0, 2, 2, 0, 0, 0],
+    'E7':    [ 0, 2, 0, 1, 0, 0],
+    'Em7':   [ 0, 2, 2, 0, 3, 0],
+    'Emaj7': [ 0, 2, 1, 1, 0, 0],
+    'Esus4': [ 0, 2, 2, 2, 0, 0],
+    // F family
+    'F':     [ 1, 3, 3, 2, 1, 1],
+    'Fm':    [ 1, 3, 3, 1, 1, 1],
+    'F7':    [ 1, 3, 1, 2, 1, 1],
+    'Fmaj7': [-1, -1, 3, 2, 1, 0],
+    // G family
+    'G':     [ 3, 2, 0, 0, 0, 3],
+    'Gm':    [ 3, 5, 5, 3, 3, 3],
+    'G7':    [ 3, 2, 0, 0, 0, 1],
+    'Gmaj7': [ 3, 2, 0, 0, 0, 2],
+    'Gsus4': [ 3, 3, 0, 0, 1, 3],
+    'Gadd9': [ 3, 2, 0, 2, 0, 3],
+    // A family
+    'A':     [-1, 0, 2, 2, 2, 0],
+    'Am':    [-1, 0, 2, 2, 1, 0],
+    'A7':    [-1, 0, 2, 0, 2, 0],
+    'Am7':   [-1, 0, 2, 0, 1, 0],
+    'Amaj7': [-1, 0, 2, 1, 2, 0],
+    'Asus2': [-1, 0, 2, 2, 0, 0],
+    'Asus4': [-1, 0, 2, 2, 3, 0],
+    'A9':    [-1, 0, 2, 4, 2, 0],
+    // B family
+    'B':     [-1, 2, 4, 4, 4, 2],
+    'Bm':    [-1, 2, 4, 4, 3, 2],
+    'B7':    [-1, 2, 1, 2, 0, 2],
+    'Bm7':   [-1, 2, 4, 2, 3, 2],
+    // Bb / A#
+    'Bb':    [-1, 1, 3, 3, 3, 1],
+    'Bbm':   [-1, 1, 3, 3, 2, 1],
+    'Bb7':   [-1, 1, 3, 1, 3, 1],
+    // F# / Gb
+    'F#':    [ 2, 4, 4, 3, 2, 2],
+    'F#m':   [ 2, 4, 4, 2, 2, 2],
+    'F#7':   [ 2, 4, 2, 3, 2, 2],
+    'F#m7':  [ 2, 4, 2, 2, 2, 2],
+    // C# / Db
+    'C#':    [-1, 4, 6, 6, 6, 4],
+    'C#m':   [-1, 4, 6, 6, 5, 4],
+    'Db':    [-1, 4, 6, 6, 6, 4],
+    // Ab / G#
+    'Ab':    [ 4, 6, 6, 5, 4, 4],
+    'Abm':   [ 4, 6, 6, 4, 4, 4],
+    // Eb / D#
+    'Eb':    [-1, 6, 8, 8, 8, 6],
+    'Ebm':   [-1, 6, 8, 8, 7, 6],
+
+    // ── aug (augmented triad) ─────────────────────────────────────────
+    // Note: augmented chords repeat every 4 semitones, so some shapes are shared
+    'Caug':  [ 0, 3, 2, 1, 1, 0],   // E,C,E,G#,C,E
+    'Daug':  [-1,-1, 0, 3, 3, 2],   // D,Bb,D,F#
+    'Eaug':  [ 0, 3, 2, 1, 1, 0],   // same notes as Caug (C/E/Ab aug family)
+    'Faug':  [ 1, 4, 3, 2, 2, 1],   // F,C#,F,A,C#,F
+    'Gaug':  [ 3, 2, 1, 0, 0, 3],   // G,B,Eb,G,B,G
+    'Aaug':  [-1, 0, 3, 2, 2, 1],   // A,F,A,C#,F
+    'Baug':  [-1, 2, 1, 0, 0,-1],   // B,Eb,G,B
+
+    // ── dim (diminished triad) ────────────────────────────────────────
+    'Cdim':  [-1, 3, 4, 5, 4,-1],   // C,Gb,C,Eb
+    'Ddim':  [-1,-1, 0, 1, 1, 1],   // D,Eb,C,F (open position; includes minor 7th)
+    'Edim':  [ 0, 1, 2, 3, 2, 3],   // E,Bb,E,Bb,Db,G
+    'Gdim':  [ 3, 4, 5, 3,-1,-1],   // G,Db,G,Bb
+    'Adim':  [-1, 0, 1, 2, 1,-1],   // A,Eb,A,C
+    'Bdim':  [-1, 2, 3, 4, 3,-1],   // B,F,B,D
+
+    // ── dim7 (diminished seventh) ─────────────────────────────────────
+    'Cdim7': [-1, 3, 4, 5, 4, 5],   // C,Gb,C,Eb,A
+    'Ddim7': [-1,-1, 0, 1, 0, 1],   // D,Eb,D,Ab (symmetric shape)
+    'Edim7': [ 0, 1, 2, 3, 2, 3],   // E,Bb,E,Bb,Db,G
+    'Gdim7': [ 3, 4, 5, 3, 5, 3],   // G,Db,G,Bb,E,G
+    'Adim7': [-1, 0, 1, 2, 1, 2],   // A,Eb,A,C,Ab
+    'Bdim7': [-1, 2, 3, 4, 3, 4],   // B,F,B,D,Ab
+
+    // ── 5 (power chord) ───────────────────────────────────────────────
+    'C5':    [-1, 3, 5,-1,-1,-1],   // C,G
+    'D5':    [-1,-1, 0, 2,-1,-1],   // D,A
+    'E5':    [ 0, 2, 2,-1,-1,-1],   // E,B,E
+    'F5':    [ 1, 3, 3,-1,-1,-1],   // F,C
+    'G5':    [ 3, 5, 5,-1,-1,-1],   // G,D
+    'A5':    [-1, 0, 2, 2,-1,-1],   // A,E,A
+    'B5':    [-1, 2, 4, 4,-1,-1],   // B,F#
+
+    // ── 6 (major sixth) ───────────────────────────────────────────────
+    'C6':    [-1, 3, 2, 2, 1, 0],   // C,E,A,E
+    'D6':    [-1,-1, 0, 2, 0, 2],   // D,A,B,F#
+    'E6':    [ 0, 2, 2, 1, 2, 0],   // E,B,E,G#,C#,E
+    'G6':    [ 3, 2, 0, 0, 0, 0],   // G,B,D,G,B,E
+    'A6':    [-1, 0, 2, 2, 2, 2],   // A,E,A,C#,F#
+
+    // ── m6 (minor sixth) ──────────────────────────────────────────────
+    'Cm6':   [-1, 3, 5, 5, 4, 5],   // C,G,C,Eb,A
+    'Dm6':   [-1,-1, 0, 2, 0, 1],   // D,A,B,F
+    'Em6':   [ 0, 2, 2, 0, 2, 0],   // E,B,E,G,C#,E
+    'Am6':   [-1, 0, 2, 2, 1, 2],   // A,E,A,C,F#
+
+    // ── add4 (add11 — adds perfect 4th without omitting 3rd) ─────────
+    'Cadd4': [-1, 3, 3, 0, 1, 0],   // C,F,G,C,E
+    'Gadd4': [ 3, 2, 0, 0, 1, 3],   // G,B,D,G,C,G
+
+    // ── 9 (dominant ninth) ────────────────────────────────────────────
+    'C9':    [-1, 3, 2, 3, 3, 3],   // C,E,Bb,D,G
+    'E9':    [ 0, 2, 0, 1, 0, 2],   // E,B,D,G#,B,F#
+    'G9':    [ 3, 2, 0, 2, 0, 1],   // G,B,D,A,B,F
+    // A9 already defined above
+
+    // ── maj9 (major ninth) ────────────────────────────────────────────
+    'Cmaj9': [-1, 3, 2, 0, 3, 0],   // C,E,G,D,E (no maj7 — practical open voicing)
+    'Amaj9': [-1, 0, 2, 1, 0, 0],   // A,E,G#,B,E
+
+    // ── 7sus4 ─────────────────────────────────────────────────────────
+    'C7sus4':[-1, 3, 3, 3, 1, 1],   // C,F,Bb,C,F
+    'D7sus4':[-1,-1, 0, 2, 1, 3],   // D,A,C,G
+    'E7sus4':[ 0, 2, 2, 2, 0, 0],   // E,B,E,A,B,E
+    'G7sus4':[ 3, 3, 0, 0, 1, 1],   // G,C,D,G,C,F
+    'A7sus4':[-1, 0, 2, 2, 3, 3],   // A,E,A,D,G
+
+    // ── 7b9 ───────────────────────────────────────────────────────────
+    'E7b9':  [ 0, 2, 0, 1, 0, 1],   // E,B,D,G#,B,F
+    'A7b9':  [-1, 0, 2, 3, 2, 3],   // A,E,Bb,C#,G
+
+    // ── 7#9 (Hendrix chord) ───────────────────────────────────────────
+    'E7#9':  [ 0, 2, 2, 1, 3, 0],   // E,B,E,G#,D,E (practical open voicing)
+    'A7#9':  [-1, 0, 2, 0, 2, 3],   // A,E,G,C#,G (add #9 at high e)
+
+    // ── 7b5 ───────────────────────────────────────────────────────────
+    'E7b5':  [ 0, 2, 0, 3, 0,-1],   // E,B,D,Bb,B
+    'A7b5':  [-1, 0, 1, 0, 2, 3],   // A,Eb,G,C#,G
+
+    // ── 7#5 (augmented seventh) ───────────────────────────────────────
+    'E7#5':  [ 0, 3, 2, 1, 1, 0],   // E,C,E,G#,C,E (Caug/E)
+    'A7#5':  [-1, 0, 3, 0, 2, 1],   // A,F,G,C#,F
+
+    // ── m7b5 (half-diminished) ────────────────────────────────────────
+    'Em7b5': [ 0, 1, 2, 0, 3, 0],   // E,Bb,E,G,D,E
+    'Am7b5': [-1, 0, 1, 2, 1, 3],   // A,Eb,A,C,G
+    'Bm7b5': [-1, 2, 3, 2, 3,-1],   // B,F,B,D
+
+    // ── mmaj7 (minor major seventh) ───────────────────────────────────
+    'Ammaj7':[-1, 0, 2, 1, 1, 0],   // A,E,G#,C,E
+    'Dmmaj7':[-1,-1, 0, 2, 2, 1],   // D,A,C#,F
+    'Emmaj7':[ 0, 2, 2, 1, 0, 0],   // E,B,E,G#,B,E (= Emaj7 voicing, maj7 of Em)
+
+    // ── 69 ────────────────────────────────────────────────────────────
+    'C69':   [-1, 3, 2, 2, 3, 0],   // C,E,A,D,E
+    'G69':   [ 3, 2, 2, 2, 0, 0],   // G,B,E,A,B,E
+    'A69':   [-1, 0, 2, 4, 2, 2],   // A,E,B,C#,F#
+
+    // ── m9 (minor ninth) ──────────────────────────────────────────────
+    // Movable shape: root on A string fret n → [x, n, n-2, n, n, x]
+    'Cm9':   [-1, 3, 1, 3, 3,-1],   // x3133x — user-verified
+    'Dm9':   [-1, 5, 3, 5, 5,-1],
+    'Fm9':   [-1, 8, 6, 8, 8,-1],
+    'Gm9':   [-1,10, 8,10,10,-1],
+    'Em9':   [ 0, 2, 4, 0, 3, 0],   // open: E,B,F#,G,D,E
+    'Am9':   [-1, 0, 2, 0, 0, 0],   // open: A,E,G,B,E (omits b3, keeps 9th)
+    'Bbm9':  [-1, 1,-1, 1, 1,-1],   // x1x11x
+
+    // ── 11 (dominant eleventh) ────────────────────────────────────────
+    // Movable shape: root on A string fret n → [x, n, n, n, n, n] (barre)
+    'C11':   [-1, 3, 3, 3, 3, 3],   // x33333 — user-verified
+    'D11':   [-1, 5, 5, 5, 5, 5],
+    'E11':   [-1, 7, 7, 7, 7, 7],
+    'F11':   [-1, 8, 8, 8, 8, 8],
+    'G11':   [ 3, 3, 3, 0, 1, 1],   // open: G,C,F,G,C,F (1,11,b7)
+    'A11':   [-1, 0, 0, 0, 0, 0],   // open strings: A,D,G,B,E (1,11,b7)
+    'Bb11':  [-1, 1, 1, 1, 1, 1],
+
+    // ── 13 (dominant thirteenth) ──────────────────────────────────────
+    // Movable shape: root on A string fret n → [x, n, n-1, n, n, n+2]
+    'C13':   [-1, 3, 2, 3, 3, 5],   // x32335 — user-verified
+    'D13':   [-1, 5, 4, 5, 5, 7],
+    'F13':   [-1, 8, 7, 8, 8,10],
+    'G13':   [ 3, 2, 3, 2, 0, 0],   // open: G,B,F,A,B,E (1,3,b7,9,13)
+    'E13':   [ 0, 2, 2, 1, 2, 2],   // open: E,B,E,G#,C#,F# (1,5,3,13,9)
+    'A13':   [-1, 0, 2, 0, 2, 2],   // open: A,E,G,C#,F# (1,5,b7,3,13)
+    'Bb13':  [-1, 1, 0, 1, 1, 3],
+
+    // ── maj13 (major thirteenth) ──────────────────────────────────────
+    // Movable shape: root on A string fret n → [x, n, x, n+1, n+2, n+2]
+    'Cmaj13':[-1, 3,-1, 4, 5, 5],   // x3x455 — user-verified: C,B,E,A
+    'Dmaj13':[-1, 5,-1, 6, 7, 7],
+    'Fmaj13':[-1, 8,-1, 9,10,10],
+    'Emaj13':[ 0, 2, 1, 1, 2, 2],   // open: E,B,D#,G#,C#,F# (1,5,maj7,3,13,9)
+    'Amaj13':[-1, 0,-1, 1, 2, 2],   // open: A,G#,C#,F# (1,maj7,3,13)
+    'Gmaj13':[-1,10,-1,11,12,12],   // barre (no clean open position for G)
+};
+
+// Parse {define: NAME base-fret N frets f1 f2 f3 f4 f5 f6} blocks from a document.
+// Returns { chordName: [lowE, A, D, G, B, highE] } with absolute fret numbers.
+function parseDocumentDefines(document) {
+    const defines = {};
+    const text = document.getText();
+    // Step 1: extract the full content of each {define:...} or {chord:...} block
+    const blockRe = /\{(?:define|chord):?\s+([^}]+)\}/gi;
+    let block;
+    while ((block = blockRe.exec(text)) !== null) {
+        const content = block[1];
+        // Step 2: chord name is the first whitespace-delimited token
+        const nameMatch = content.match(/^\s*(\S+)/);
+        if (!nameMatch) continue;
+        const name = nameMatch[1];
+        // Step 3: extract base-fret (defaults to 1 if absent)
+        const baseFretMatch = content.match(/base-fret\s+(\d+)/i);
+        const baseFret = baseFretMatch ? parseInt(baseFretMatch[1]) : 1;
+        // Step 4: extract the 6 fret values after the "frets" keyword
+        const fretsMatch = content.match(/\bfrets\s+((?:[x0-9-]+\s+){5}[x0-9-]+)/i);
+        if (!fretsMatch) continue;
+        const fretStrs = fretsMatch[1].trim().split(/\s+/);
+        if (fretStrs.length !== 6) continue;
+        const frets = fretStrs.map(f => {
+            if (f === 'x' || f === 'X' || f === '-1') return -1;
+            const n = parseInt(f);
+            if (isNaN(n) || n < 0) return -1;
+            if (n === 0) return 0;
+            return n + baseFret - 1;
+        });
+        defines[name] = frets;
+    }
+    return defines;
+}
+
+function generateChordSvg(frets, chordName) {
+    const W = 110, H = 130;
+    const PL = 10, PR = 16, PT = 22, PB = 8;
+    const NS = 6, NF = 5;
+    const SW = (W - PL - PR) / (NS - 1); // string spacing
+    const FH = (H - PT - PB) / NF;       // fret slot height
+
+    const sx = i => PL + i * SW;
+    const fy = i => PT + i * FH;
+    const dy = i => PT + (i - 0.5) * FH;
+
+    const frettedNotes = frets.filter(f => f > 0);
+    const hasOpen = frets.some(f => f === 0);
+    const minFret = frettedNotes.length ? Math.min(...frettedNotes) : 1;
+
+    let startFret, showNut;
+    if (hasOpen || minFret <= 3) {
+        startFret = 1; showNut = true;
+    } else {
+        startFret = minFret; showNut = false;
+    }
+
+    // Detect barre: ≥ 4 strings on the same lowest fret
+    const fretCounts = {};
+    frets.forEach(f => { if (f > 0) fretCounts[f] = (fretCounts[f] || 0) + 1; });
+    const barreFret = Number(Object.keys(fretCounts).find(f => fretCounts[f] >= 4 && Number(f) === minFret) || 0);
+
+    const parts = [
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`,
+        `<rect width="${W}" height="${H}" rx="5" fill="#fafafa" stroke="#ddd" stroke-width="1"/>`,
+    ];
+
+    // Fret lines
+    for (let i = 0; i <= NF; i++) {
+        const y = fy(i);
+        const sw = i === 0 && showNut ? 3 : 1;
+        const color = i === 0 ? '#222' : '#bbb';
+        parts.push(`<line x1="${sx(0)}" y1="${y}" x2="${sx(NS-1)}" y2="${y}" stroke="${color}" stroke-width="${sw}"/>`);
+    }
+    // String lines
+    for (let i = 0; i < NS; i++) {
+        parts.push(`<line x1="${sx(i)}" y1="${fy(0)}" x2="${sx(i)}" y2="${fy(NF)}" stroke="#bbb" stroke-width="1"/>`);
+    }
+
+    // Mute / open indicators above nut
+    for (let s = 0; s < NS; s++) {
+        const x = sx(s), y = PT - 8;
+        if (frets[s] === -1) {
+            const d = 4;
+            parts.push(`<line x1="${x-d}" y1="${y-d}" x2="${x+d}" y2="${y+d}" stroke="#c00" stroke-width="1.5"/>`);
+            parts.push(`<line x1="${x+d}" y1="${y-d}" x2="${x-d}" y2="${y+d}" stroke="#c00" stroke-width="1.5"/>`);
+        } else if (frets[s] === 0) {
+            parts.push(`<circle cx="${x}" cy="${y}" r="4.5" fill="none" stroke="#222" stroke-width="1.5"/>`);
+        }
+    }
+
+    // Barre bar
+    if (barreFret) {
+        const slot = barreFret - startFret + 1;
+        const barStrings = frets.reduce((acc, f, i) => { if (f === barreFret) acc.push(i); return acc; }, []);
+        const x1 = sx(Math.min(...barStrings)), x2 = sx(Math.max(...barStrings));
+        const cy = dy(slot);
+        parts.push(`<rect x="${x1 - 7}" y="${cy - 7}" width="${x2 - x1 + 14}" height="14" rx="7" fill="#222"/>`);
+    }
+
+    // Individual finger dots
+    frets.forEach((f, s) => {
+        if (f <= 0) return;
+        if (barreFret && f === barreFret) return; // already drawn as barre
+        const slot = f - startFret + 1;
+        if (slot < 1 || slot > NF) return;
+        parts.push(`<circle cx="${sx(s)}" cy="${dy(slot)}" r="7" fill="#222"/>`);
+    });
+
+    // Fret number label for non-open-position chords
+    if (!showNut) {
+        parts.push(`<text x="${sx(NS-1)+5}" y="${fy(1)+3}" font-size="9" fill="#555" font-family="sans-serif">${startFret}fr</text>`);
+    }
+
+    parts.push('</svg>');
+    return parts.join('');
+}
+
+// ─────────────────────────────────────────────
 // Transpose helpers
 // ─────────────────────────────────────────────
 
@@ -603,22 +935,35 @@ function activate(context) {
     });
 
     const insertChord = vscode.commands.registerCommand('chordproFretboard.insertChord', async () => {
-        const chordName = await vscode.window.showInputBox({ prompt: 'Enter chord name' });
-        if (!chordName) { return; }
-        const chord = context.globalState.get(`chord_${chordName}`);
-        if (!chord) { vscode.window.showErrorMessage(`Chord "${chordName}" not found`); return; }
         const editor = vscode.window.activeTextEditor;
+        const docDefineNames = editor ? Object.keys(parseDocumentDefines(editor.document)) : [];
+        const savedNames = context.globalState.keys()
+            .filter(k => k.startsWith('chord_'))
+            .map(k => k.slice('chord_'.length));
+        const allNames = [...new Set([...docDefineNames, ...savedNames])];
+
+        const chordName = await vscode.window.showInputBox({
+            prompt: 'Enter chord name',
+            placeHolder: allNames.length ? allNames.join(', ') : undefined
+        });
+        if (!chordName) { return; }
         if (editor) { editor.insertSnippet(new vscode.SnippetString(`[${chordName}]`)); }
     });
 
     const insertChordFromList = vscode.commands.registerCommand('chordproFretboard.insertChordFromList', async () => {
-        const allKeys = context.globalState.keys().filter(k => k.startsWith('chord_'));
-        const chordNames = allKeys.map(k => k.replace('chord_', ''));
-        if (!chordNames.length) { vscode.window.showInformationMessage('No chords defined yet'); return; }
-        const selection = await vscode.window.showQuickPick(chordNames, { placeHolder: 'Select a chord' });
-        if (!selection) { return; }
         const editor = vscode.window.activeTextEditor;
-        if (editor) { editor.insertSnippet(new vscode.SnippetString(`[${selection}]`)); }
+        const docDefineNames = editor ? Object.keys(parseDocumentDefines(editor.document)) : [];
+        const savedKeys = context.globalState.keys().filter(k => k.startsWith('chord_'));
+        const savedNames = savedKeys.map(k => k.slice('chord_'.length));
+        const allNames = [...new Set([...docDefineNames, ...savedNames])];
+        if (!allNames.length) { vscode.window.showInformationMessage('No chords defined yet'); return; }
+        const items = allNames.map(name => ({
+            label: name,
+            description: docDefineNames.includes(name) ? 'defined in file' : 'saved chord'
+        }));
+        const selection = await vscode.window.showQuickPick(items, { placeHolder: 'Select a chord' });
+        if (!selection) { return; }
+        if (editor) { editor.insertSnippet(new vscode.SnippetString(`[${selection.label}]`)); }
     });
 
     // Auto-completion provider for { (directives) and [ (chords)
@@ -670,17 +1015,23 @@ function activate(context) {
                         .filter(k => k.startsWith('chord_'))
                         .map(k => k.slice('chord_'.length));
 
-                    const savedItems = savedChordNames.map(chord => {
+                    const docDefineNames = Object.keys(parseDocumentDefines(document));
+
+                    // Merge: doc-defined first, then builder-saved, deduped
+                    const priorityNames = [...new Set([...docDefineNames, ...savedChordNames])];
+
+                    const savedItems = priorityNames.map(chord => {
+                        const isDoc = docDefineNames.includes(chord);
                         const item = new vscode.CompletionItem(chord, vscode.CompletionItemKind.Value);
                         item.insertText = new vscode.SnippetString(`${chord}]`);
-                        item.detail = 'Saved chord';
+                        item.detail = isDoc ? 'Defined in file' : 'Saved chord';
                         item.sortText = `0_${chord}`;
                         item.range = replaceRange;
                         return item;
                     });
 
                     const genericItems = COMPLETION_CHORDS
-                        .filter(chord => !savedChordNames.includes(chord))
+                        .filter(chord => !priorityNames.includes(chord))
                         .map(chord => {
                             const item = new vscode.CompletionItem(chord, vscode.CompletionItemKind.Value);
                             item.insertText = new vscode.SnippetString(`${chord}]`);
@@ -1195,12 +1546,46 @@ updateUI();
 </html>`;
     }
 
+    // Chord diagram hover — fires when hovering over [chord] tokens
+    const chordHoverProvider = vscode.languages.registerHoverProvider('chordpro', {
+        provideHover(document, position) {
+            const line = document.lineAt(position).text;
+            const re = /\[([A-G][b#]?[^\]]*)\]/g;
+            let m;
+            while ((m = re.exec(line)) !== null) {
+                const start = m.index, end = m.index + m[0].length;
+                if (position.character >= start && position.character <= end) {
+                    const chordName = m[1];
+                    // Priority: {define:} in document > Chord Builder globalState > CHORD_DB
+                    // Chord Builder stores frets as [highE, B, G, D, A, lowE] — reverse to match CHORD_DB order
+                    const docDefines = parseDocumentDefines(document);
+                    const saved = context.globalState.get(`chord_${chordName}`);
+                    let frets = docDefines[chordName]
+                        ?? (saved ? [...saved.frets].reverse() : null)
+                        ?? CHORD_DB[chordName];
+                    const md = new vscode.MarkdownString();
+                    md.isTrusted = true;
+                    md.supportHtml = true;
+                    if (frets) {
+                        const svg = generateChordSvg(frets, chordName);
+                        const b64 = Buffer.from(svg).toString('base64');
+                        md.appendMarkdown(`**${chordName}**\n\n![${chordName}](data:image/svg+xml;base64,${b64})`);
+                    } else {
+                        md.appendMarkdown(`**${chordName}**`);
+                    }
+                    return new vscode.Hover(md, new vscode.Range(position.line, start, position.line, end));
+                }
+            }
+        }
+    });
+
     // Add disposables to context.subscriptions
     context.subscriptions.push(
         renderOnly,
         previewChordPro,
         completionProvider,
         hoverProvider,
+        chordHoverProvider,
         codeLensProvider,
         configureRendering,
         openChordProMinimalTemplate,
