@@ -1,76 +1,102 @@
 # chordpro-vscode
 
-This extension allows you to edit and render chordpro files in vscode. While easily passing rendering parameters directly in source code.
+Edit, render, and build ChordPro songs in VSCode — with PDF preview, an interactive chord builder, and smart auto-completion.
 
 ## Features
 
-
-- [x] Allows to compile chordpro files with the function "Render ChordPro PDF"
-- [x] Keyboard shortcut for rendering .cho : Ctrl+Shift+B
-- [x] Possibility to activate "Build on save" from extension settings.
-- [x] Write rendering parameters directly in source code. 
-- [ ] Render and open pdf document in side pannel.
-- [ ] Preview result in side panel.
-- [ ] Synthax highlighting.
-- [ ] Ultimate Guitarto and from ChordPro converter based on [ChordSheetJS](https://github.com/martijnversluis/ChordSheetJS)
+- [x] Compile `.cho` files with **Render ChordPro PDF** (`Ctrl+Shift+B`)
+- [x] **Preview ChordPro PDF** — renders and opens the PDF automatically in a side panel (`Ctrl+Shift+V`)
+- [x] Build on save (enable from extension settings)
+- [x] Write rendering parameters directly in source code
+- [x] **Interactive Chord Builder** — fretboard panel to build and insert chord definitions
+- [x] **Auto-completion** — type `{` for directive suggestions, `[` for chord suggestions
+- [x] Chords saved in the Chord Builder appear first in the `[` completion list
+- [ ] Syntax highlighting
+- [ ] Ultimate Guitar to/from ChordPro converter based on [ChordSheetJS](https://github.com/martijnversluis/ChordSheetJS)
 - [ ] Auto-scrolling
 
-## Functions
+## Commands
 
-- "Render ChordPro PDF"
-  - Compile and renders your `.cho` file, fetching parameters from the first 25 lines of the file. 
-- "Open ChordPro Minimal Template"
-  - Minimal template to write a compatible `.cho` file.
-- "Open ChordPro Example Template"
-  - Example of Yesterday by The Beatles.
-  
+| Command | Shortcut | Description |
+|---|---|---|
+| Render ChordPro PDF | `Ctrl+Shift+B` | Compile and render the active `.cho` file |
+| Preview ChordPro PDF | `Ctrl+Shift+V` | Render and open PDF beside the editor |
+| Open Chord Builder | `Ctrl+Alt+D` | Open the interactive fretboard panel |
+| Insert Chord by Name | `Ctrl+I` | Insert a saved chord by typing its name |
+| Insert Chord from List | `Ctrl+L` | Pick a saved chord from a quick-pick list |
+| Open ChordPro Minimal Template | — | Blank template to start a new song |
+| Open ChordPro Example Template | — | Example file (Yesterday by The Beatles) |
+
+## Chord Builder
+
+Open the **Chord Builder** panel (`Ctrl+Alt+D` or from the panel at the bottom).
+
+- Click strings and frets to place fingers on the fretboard
+- The extension auto-detects the chord name from your finger positions
+- Click a suggestion to fill the name field, or type your own
+- Click **Insert definition** to insert the `{define: ...}` block into the active editor
+- Saved chords appear at the top of the `[` auto-completion list
+
+## Auto-completion
+
+Auto-completion activates automatically in `.cho` / `.chordpro` files.
+
+- Type `{` → suggestions for all ChordPro directives (`title`, `key`, `start_of_chorus`, `define`, …)
+- Type `[` → suggestions for chords — your saved chords appear first, followed by all standard chords
+
+## Rendering Parameters
+
+Parameters can be written in the first 25 lines of your `.cho` file:
+
+```
+# {options = -l}
+# {suffix = "lyrics_only"}
+# {output = mysong_out.pdf}
+# {config = "dark"}
+```
+
+- **config** can be a [preset name](https://www.chordpro.org/chordpro/chordpro-configuration-presets/#preset-configurations) (`modern1`, `dark`, …) or a path to a `.json` file (absolute or relative to the `.cho` file). Defaults to `modern1`.
+- **suffix** is appended to the output filename: `mysong_lyrics_only.pdf`
+- **output** sets the output filename directly
+
 ## Requirements
 
-  Install Chordpro  from  [official website](https://www.chordpro.org/chordpro/chordpro-installation/) and make sure to **add chordpro to system PATH**.
+Install ChordPro from the [official website](https://www.chordpro.org/chordpro/chordpro-installation/) and make sure to **add chordpro to your system PATH**.
 
-## Advices
+## Workflow
 
-- Use `.cho` extension for your chordpro files to make sure the extension recognizes the language (for functions to work).
-- Combine this extension with the VScode extension [ChordPro by ricardomfmsousa](https://marketplace.visualstudio.com/items/?itemName=ricardomfmsousa.chordpro)  to enjoy synthax highlighting!
+1. Open a template: **Open ChordPro Minimal Template** or **Open ChordPro Example Template**
+2. Write your song — use `{` and `[` auto-completion to insert directives and chords
+3. Use the **Chord Builder** to define custom chord fingerings
+4. Press `Ctrl+Shift+V` to render and open the PDF preview beside the editor
+5. Enable **Build on save** in settings to auto-render on every `Ctrl+S`
+
+*Note: if you change the suffix or output filename, you need to open the new PDF file once for it to auto-refresh.*
+
+## Advice
+
+- Use `.cho` as your file extension — the extension registers it as ChordPro automatically
+- Combine with [ChordPro by ricardomfmsousa](https://marketplace.visualstudio.com/items/?itemName=ricardomfmsousa.chordpro) for syntax highlighting
 
 ## Release Notes
 
-### 0.0.1
+### 0.1.0
+- Added interactive Chord Builder with fretboard webview
+- Added Preview ChordPro PDF command (renders + opens beside editor)
+- Added auto-completion for directives (`{`) and chords (`[`)
+- Saved chords from the Chord Builder appear first in chord completions
+- Registered `.cho` / `.chordpro` / `.chopro` as ChordPro language
 
-Beta product with basic functions.
+### 0.0.1
+Initial release with basic render and template functions.
 
 ---
 
-## Working with chordpro_vscode
+## Online Tools
 
-1. You can open an example or minimal template through functions
-  - "Open ChordPro Minimal Template"
-  - "Open ChordPro Example Template"
-2. Configure your rendering parameters:
-   - All parameters can be written quoted or not.
-   - Config can be one of the [preset config](https://www.chordpro.org/chordpro/chordpro-configuration-presets/#preset-configurations) OR a path to your config.json file (either absolute or relative to your .cho file folder)
+Some great websites for ChordPro editing:
 
- ```
-# {options = -l}
-# {suffix = "lyrics_only"}
-# {output =}
-# {config ="dark"}
-```
-3. Render your .cho file using "Render ChordPro PDF"
-4. From file explorer, open PDF in side panel.
-5. From now on "Render ChordPro PDF" and Ctrl+s (if activate build on save) will update automatically the opened PDF. 
-
-*Note*: If change suffix or output name, need to open the new pdf file.
+- [Songcraft.io](https://songcraft.io/) — BPM, autoscrolling, visual editor, chord progressions, collaboration. 5 free songs, then ~4€/month.
+- [Chordly.io](https://chordly.io/) — Metronome, autoplay. Free as of 2025.
 
 **Enjoy!!**
-
-
-## For those looking for online tools: 
-
-Some great websites exist such as:
-- [Songcraft.io](https://songcraft.io/). (**This is truely great**)
-  - Many awesome functionalities (BPM, autoscrollling, visual editor, chord progressions, chord dragging, tuner, version history, music and lyrics writings helping tools, collaboration)
-  - 5 free songs, then minimum 4e / month
-- [Chordly.io](https://chordly.io/)
-  - Metronome, autoplay 
-  - Entirely free as of 2025-04-13

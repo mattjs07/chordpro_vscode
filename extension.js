@@ -32,7 +32,7 @@ function resolveConfigPath(configPath, fileDirname) {
     }
 }
 
-function renderChordProLogic(context) {
+function renderChordProLogic(context, onSuccess) {
     const editor = vscode.window.activeTextEditor;
 
     if (!editor) {
@@ -102,16 +102,17 @@ function renderChordProLogic(context) {
         return;
     }
 
+    const fullOutputPath = path.resolve(fileDirname, outputFile);
+
     // Build the command string to execute the bash script
-    let command = `bash "${scriptPath}" "${filePath}" "${fileDirname}/${outputFile}" "${config_path}"`;
+    let command = `bash "${scriptPath}" "${filePath}" "${fullOutputPath}" "${config_path}"`;
     if (options) {
         // Ensure options are quoted in case they contain spaces
         command += ` "${options}"`;
     }
 
     console.log('File Directory:', fileDirname);
-
-    console.log('Running command: ', command);  // For debugging purposes, remove or comment this in production
+    console.log('Running command: ', command);
 
     // Execute the command
     exec(command, (error, stdout, stderr) => {
@@ -125,6 +126,7 @@ function renderChordProLogic(context) {
         }
 
         vscode.window.showInformationMessage(`ChordPro PDF rendered.`);
+        if (onSuccess) { onSuccess(fullOutputPath); }
     });
 }
 
@@ -381,11 +383,69 @@ document.getElementById('resetBtn').addEventListener('click', () => {
 }
 
 // ─────────────────────────────────────────────
+// Auto-completion data
+// ─────────────────────────────────────────────
+
+const DIRECTIVES = [
+    // Metadata
+    { label: 'title',              detail: 'Song title',                    snippet: 'title: $1}'              },
+    { label: 'subtitle',           detail: 'Song subtitle',                 snippet: 'subtitle: $1}'           },
+    { label: 'artist',             detail: 'Artist name',                   snippet: 'artist: $1}'             },
+    { label: 'composer',           detail: 'Composer name',                 snippet: 'composer: $1}'           },
+    { label: 'lyricist',           detail: 'Lyricist name',                 snippet: 'lyricist: $1}'           },
+    { label: 'copyright',          detail: 'Copyright info',                snippet: 'copyright: $1}'          },
+    { label: 'album',              detail: 'Album name',                    snippet: 'album: $1}'              },
+    { label: 'year',               detail: 'Year of publication',           snippet: 'year: $1}'               },
+    { label: 'key',                detail: 'Song key (e.g. C, Am)',         snippet: 'key: $1}'                },
+    { label: 'time',               detail: 'Time signature (e.g. 4/4)',     snippet: 'time: $1}'               },
+    { label: 'tempo',              detail: 'Tempo in BPM',                  snippet: 'tempo: $1}'              },
+    { label: 'duration',           detail: 'Song duration',                 snippet: 'duration: $1}'           },
+    { label: 'capo',               detail: 'Capo position',                 snippet: 'capo: $1}'               },
+    { label: 'meta',               detail: 'Custom metadata',               snippet: 'meta: $1}'               },
+    // Sections
+    { label: 'start_of_chorus',    detail: 'Start chorus section',          snippet: 'start_of_chorus}'        },
+    { label: 'end_of_chorus',      detail: 'End chorus section',            snippet: 'end_of_chorus}'          },
+    { label: 'start_of_verse',     detail: 'Start verse section',           snippet: 'start_of_verse}'         },
+    { label: 'end_of_verse',       detail: 'End verse section',             snippet: 'end_of_verse}'           },
+    { label: 'start_of_bridge',    detail: 'Start bridge section',          snippet: 'start_of_bridge}'        },
+    { label: 'end_of_bridge',      detail: 'End bridge section',            snippet: 'end_of_bridge}'          },
+    { label: 'start_of_tab',       detail: 'Start tab section',             snippet: 'start_of_tab}'           },
+    { label: 'end_of_tab',         detail: 'End tab section',               snippet: 'end_of_tab}'             },
+    { label: 'start_of_grid',      detail: 'Start chord grid',              snippet: 'start_of_grid}'          },
+    { label: 'end_of_grid',        detail: 'End chord grid',                snippet: 'end_of_grid}'            },
+    // Comments & formatting
+    { label: 'comment',            detail: 'Inline comment / annotation',   snippet: 'comment: $1}'            },
+    { label: 'comment_italic',     detail: 'Italic comment',                snippet: 'comment_italic: $1}'     },
+    { label: 'comment_box',        detail: 'Boxed comment',                 snippet: 'comment_box: $1}'        },
+    { label: 'columns',            detail: 'Number of columns',             snippet: 'columns: $1}'            },
+    { label: 'column_break',       detail: 'Force column break',            snippet: 'column_break}'           },
+    { label: 'new_page',           detail: 'Force new page',                snippet: 'new_page}'               },
+    { label: 'new_physical_page',  detail: 'Force new physical page',       snippet: 'new_physical_page}'      },
+    // Chord definitions
+    { label: 'define',             detail: 'Define a chord fingering',      snippet: 'define: $1 base-fret $2 frets $3}' },
+    { label: 'chord',              detail: 'Inline chord display',          snippet: 'chord: $1}'              },
+    // Misc
+    { label: 'image',              detail: 'Embed an image',                snippet: 'image: $1}'              },
+    { label: 'x_',                 detail: 'Custom extension directive',    snippet: 'x_$1: $2}'               },
+];
+
+const CHORD_ROOTS = ['C','C#','Db','D','D#','Eb','E','F','F#','Gb','G','G#','Ab','A','A#','Bb','B'];
+const CHORD_QUALITIES = ['', 'm', '7', 'm7', 'maj7', 'sus2', 'sus4', 'add9', 'dim', 'aug', '5', '6', 'm6', '9', 'm9', 'maj9', '11', '13'];
+const COMPLETION_CHORDS = CHORD_ROOTS.flatMap(r => CHORD_QUALITIES.map(q => r + q));
+
+// ─────────────────────────────────────────────
 
 function activate(context) {
     // Register the renderChordPro command
     const renderOnly = vscode.commands.registerCommand('extension.renderChordPro', function () {
         renderChordProLogic(context);
+    });
+
+    // Register the previewChordPro command — renders then opens the PDF beside the editor
+    const previewChordPro = vscode.commands.registerCommand('extension.previewChordPro', function () {
+        renderChordProLogic(context, (pdfPath) => {
+            vscode.commands.executeCommand('vscode.open', vscode.Uri.file(pdfPath), vscode.ViewColumn.Beside);
+        });
     });
 
     // Register the openChordProMinimalTemplate command
@@ -442,9 +502,68 @@ function activate(context) {
         if (editor) { editor.insertSnippet(new vscode.SnippetString(`[${selection}]`)); }
     });
 
+    // Auto-completion provider for { (directives) and [ (chords)
+    const completionProvider = vscode.languages.registerCompletionItemProvider(
+        'chordpro',
+        {
+            provideCompletionItems(document, position) {
+                const linePrefix = document.lineAt(position).text.substring(0, position.character);
+
+                // Directive completions: inside {…} not yet closed
+                const braceStart = linePrefix.lastIndexOf('{');
+                if (braceStart !== -1 && !linePrefix.includes('}', braceStart)) {
+                    const replaceRange = new vscode.Range(position.line, braceStart + 1, position.line, position.character);
+                    return DIRECTIVES.map(d => {
+                        const item = new vscode.CompletionItem(d.label, vscode.CompletionItemKind.Keyword);
+                        item.insertText = new vscode.SnippetString(d.snippet);
+                        item.detail = d.detail;
+                        item.range = replaceRange;
+                        return item;
+                    });
+                }
+
+                // Chord completions: inside […] not yet closed
+                const bracketStart = linePrefix.lastIndexOf('[');
+                if (bracketStart !== -1 && !linePrefix.includes(']', bracketStart)) {
+                    const replaceRange = new vscode.Range(position.line, bracketStart + 1, position.line, position.character);
+
+                    const savedChordNames = context.globalState.keys()
+                        .filter(k => k.startsWith('chord_'))
+                        .map(k => k.slice('chord_'.length));
+
+                    const savedItems = savedChordNames.map(chord => {
+                        const item = new vscode.CompletionItem(chord, vscode.CompletionItemKind.Value);
+                        item.insertText = new vscode.SnippetString(`${chord}]`);
+                        item.detail = 'Saved chord';
+                        item.sortText = `0_${chord}`;
+                        item.range = replaceRange;
+                        return item;
+                    });
+
+                    const genericItems = COMPLETION_CHORDS
+                        .filter(chord => !savedChordNames.includes(chord))
+                        .map(chord => {
+                            const item = new vscode.CompletionItem(chord, vscode.CompletionItemKind.Value);
+                            item.insertText = new vscode.SnippetString(`${chord}]`);
+                            item.sortText = `1_${chord}`;
+                            item.range = replaceRange;
+                            return item;
+                        });
+
+                    return [...savedItems, ...genericItems];
+                }
+
+                return undefined;
+            }
+        },
+        '{', '['
+    );
+
     // Add disposables to context.subscriptions
     context.subscriptions.push(
         renderOnly,
+        previewChordPro,
+        completionProvider,
         openChordProMinimalTemplate,
         openChordProExampleTemplate,
         openChordProTemplateCommand,

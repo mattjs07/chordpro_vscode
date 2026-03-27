@@ -11,6 +11,13 @@
   },
   "main": "./extension.js",
   "contributes": {
+    "languages": [
+      {
+        "id": "chordpro",
+        "aliases": ["ChordPro", "chordpro"],
+        "extensions": [".cho", ".chordpro", ".chopro"]
+      }
+    ],
     "viewsContainers": {
       "panel": [
         { "id": "chordBuilder", "title": "Chord Builder", "icon": "$(music)" }
@@ -23,6 +30,7 @@
     },
     "commands": [
       { "command": "extension.renderChordPro",             "title": "Render ChordPro PDF" },
+      { "command": "extension.previewChordPro",            "title": "Preview ChordPro PDF" },
       { "command": "extension.openChordProMinimalTemplate", "title": "Open ChordPro Minimal Template" },
       { "command": "extension.openChordProExampleTemplate", "title": "Open ChordPro Example Template" },
       { "command": "extension.openChordProTemplate",        "title": "Open ChordPro Template" },
@@ -37,19 +45,24 @@
         "when": "editorLangId == 'chordpro'"
       },
       {
+        "command": "extension.previewChordPro",
+        "key": "ctrl+shift+v",
+        "when": "editorLangId == 'chordpro'"
+      },
+      {
         "command": "chordproFretboard.insertChord",
         "key": "ctrl+i",
-        "when": "editorTextFocus && resourceExtname == .cho"
+        "when": "editorTextFocus && editorLangId == 'chordpro'"
       },
       {
         "command": "chordproFretboard.insertChordFromList",
         "key": "ctrl+l",
-        "when": "editorTextFocus && resourceExtname == .cho"
+        "when": "editorTextFocus && editorLangId == 'chordpro'"
       },
       {
         "command": "chordproFretboard.openBuilder",
         "key": "ctrl+alt+d",
-        "when": "resourceExtname == .cho"
+        "when": "editorLangId == 'chordpro'"
       }
     ],
     "configuration": {
@@ -64,8 +77,10 @@
     }
   },
   "activationEvents": [
+    "onLanguage:chordpro",
     "onView:chordproFretboard.chordBuilderView",
     "onCommand:extension.renderChordPro",
+    "onCommand:extension.previewChordPro",
     "onCommand:extension.openChordProMinimalTemplate",
     "onCommand:extension.openChordProExampleTemplate",
     "onCommand:extension.openChordProTemplate",
