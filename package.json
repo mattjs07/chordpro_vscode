@@ -1,36 +1,55 @@
 {
   "name": "chordpro-vscode",
-  "displayName": "chordpro vscode",
+  "displayName": "ChordPro VSCode",
+  "description": "Edit, render, and build ChordPro songs in VSCode — includes PDF rendering, templates, and an interactive chord builder with fretboard.",
   "publisher": "mattjs07",
-  "version": "0.0.1",
+  "version": "0.1.0",
+  "categories": ["Other"],
+  "keywords": ["chordpro", "guitar", "chord", "music", "tabs"],
   "engines": {
     "vscode": "^1.99.0"
   },
   "main": "./extension.js",
   "contributes": {
+    "viewsContainers": {
+      "panel": [
+        { "id": "chordBuilder", "title": "Chord Builder", "icon": "$(music)" }
+      ]
+    },
+    "views": {
+      "chordBuilder": [
+        { "type": "webview", "id": "chordproFretboard.chordBuilderView", "name": "Chord Builder", "icon": "$(music)" }
+      ]
+    },
     "commands": [
-      {
-        "command": "extension.renderChordPro",
-        "title": "Render ChordPro PDF"
-    },
-    {
-        "command": "extension.openChordProMinimalTemplate",
-        "title": "Open ChordPro Minimal Template"
-    },
-    {
-        "command": "extension.openChordProExampleTemplate",
-        "title": "Open ChordPro Example Template"
-    },
-    {
-        "command": "extension.openChordProTemplate",
-        "title": "Open ChordPro Template"
-    }
+      { "command": "extension.renderChordPro",             "title": "Render ChordPro PDF" },
+      { "command": "extension.openChordProMinimalTemplate", "title": "Open ChordPro Minimal Template" },
+      { "command": "extension.openChordProExampleTemplate", "title": "Open ChordPro Example Template" },
+      { "command": "extension.openChordProTemplate",        "title": "Open ChordPro Template" },
+      { "command": "chordproFretboard.openBuilder",         "title": "Open Chord Builder" },
+      { "command": "chordproFretboard.insertChord",         "title": "Insert Chord by Name" },
+      { "command": "chordproFretboard.insertChordFromList", "title": "Insert Chord from List" }
     ],
     "keybindings": [
       {
         "command": "extension.renderChordPro",
         "key": "ctrl+shift+b",
         "when": "editorLangId == 'chordpro'"
+      },
+      {
+        "command": "chordproFretboard.insertChord",
+        "key": "ctrl+i",
+        "when": "editorTextFocus && resourceExtname == .cho"
+      },
+      {
+        "command": "chordproFretboard.insertChordFromList",
+        "key": "ctrl+l",
+        "when": "editorTextFocus && resourceExtname == .cho"
+      },
+      {
+        "command": "chordproFretboard.openBuilder",
+        "key": "ctrl+alt+d",
+        "when": "resourceExtname == .cho"
       }
     ],
     "configuration": {
@@ -45,18 +64,25 @@
     }
   },
   "activationEvents": [
-        "onCommand:extension.renderChordPro",
-        "onCommand:extension.openChordProMinimalTemplate",
-        "onCommand:extension.openChordProExampleTemplate",
-        "onCommand:extension.openChordProTemplate"
-    ],
+    "onView:chordproFretboard.chordBuilderView",
+    "onCommand:extension.renderChordPro",
+    "onCommand:extension.openChordProMinimalTemplate",
+    "onCommand:extension.openChordProExampleTemplate",
+    "onCommand:extension.openChordProTemplate",
+    "onCommand:chordproFretboard.openBuilder",
+    "onCommand:chordproFretboard.insertChord",
+    "onCommand:chordproFretboard.insertChordFromList"
+  ],
   "devDependencies": {
-    "@types/vscode": "^1.99.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
-    "eslint": "^9.23.0",
+    "@types/vscode": "^1.99.0",
     "@vscode/test-cli": "^0.0.10",
-    "@vscode/test-electron": "^2.4.1"
+    "@vscode/test-electron": "^2.4.1",
+    "eslint": "^9.23.0"
+  },
+  "dependencies": {
+    "tonal": "^6.4.3"
   },
   "repository": {
     "type": "git",
