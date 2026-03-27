@@ -26,6 +26,7 @@ Edit, render, and build ChordPro songs in VSCode — with PDF preview, an intera
 | Insert Chord from List | `Ctrl+L` | Pick a saved chord from a quick-pick list |
 | Open ChordPro Minimal Template | — | Blank template to start a new song |
 | Open ChordPro Example Template | — | Example file (Yesterday by The Beatles) |
+| Open Chord Analyzer | `Ctrl+Alt+A` | Open Oolimo chord analyzer in a side panel |
 
 ## Chord Builder
 
@@ -82,6 +83,11 @@ Install ChordPro from the [official website](https://www.chordpro.org/chordpro/c
 - Combine with [ChordPro by ricardomfmsousa](https://marketplace.visualstudio.com/items/?itemName=ricardomfmsousa.chordpro) for syntax highlighting
 
 ## Release Notes
+
+### 0.6.0
+- Added **Chord Analyzer** panel (`Ctrl+Alt+A`): opens Oolimo in a side panel
+- If the cursor is inside a `[Chord]` token, the chord name is pre-filled automatically
+- Falls back to opening in the system browser if Oolimo blocks the embedded iframe
 
 ### 0.5.0
 - Expanded directive completions: `sorttitle`, `sortartist`, `tag`, `chorus`, `highlight`, `start_of_abc/ly/svg`, font/colour directives, `transpose`, and more

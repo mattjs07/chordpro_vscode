@@ -95,6 +95,10 @@
       {
         "command": "extension.configureRendering",
         "title": "Configure ChordPro Rendering"
+      },
+      {
+        "command": "extension.openChordAnalyzer",
+        "title": "Open Chord Analyzer (Oolimo)"
       }
     ],
     "keybindings": [
@@ -122,6 +126,11 @@
         "command": "chordproFretboard.openBuilder",
         "key": "ctrl+alt+d",
         "when": "editorLangId == 'chordpro'"
+      },
+      {
+        "command": "extension.openChordAnalyzer",
+        "key": "ctrl+alt+a",
+        "when": "editorLangId == 'chordpro'"
       }
     ],
     "configuration": {
@@ -145,7 +154,8 @@
     "onCommand:extension.openChordProTemplate",
     "onCommand:chordproFretboard.openBuilder",
     "onCommand:chordproFretboard.insertChord",
-    "onCommand:chordproFretboard.insertChordFromList"
+    "onCommand:chordproFretboard.insertChordFromList",
+    "onCommand:extension.openChordAnalyzer"
   ],
   "devDependencies": {
     "@types/mocha": "^10.0.10",
