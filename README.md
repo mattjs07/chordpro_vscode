@@ -85,8 +85,13 @@ Press `Ctrl+Alt+S` to render the current song as HTML and open it in **performan
 - Re-running the command while the panel is open reloads the content
 - **Auto-reload on save** — the preview refreshes automatically every time you save the file
 - **Chord diagrams** — hover over any chord name in the preview to see a fretboard diagram popup (same fingering priority as the source hover: file `{define:}` > Chord Builder > built-in library)
-- **Tempo-based speed** — if the file contains `{tempo: N}`, the scroll speed is auto-set so the song scrolls at the right pace (1 bar per chord line); a ♩ indicator shows when the speed was auto-set; manual ±10 adjustments clear it
-- **Save as HTML** — click the 💾 button in the control bar to save a standalone `{basename}_preview.html` to disk; the file works in any browser with scroll controls fully functional
+- **Tempo-based speed** — if the file contains `{tempo: N}`, the scroll speed is auto-set so the song scrolls at the right pace (1 bar per chord line); a ♩ button appears in the control bar (gold when active); click it any time to snap back to tempo speed
+- **Save as HTML** — click the 💾 button to save a standalone `{basename}_preview.html` to disk; works in any browser with all controls functional
+- **Dark mode** — automatically adapts to the OS dark/light theme (`prefers-color-scheme`)
+- **Font size controls** — A− / A+ buttons in the control bar to resize text (11–28 px)
+- **Capo badge** — capo number shown as a distinct pill badge in the song header
+- **Progress bar** — thin bar at the top of the page shows scroll position
+- **Print-friendly** — `@media print` stylesheet hides controls and renders cleanly on paper
 
 ## Transposing
 
@@ -174,9 +179,16 @@ Install ChordPro from the [official website](https://www.chordpro.org/chordpro/c
 
 ## Release Notes
 
+### 1.4.0
+- **Dark mode** — preview auto-adapts to OS dark/light theme via `prefers-color-scheme`
+- **Font size controls** — A− / A+ buttons in the control bar (11–28 px range)
+- **Capo badge** — capo number rendered as a distinct gold pill in the song header
+- **Progress bar** — thin bar at the top tracks scroll position through the song
+- **Print stylesheet** — `@media print` hides controls and produces a clean printed output
+
 ### 1.3.0
-- **Tempo-based scroll speed** — if `{tempo: N}` is set in the file, the auto-scroll speed is automatically calculated so the song scrolls at the correct pace (1 bar per chord line); a ♩ indicator shows in the speed label; manual ±10 adjustments clear the auto-set flag
-- **Save as HTML** — 💾 button in the auto-scroll preview saves a self-contained `{basename}_preview.html` file to disk; the exported file works in any browser with all scroll controls functional
+- **Tempo-based scroll speed** — if `{tempo: N}` is in the file, scroll speed is auto-calculated (1 bar per chord line); ♩ button appears in the control bar (gold = active), click to snap back to tempo speed at any time; speed increments changed to ±5 px/s
+- **Save as HTML** — 💾 button saves a self-contained `{basename}_preview.html` to disk; works in any browser with all controls functional
 
 ### 1.2.0
 - **Auto-scroll preview auto-reload** — preview panel now refreshes automatically on every file save (no need to re-run the command)

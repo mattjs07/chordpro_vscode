@@ -1256,54 +1256,90 @@ function activate(context) {
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:;">
 <style>
+:root {
+  --bg: #fafaf8; --fg: #1a1a1a; --fg-dim: #555; --fg-muted: #888;
+  --border: #ddd; --chord: #1a5fb4;
+  --sec-chorus-bg: #e8f0fe; --sec-chorus-fg: #2a5bbf;
+  --sec-verse-bg: #f0f0f0;  --sec-verse-fg: #555;
+  --sec-bridge-bg: #fef0d0; --sec-bridge-fg: #a05000;
+  --sec-tab-bg: #f0f4e8;    --sec-tab-fg: #4a6a20;
+  --tab-bg: #f4f4f0; --tab-border: #bbb;
+  --tip-bg: #fff; --tip-border: #ccc; --tip-fg: #333;
+  --capo-bg: #ffe8b0; --capo-fg: #7a4000;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1e1e1e; --fg: #d4d4d4; --fg-dim: #999; --fg-muted: #666;
+    --border: #444; --chord: #79b8ff;
+    --sec-chorus-bg: #1e2a4a; --sec-chorus-fg: #79b8ff;
+    --sec-verse-bg: #2a2a2a;  --sec-verse-fg: #aaa;
+    --sec-bridge-bg: #3a2a10; --sec-bridge-fg: #e8a050;
+    --sec-tab-bg: #1e2a14;    --sec-tab-fg: #90c040;
+    --tab-bg: #252525; --tab-border: #555;
+    --tip-bg: #2d2d2d; --tip-border: #555; --tip-fg: #ccc;
+    --capo-bg: #4a3010; --capo-fg: #ffcc60;
+  }
+}
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   font-family: Georgia, serif; font-size: 17px; line-height: 1.6;
-  background: #fafaf8; color: #1a1a1a;
+  background: var(--bg); color: var(--fg);
   padding: 40px 56px 160px; max-width: 860px; margin: 0 auto;
 }
-.song-header { text-align: center; margin-bottom: 36px; padding-bottom: 20px; border-bottom: 2px solid #ddd; }
+.song-header { text-align: center; margin-bottom: 36px; padding-bottom: 20px; border-bottom: 2px solid var(--border); }
 .song-title  { font-size: 2em; font-weight: bold; }
-.song-subtitle { font-size: 1.1em; color: #555; margin-top: 4px; }
-.song-meta   { font-size: 0.88em; color: #888; margin-top: 8px; }
+.song-subtitle { font-size: 1.1em; color: var(--fg-dim); margin-top: 4px; }
+.song-meta   { font-size: 0.88em; color: var(--fg-muted); margin-top: 8px; }
+.capo-badge  {
+  display: inline-block; background: var(--capo-bg); color: var(--capo-fg);
+  font-size: 0.78em; font-weight: bold; font-family: sans-serif;
+  padding: 2px 10px; border-radius: 12px; margin-left: 6px; vertical-align: middle;
+}
 .section     { margin-bottom: 22px; }
 .section-label {
   display: inline-block; font-size: 0.75em; font-weight: bold;
   text-transform: uppercase; letter-spacing: 1px;
   padding: 2px 10px; border-radius: 3px; margin-bottom: 6px;
 }
-.section-chorus  .section-label { background: #e8f0fe; color: #2a5bbf; }
-.section-verse   .section-label { background: #f0f0f0; color: #555; }
-.section-bridge  .section-label { background: #fef0d0; color: #a05000; }
-.section-tab     .section-label { background: #f0f4e8; color: #4a6a20; }
+.section-chorus  .section-label { background: var(--sec-chorus-bg); color: var(--sec-chorus-fg); }
+.section-verse   .section-label { background: var(--sec-verse-bg);  color: var(--sec-verse-fg); }
+.section-bridge  .section-label { background: var(--sec-bridge-bg); color: var(--sec-bridge-fg); }
+.section-tab     .section-label { background: var(--sec-tab-bg);    color: var(--sec-tab-fg); }
 .chord-line  { display: flex; flex-wrap: wrap; line-height: 1; margin-bottom: 4px; }
 .pair        { display: inline-flex; flex-direction: column; align-items: flex-start; }
-.chord       { color: #1a5fb4; font-weight: bold; font-size: 0.82em; min-height: 1.3em; font-family: sans-serif; white-space: pre; cursor: default; }
+.chord       { color: var(--chord); font-weight: bold; font-size: 0.82em; min-height: 1.3em; font-family: sans-serif; white-space: pre; cursor: default; }
 .chord[data-chord] { cursor: help; }
 #chord-tip {
   display: none; position: fixed; z-index: 9998; pointer-events: none;
-  background: #fff; border: 1px solid #ccc; border-radius: 7px;
+  background: var(--tip-bg); border: 1px solid var(--tip-border); border-radius: 7px;
   padding: 6px 8px 4px; box-shadow: 0 4px 18px rgba(0,0,0,0.18);
-  text-align: center; font-family: sans-serif; font-size: 11px; color: #333;
+  text-align: center; font-family: sans-serif; font-size: 11px; color: var(--tip-fg);
 }
 #chord-tip svg { display: block; margin: 0 auto 3px; }
 .lyric       { white-space: pre; }
 .lyric-line  { white-space: pre-wrap; margin-bottom: 2px; }
 .empty-line  { height: 0.75em; }
-.comment     { color: #888; font-style: italic; font-size: 0.9em; margin: 3px 0; }
-.comment-box { border: 1px solid #ccc; padding: 1px 8px; border-radius: 3px; display: inline-block; }
-.chorus-ref  { color: #2a5bbf; font-style: italic; font-size: 0.9em; margin: 3px 0; }
+.comment     { color: var(--fg-muted); font-style: italic; font-size: 0.9em; margin: 3px 0; }
+.comment-box { border: 1px solid var(--border); padding: 1px 8px; border-radius: 3px; display: inline-block; }
+.chorus-ref  { color: var(--sec-chorus-fg); font-style: italic; font-size: 0.9em; margin: 3px 0; }
 .tab-block   {
   font-family: 'Courier New', monospace; font-size: 0.88em;
-  background: #f4f4f0; padding: 12px 16px; border-radius: 4px;
-  border-left: 3px solid #bbb; white-space: pre; overflow-x: auto;
+  background: var(--tab-bg); padding: 12px 16px; border-radius: 4px;
+  border-left: 3px solid var(--tab-border); white-space: pre; overflow-x: auto;
 }
-.page-break  { border: none; border-top: 2px dashed #ddd; margin: 28px 0; }
+.page-break  { border: none; border-top: 2px dashed var(--border); margin: 28px 0; }
+/* ── Progress bar ─────────────────────────────────────────────────────────── */
+#progress-bar {
+  position: fixed; top: 0; left: 0; height: 4px; width: 0%;
+  background: var(--chord); z-index: 10000; transition: width 0.15s linear;
+  pointer-events: none;
+}
+/* ── Control bar ──────────────────────────────────────────────────────────── */
 #scroll-bar {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-  display: flex; align-items: center; gap: 10px;
-  background: rgba(20,20,20,0.90); border: 1px solid #555; border-radius: 28px;
-  padding: 8px 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(20,20,20,0.92); border: 1px solid #555; border-radius: 28px;
+  padding: 8px 18px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
   font-family: sans-serif; color: #eee; user-select: none; z-index: 9999;
 }
 #scroll-bar button {
@@ -1313,23 +1349,40 @@ body {
 }
 #scroll-bar button:hover { background: #555; }
 #play-btn    { width: 38px; height: 38px; font-size: 18px; }
-#speed-label { min-width: 56px; text-align: center; font-size: 12px; color: #aaa; }
+#speed-label { min-width: 52px; text-align: center; font-size: 12px; color: #aaa; }
 #save-btn    { font-size: 14px; opacity: 0.7; }
 #save-btn:hover { opacity: 1; }
 #tempo-btn   { font-size: 15px; opacity: 0.7; }
 #tempo-btn:hover { opacity: 1; }
 #tempo-btn.active { opacity: 1; color: #ffd700; border-color: #ffd700; }
+#font-smaller, #font-larger { font-size: 11px; font-family: sans-serif; letter-spacing: -0.5px; border-radius: 6px !important; width: auto !important; padding: 0 7px !important; }
+/* ── Print ────────────────────────────────────────────────────────────────── */
+@media print {
+  #scroll-bar, #progress-bar { display: none !important; }
+  body { background: #fff !important; color: #000 !important; padding: 20px !important; max-width: 100% !important; font-size: 13px !important; }
+  .song-header { border-bottom-color: #ccc !important; }
+  .chord { color: #1a5fb4 !important; }
+  .tab-block { background: #f8f8f8 !important; border-left-color: #aaa !important; }
+  .section-chorus .section-label { background: #e8f0fe !important; color: #2a5bbf !important; }
+  .section-verse  .section-label { background: #f0f0f0 !important; color: #555 !important; }
+  .section-bridge .section-label { background: #fef0d0 !important; color: #a05000 !important; }
+  .section-tab    .section-label { background: #f0f4e8 !important; color: #4a6a20 !important; }
+  .capo-badge { background: #ffe8b0 !important; color: #7a4000 !important; }
+}
 </style>
 </head>
 <body>
+<div id="progress-bar"></div>
 <div id="song"></div>
 <div id="scroll-bar">
-  <button id="slower-btn" title="Slower (↓)">−</button>
-  <button id="play-btn"   title="Play / Pause (Space)">▶</button>
-  <button id="faster-btn" title="Faster (↑)">+</button>
+  <button id="font-smaller" title="Smaller text (A−)">A−</button>
+  <button id="font-larger"  title="Larger text (A+)">A+</button>
+  <button id="slower-btn"   title="Slower (↓)">−</button>
+  <button id="play-btn"     title="Play / Pause (Space)">▶</button>
+  <button id="faster-btn"   title="Faster (↑)">+</button>
   <span   id="speed-label">30 px/s</span>
-  <button id="tempo-btn"  title="Snap to tempo speed" style="display:none">♩</button>
-  <button id="save-btn"   title="Save as HTML">💾</button>
+  <button id="tempo-btn"    title="Snap to tempo speed" style="display:none">♩</button>
+  <button id="save-btn"     title="Save as HTML">💾</button>
 </div>
 <script>
 // ── ChordPro parser ──────────────────────────────────────────────────────────
@@ -1406,9 +1459,10 @@ function render({ meta, sections }) {
   const mp = [];
   if (meta.artist) mp.push(esc(meta.artist));
   if (meta.key)    mp.push('Key: ' + esc(meta.key));
-  if (meta.capo)   mp.push('Capo ' + esc(meta.capo));
   if (meta.tempo)  mp.push(esc(meta.tempo) + ' BPM');
-  if (mp.length)   out.push('<div class="song-meta">' + mp.join(' &nbsp;·&nbsp; ') + '</div>');
+  const metaLine = mp.join(' &nbsp;·&nbsp; ');
+  const capoBadge = meta.capo ? '<span class="capo-badge">Capo ' + esc(meta.capo) + '</span>' : '';
+  if (metaLine || capoBadge) out.push('<div class="song-meta">' + metaLine + capoBadge + '</div>');
   out.push('</div>');
 
   for (const sec of sections) {
@@ -1476,6 +1530,25 @@ function bindTooltips() {
   });
 }
 
+// ── Progress bar ─────────────────────────────────────────────────────────────
+var progressBar = document.getElementById('progress-bar');
+function updateProgress() {
+  var scrollable = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+  progressBar.style.width = Math.min(100, (window.scrollY / scrollable) * 100) + '%';
+}
+window.addEventListener('scroll', updateProgress, { passive: true });
+
+// ── Font size ─────────────────────────────────────────────────────────────────
+var fontSize = 17;
+function changeFontSize(delta) {
+  fontSize = Math.max(11, Math.min(28, fontSize + delta));
+  document.body.style.fontSize = fontSize + 'px';
+  // tempo speed depends on scrollHeight which changes with font size
+  if (tempoSpeed) setTimeout(function() { applyTempoSpeed(PARSED.meta, false, true); }, 100);
+}
+document.getElementById('font-smaller').addEventListener('click', function() { changeFontSize(-1); });
+document.getElementById('font-larger').addEventListener('click',  function() { changeFontSize(+1); });
+
 // ── Boot ─────────────────────────────────────────────────────────────────────
 const vscodeApi = acquireVsCodeApi();
 const SOURCE = ${safeSource};
@@ -1502,7 +1575,8 @@ function updateUI() {
 }
 
 // Set scroll speed from {tempo:} — 1 chord-line ≈ 1 bar (4 beats)
-function applyTempoSpeed(meta, _retry) {
+// keepManual=true: update tempoSpeed but don't change speed if user had manually overridden it
+function applyTempoSpeed(meta, _retry, keepManual) {
   var bpm = parseInt(meta.tempo || '0');
   if (!bpm) return;
   var lines = document.querySelectorAll('.chord-line').length;
@@ -1513,12 +1587,14 @@ function applyTempoSpeed(meta, _retry) {
   );
   if (scrollable <= 0) {
     if (_retry) return; // give up after one retry
-    setTimeout(function() { applyTempoSpeed(meta, true); }, 400);
+    setTimeout(function() { applyTempoSpeed(meta, true, keepManual); }, 400);
     return;
   }
   var totalSecs = lines * (4 * 60 / bpm); // 4 beats per line at BPM
-  tempoSpeed = Math.max(5, Math.min(300, Math.round(scrollable / totalSecs)));
-  speed = tempoSpeed;
+  var newTempo = Math.max(5, Math.min(300, Math.round(scrollable / totalSecs)));
+  var wasOnTempo = (tempoSpeed > 0 && speed === tempoSpeed);
+  tempoSpeed = newTempo;
+  if (!keepManual || wasOnTempo) speed = tempoSpeed;
   updateUI();
 }
 
@@ -1540,10 +1616,10 @@ playBtn.addEventListener('click', () => {
   playing = !playing; updateUI();
   if (playing) requestAnimationFrame(step);
 });
-document.getElementById('faster-btn').addEventListener('click', () => { speed = Math.min(speed + 5, 300); updateUI(); });
-document.getElementById('slower-btn').addEventListener('click', () => { speed = Math.max(speed - 5, 5);   updateUI(); });
-document.getElementById('save-btn').addEventListener('click',   () => { vscodeApi.postMessage({ command: 'saveHtml' }); });
-tempoBtn.addEventListener('click', () => { if (tempoSpeed) { speed = tempoSpeed; updateUI(); } });
+document.getElementById('faster-btn').addEventListener('click', function() { speed = Math.min(speed + 5, 300); updateUI(); });
+document.getElementById('slower-btn').addEventListener('click', function() { speed = Math.max(speed - 5, 5);   updateUI(); });
+document.getElementById('save-btn').addEventListener('click',   function() { vscodeApi.postMessage({ command: 'saveHtml' }); });
+tempoBtn.addEventListener('click', function() { if (tempoSpeed) { speed = tempoSpeed; updateUI(); } });
 document.addEventListener('keydown', e => {
   if (e.code === 'Space')     { playBtn.click(); e.preventDefault(); }
   if (e.code === 'ArrowUp')   { document.getElementById('faster-btn').click(); e.preventDefault(); }
