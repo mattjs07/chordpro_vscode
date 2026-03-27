@@ -11,7 +11,7 @@ Edit, render, and build ChordPro songs in VSCode — with PDF preview, an intera
 - [x] **Interactive Chord Builder** — fretboard panel to build and insert chord definitions
 - [x] **Auto-completion** — type `{` for directive suggestions, `[` for chord suggestions
 - [x] Chords saved in the Chord Builder appear first in the `[` completion list
-- [ ] Syntax highlighting
+- [x] **Syntax highlighting** — chords, directives, sections, comments
 - [ ] Ultimate Guitar to/from ChordPro converter based on [ChordSheetJS](https://github.com/martijnversluis/ChordSheetJS)
 - [ ] Auto-scrolling
 

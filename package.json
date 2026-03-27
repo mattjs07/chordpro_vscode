@@ -33,6 +33,13 @@
         ]
       }
     ],
+    "grammars": [
+      {
+        "language": "chordpro",
+        "scopeName": "source.chordpro",
+        "path": "./syntaxes/chordpro.tmLanguage.json"
+      }
+    ],
     "viewsContainers": {
       "panel": [
         {
