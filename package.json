@@ -3,9 +3,17 @@
   "displayName": "ChordPro VSCode",
   "description": "Edit, render, and build ChordPro songs in VSCode — includes PDF rendering, templates, and an interactive chord builder with fretboard.",
   "publisher": "mattjs07",
-  "version": "0.1.0",
-  "categories": ["Other"],
-  "keywords": ["chordpro", "guitar", "chord", "music", "tabs"],
+  "version": "0.2.0",
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "chordpro",
+    "guitar",
+    "chord",
+    "music",
+    "tabs"
+  ],
   "engines": {
     "vscode": "^1.99.0"
   },
@@ -14,29 +22,69 @@
     "languages": [
       {
         "id": "chordpro",
-        "aliases": ["ChordPro", "chordpro"],
-        "extensions": [".cho", ".chordpro", ".chopro"]
+        "aliases": [
+          "ChordPro",
+          "chordpro"
+        ],
+        "extensions": [
+          ".cho",
+          ".chordpro",
+          ".chopro"
+        ]
       }
     ],
     "viewsContainers": {
       "panel": [
-        { "id": "chordBuilder", "title": "Chord Builder", "icon": "$(music)" }
+        {
+          "id": "chordBuilder",
+          "title": "Chord Builder",
+          "icon": "$(music)"
+        }
       ]
     },
     "views": {
       "chordBuilder": [
-        { "type": "webview", "id": "chordproFretboard.chordBuilderView", "name": "Chord Builder", "icon": "$(music)" }
+        {
+          "type": "webview",
+          "id": "chordproFretboard.chordBuilderView",
+          "name": "Chord Builder",
+          "icon": "$(music)"
+        }
       ]
     },
     "commands": [
-      { "command": "extension.renderChordPro",             "title": "Render ChordPro PDF" },
-      { "command": "extension.previewChordPro",            "title": "Preview ChordPro PDF" },
-      { "command": "extension.openChordProMinimalTemplate", "title": "Open ChordPro Minimal Template" },
-      { "command": "extension.openChordProExampleTemplate", "title": "Open ChordPro Example Template" },
-      { "command": "extension.openChordProTemplate",        "title": "Open ChordPro Template" },
-      { "command": "chordproFretboard.openBuilder",         "title": "Open Chord Builder" },
-      { "command": "chordproFretboard.insertChord",         "title": "Insert Chord by Name" },
-      { "command": "chordproFretboard.insertChordFromList", "title": "Insert Chord from List" }
+      {
+        "command": "extension.renderChordPro",
+        "title": "Render ChordPro PDF"
+      },
+      {
+        "command": "extension.previewChordPro",
+        "title": "Preview ChordPro PDF"
+      },
+      {
+        "command": "extension.openChordProMinimalTemplate",
+        "title": "Open ChordPro Minimal Template"
+      },
+      {
+        "command": "extension.openChordProExampleTemplate",
+        "title": "Open ChordPro Example Template"
+      },
+      {
+        "command": "extension.openChordProTemplate",
+        "title": "Open ChordPro Template"
+      },
+      {
+        "command": "chordproFretboard.openBuilder",
+        "title": "Open Chord Builder"
+      },
+      {
+        "command": "chordproFretboard.insertChord",
+        "title": "Insert Chord by Name"
+      },
+      {
+        "command": "chordproFretboard.insertChordFromList",
+        "title": "Insert Chord from List"
+      }
     ],
     "keybindings": [
       {
