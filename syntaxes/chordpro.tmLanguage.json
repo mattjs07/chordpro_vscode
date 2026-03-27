@@ -28,7 +28,7 @@
     },
 
     "section-directive": {
-      "match": "(\\{)(start_of_chorus|end_of_chorus|start_of_verse|end_of_verse|start_of_bridge|end_of_bridge|start_of_tab|end_of_tab|start_of_grid|end_of_grid|start_of_textblock|end_of_textblock|soc|eoc|sov|eov|sot|eot)([^}]*)(\\})",
+      "match": "(\\{)(start_of_chorus|end_of_chorus|start_of_verse|end_of_verse|start_of_bridge|end_of_bridge|start_of_tab|end_of_tab|start_of_grid|end_of_grid|start_of_textblock|end_of_textblock|start_of_abc|end_of_abc|start_of_ly|end_of_ly|start_of_svg|end_of_svg|soc|eoc|sov|eov|sob|eob|sot|eot|sog|eog|chorus)([^}]*)(\\})",
       "captures": {
         "1": { "name": "punctuation.definition.directive.chordpro" },
         "2": { "name": "keyword.control.section.chordpro" },

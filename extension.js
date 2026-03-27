@@ -388,50 +388,140 @@ document.getElementById('resetBtn').addEventListener('click', () => {
 
 const DIRECTIVES = [
     // Metadata
-    { label: 'title',              detail: 'Song title',                    snippet: 'title: $1}'              },
-    { label: 'subtitle',           detail: 'Song subtitle',                 snippet: 'subtitle: $1}'           },
-    { label: 'artist',             detail: 'Artist name',                   snippet: 'artist: $1}'             },
-    { label: 'composer',           detail: 'Composer name',                 snippet: 'composer: $1}'           },
-    { label: 'lyricist',           detail: 'Lyricist name',                 snippet: 'lyricist: $1}'           },
-    { label: 'copyright',          detail: 'Copyright info',                snippet: 'copyright: $1}'          },
-    { label: 'album',              detail: 'Album name',                    snippet: 'album: $1}'              },
-    { label: 'year',               detail: 'Year of publication',           snippet: 'year: $1}'               },
-    { label: 'key',                detail: 'Song key (e.g. C, Am)',         snippet: 'key: $1}'                },
-    { label: 'time',               detail: 'Time signature (e.g. 4/4)',     snippet: 'time: $1}'               },
-    { label: 'tempo',              detail: 'Tempo in BPM',                  snippet: 'tempo: $1}'              },
-    { label: 'duration',           detail: 'Song duration',                 snippet: 'duration: $1}'           },
-    { label: 'capo',               detail: 'Capo position',                 snippet: 'capo: $1}'               },
-    { label: 'meta',               detail: 'Custom metadata',               snippet: 'meta: $1}'               },
+    { label: 'title',                detail: 'Song title',                       snippet: 'title: $1}'                       },
+    { label: 'sorttitle',            detail: 'Title used for sorting',           snippet: 'sorttitle: $1}'                   },
+    { label: 'subtitle',             detail: 'Song subtitle',                    snippet: 'subtitle: $1}'                    },
+    { label: 'artist',               detail: 'Artist / performer name',          snippet: 'artist: $1}'                      },
+    { label: 'sortartist',           detail: 'Artist name used for sorting',     snippet: 'sortartist: $1}'                  },
+    { label: 'composer',             detail: 'Composer name',                    snippet: 'composer: $1}'                    },
+    { label: 'lyricist',             detail: 'Lyricist name',                    snippet: 'lyricist: $1}'                    },
+    { label: 'copyright',            detail: 'Copyright info',                   snippet: 'copyright: $1}'                   },
+    { label: 'album',                detail: 'Album name',                       snippet: 'album: $1}'                       },
+    { label: 'year',                 detail: 'Year of publication',              snippet: 'year: $1}'                        },
+    { label: 'key',                  detail: 'Song key (e.g. C, Am)',            snippet: 'key: $1}'                         },
+    { label: 'time',                 detail: 'Time signature (e.g. 4/4)',        snippet: 'time: $1}'                        },
+    { label: 'tempo',                detail: 'Tempo in BPM',                     snippet: 'tempo: $1}'                       },
+    { label: 'duration',             detail: 'Song duration',                    snippet: 'duration: $1}'                    },
+    { label: 'capo',                 detail: 'Capo position (fret number)',       snippet: 'capo: $1}'                        },
+    { label: 'tag',                  detail: 'Arbitrary tag / label',            snippet: 'tag: $1}'                         },
+    { label: 'meta',                 detail: 'Custom metadata key-value',        snippet: 'meta: $1}'                        },
     // Sections
-    { label: 'start_of_chorus',    detail: 'Start chorus section',          snippet: 'start_of_chorus}'        },
-    { label: 'end_of_chorus',      detail: 'End chorus section',            snippet: 'end_of_chorus}'          },
-    { label: 'start_of_verse',     detail: 'Start verse section',           snippet: 'start_of_verse}'         },
-    { label: 'end_of_verse',       detail: 'End verse section',             snippet: 'end_of_verse}'           },
-    { label: 'start_of_bridge',    detail: 'Start bridge section',          snippet: 'start_of_bridge}'        },
-    { label: 'end_of_bridge',      detail: 'End bridge section',            snippet: 'end_of_bridge}'          },
-    { label: 'start_of_tab',       detail: 'Start tab section',             snippet: 'start_of_tab}'           },
-    { label: 'end_of_tab',         detail: 'End tab section',               snippet: 'end_of_tab}'             },
-    { label: 'start_of_grid',      detail: 'Start chord grid',              snippet: 'start_of_grid}'          },
-    { label: 'end_of_grid',        detail: 'End chord grid',                snippet: 'end_of_grid}'            },
+    { label: 'start_of_chorus',      detail: 'Start chorus section',             snippet: 'start_of_chorus}'                 },
+    { label: 'end_of_chorus',        detail: 'End chorus section',               snippet: 'end_of_chorus}'                   },
+    { label: 'chorus',               detail: 'Repeat / reference chorus inline', snippet: 'chorus}'                          },
+    { label: 'start_of_verse',       detail: 'Start verse section',              snippet: 'start_of_verse}'                  },
+    { label: 'end_of_verse',         detail: 'End verse section',                snippet: 'end_of_verse}'                    },
+    { label: 'start_of_bridge',      detail: 'Start bridge section',             snippet: 'start_of_bridge}'                 },
+    { label: 'end_of_bridge',        detail: 'End bridge section',               snippet: 'end_of_bridge}'                   },
+    { label: 'start_of_tab',         detail: 'Start tablature section',          snippet: 'start_of_tab}'                    },
+    { label: 'end_of_tab',           detail: 'End tablature section',            snippet: 'end_of_tab}'                      },
+    { label: 'start_of_grid',        detail: 'Start chord grid section',         snippet: 'start_of_grid}'                   },
+    { label: 'end_of_grid',          detail: 'End chord grid section',           snippet: 'end_of_grid}'                     },
+    { label: 'start_of_textblock',   detail: 'Start raw text block',             snippet: 'start_of_textblock}'              },
+    { label: 'end_of_textblock',     detail: 'End raw text block',               snippet: 'end_of_textblock}'                },
+    { label: 'start_of_abc',         detail: 'Start ABC music notation block',   snippet: 'start_of_abc}\n$1\n{end_of_abc}'  },
+    { label: 'end_of_abc',           detail: 'End ABC music notation block',     snippet: 'end_of_abc}'                      },
+    { label: 'start_of_ly',          detail: 'Start LilyPond notation block',    snippet: 'start_of_ly}\n$1\n{end_of_ly}'    },
+    { label: 'end_of_ly',            detail: 'End LilyPond notation block',      snippet: 'end_of_ly}'                       },
+    { label: 'start_of_svg',         detail: 'Start SVG content block',          snippet: 'start_of_svg}\n$1\n{end_of_svg}'  },
+    { label: 'end_of_svg',           detail: 'End SVG content block',            snippet: 'end_of_svg}'                      },
     // Comments & formatting
-    { label: 'comment',            detail: 'Inline comment / annotation',   snippet: 'comment: $1}'            },
-    { label: 'comment_italic',     detail: 'Italic comment',                snippet: 'comment_italic: $1}'     },
-    { label: 'comment_box',        detail: 'Boxed comment',                 snippet: 'comment_box: $1}'        },
-    { label: 'columns',            detail: 'Number of columns',             snippet: 'columns: $1}'            },
-    { label: 'column_break',       detail: 'Force column break',            snippet: 'column_break}'           },
-    { label: 'new_page',           detail: 'Force new page',                snippet: 'new_page}'               },
-    { label: 'new_physical_page',  detail: 'Force new physical page',       snippet: 'new_physical_page}'      },
-    // Chord definitions
-    { label: 'define',             detail: 'Define a chord fingering',      snippet: 'define: $1 base-fret $2 frets $3}' },
-    { label: 'chord',              detail: 'Inline chord display',          snippet: 'chord: $1}'              },
-    // Misc
-    { label: 'image',              detail: 'Embed an image',                snippet: 'image: $1}'              },
-    { label: 'x_',                 detail: 'Custom extension directive',    snippet: 'x_$1: $2}'               },
+    { label: 'comment',              detail: 'Inline comment / annotation',      snippet: 'comment: $1}'                     },
+    { label: 'comment_italic',       detail: 'Italic comment',                   snippet: 'comment_italic: $1}'              },
+    { label: 'comment_box',          detail: 'Boxed comment',                    snippet: 'comment_box: $1}'                 },
+    { label: 'highlight',            detail: 'Highlighted text',                 snippet: 'highlight: $1}'                   },
+    { label: 'image',                detail: 'Embed an image',                   snippet: 'image: src="$1"}'                 },
+    { label: 'columns',              detail: 'Number of layout columns',         snippet: 'columns: $1}'                     },
+    { label: 'column_break',         detail: 'Force column break',               snippet: 'column_break}'                    },
+    { label: 'new_page',             detail: 'Force new page',                   snippet: 'new_page}'                        },
+    { label: 'new_physical_page',    detail: 'Force new physical page',          snippet: 'new_physical_page}'               },
+    { label: 'pagetype',             detail: 'Set page layout type',             snippet: 'pagetype: $1}'                    },
+    // Chord definitions & transposition
+    { label: 'define',               detail: 'Define a chord fingering',         snippet: 'define: $1 base-fret $2 frets $3}'},
+    { label: 'chord',                detail: 'Inline chord definition',          snippet: 'chord: $1}'                       },
+    { label: 'transpose',            detail: 'Transpose the song',               snippet: 'transpose: $1}'                   },
+    // Font / size / colour — chords
+    { label: 'chordfont',            detail: 'Chord font name',                  snippet: 'chordfont: $1}'                   },
+    { label: 'chordsize',            detail: 'Chord font size',                  snippet: 'chordsize: $1}'                   },
+    { label: 'chordcolour',          detail: 'Chord colour',                     snippet: 'chordcolour: $1}'                 },
+    // Font / size / colour — lyrics
+    { label: 'textfont',             detail: 'Lyrics font name',                 snippet: 'textfont: $1}'                    },
+    { label: 'textsize',             detail: 'Lyrics font size',                 snippet: 'textsize: $1}'                    },
+    { label: 'textcolour',           detail: 'Lyrics colour',                    snippet: 'textcolour: $1}'                  },
+    // Font / size / colour — title
+    { label: 'titlefont',            detail: 'Title font name',                  snippet: 'titlefont: $1}'                   },
+    { label: 'titlesize',            detail: 'Title font size',                  snippet: 'titlesize: $1}'                   },
+    { label: 'titlecolour',          detail: 'Title colour',                     snippet: 'titlecolour: $1}'                 },
+    // Font / size / colour — chorus
+    { label: 'chorusfont',           detail: 'Chorus font name',                 snippet: 'chorusfont: $1}'                  },
+    { label: 'chorussize',           detail: 'Chorus font size',                 snippet: 'chorussize: $1}'                  },
+    { label: 'choruscolour',         detail: 'Chorus colour',                    snippet: 'choruscolour: $1}'                },
+    // Font / size / colour — tab
+    { label: 'tabfont',              detail: 'Tablature font name',              snippet: 'tabfont: $1}'                     },
+    { label: 'tabsize',              detail: 'Tablature font size',              snippet: 'tabsize: $1}'                     },
+    { label: 'tabcolour',            detail: 'Tablature colour',                 snippet: 'tabcolour: $1}'                   },
+    // Legacy / misc
+    { label: 'diagrams',             detail: 'Toggle chord diagrams (legacy)',   snippet: 'diagrams: $1}'                    },
+    { label: 'grid',                 detail: 'Show chord grids (legacy)',        snippet: 'grid}'                            },
+    { label: 'no_grid',              detail: 'Hide chord grids (legacy)',        snippet: 'no_grid}'                         },
+    { label: 'titles',               detail: 'Toggle titles (legacy)',           snippet: 'titles: $1}'                      },
 ];
 
 const CHORD_ROOTS = ['C','C#','Db','D','D#','Eb','E','F','F#','Gb','G','G#','Ab','A','A#','Bb','B'];
-const CHORD_QUALITIES = ['', 'm', '7', 'm7', 'maj7', 'sus2', 'sus4', 'add9', 'dim', 'aug', '5', '6', 'm6', '9', 'm9', 'maj9', '11', '13'];
+const CHORD_QUALITIES = [
+    '', 'm', '7', 'm7', 'maj7', 'maj9', 'maj11', 'maj13',
+    'sus2', 'sus4', 'add9', 'add4',
+    'dim', 'dim7', 'aug',
+    '5', '6', 'm6', '69',
+    '9', 'm9', '11', '13',
+    '7sus4', '7b9', '7#9', '7b5', '7#5',
+    'm7b5', 'mmaj7',
+];
 const COMPLETION_CHORDS = CHORD_ROOTS.flatMap(r => CHORD_QUALITIES.map(q => r + q));
+
+const RENDER_OPTIONS = {
+    config: {
+        description: 'ChordPro config preset or path to a custom `.json` config file (absolute or relative to the `.cho` file).',
+        presets: ['modern1', 'modern2', 'modern3', 'nashville', 'nashville2', 'rock', 'ukulele', 'dark', 'default'],
+        placeholder: 'e.g. modern1, dark, or ./myconfig.json',
+    },
+    suffix: {
+        description: 'String appended to the output filename: `songname_<suffix>.pdf`.',
+        placeholder: 'e.g. lyrics_only',
+    },
+    output: {
+        description: 'Full output PDF filename. Overrides the default name derived from the source file.',
+        placeholder: 'e.g. mysong_final.pdf',
+    },
+    options: {
+        description: 'Additional ChordPro CLI flags passed verbatim to the renderer.',
+        placeholder: 'e.g. -l --toc --no-chord-grids',
+        flags: [
+            { flag: '-l',                  detail: 'Lyrics only — hide all chords'              },
+            { flag: '--lyrics-only',        detail: 'Lyrics only — hide all chords'              },
+            { flag: '--toc',               detail: 'Include a table of contents'                },
+            { flag: '--no-toc',            detail: 'Remove the table of contents'               },
+            { flag: '--chord-grids',        detail: 'Show all chord diagrams at the end'         },
+            { flag: '--user-chord-grids',   detail: 'Show only user-defined chord diagrams'      },
+            { flag: '--no-chord-grids',     detail: 'Hide chord diagrams'                        },
+            { flag: '--decapo',            detail: 'Apply capo by transposing chords instead'   },
+            { flag: '--diagrams=all',       detail: 'Show diagrams for all chords'               },
+            { flag: '--diagrams=user',      detail: 'Show diagrams for user-defined chords only' },
+            { flag: '--diagrams=none',      detail: 'Suppress all chord diagrams'                },
+            { flag: '--page-size=a4',       detail: 'Set page size to A4'                        },
+            { flag: '--page-size=letter',   detail: 'Set page size to US Letter'                 },
+            { flag: '--start-page-number=1',detail: 'Override starting page number'              },
+            { flag: '--strict',            detail: 'Enforce strict ChordPro syntax'             },
+            { flag: '--no-strict',         detail: 'Allow relaxed / custom chord names'         },
+            { flag: '--generate=pdf',       detail: 'Output as PDF (default)'                    },
+            { flag: '--generate=html',      detail: 'Output as HTML'                             },
+            { flag: '--generate=txt',       detail: 'Output as plain text'                       },
+            { flag: '--generate=cho',       detail: 'Output as normalised ChordPro'              },
+            { flag: '-x N',                detail: 'Transpose N semitones (replace N)'          },
+            { flag: '--verbose',           detail: 'Print detailed execution log'               },
+        ],
+    },
+};
 
 // ─────────────────────────────────────────────
 
@@ -507,10 +597,30 @@ function activate(context) {
         'chordpro',
         {
             provideCompletionItems(document, position) {
-                const linePrefix = document.lineAt(position).text.substring(0, position.character);
+                const fullLine = document.lineAt(position).text;
+                const linePrefix = fullLine.substring(0, position.character);
+                const isCommentLine = /^\s*#/.test(fullLine);
+                const braceStart = linePrefix.lastIndexOf('{');
+
+                // Render option completions: inside {…} on a comment line
+                if (isCommentLine && braceStart !== -1 && !linePrefix.includes('}', braceStart)) {
+                    const replaceRange = new vscode.Range(position.line, braceStart + 1, position.line, position.character);
+                    return Object.entries(RENDER_OPTIONS).map(([key, info]) => {
+                        const item = new vscode.CompletionItem(key, vscode.CompletionItemKind.Property);
+                        item.detail = info.placeholder;
+                        item.documentation = new vscode.MarkdownString(info.description);
+                        if (key === 'config') {
+                            const choices = info.presets.join(',');
+                            item.insertText = new vscode.SnippetString(`${key} = "\${1|${choices}|}"}`)
+                        } else {
+                            item.insertText = new vscode.SnippetString(`${key} = "$1"}`);
+                        }
+                        item.range = replaceRange;
+                        return item;
+                    });
+                }
 
                 // Directive completions: inside {…} not yet closed
-                const braceStart = linePrefix.lastIndexOf('{');
                 if (braceStart !== -1 && !linePrefix.includes('}', braceStart)) {
                     const replaceRange = new vscode.Range(position.line, braceStart + 1, position.line, position.character);
                     return DIRECTIVES.map(d => {
@@ -559,11 +669,109 @@ function activate(context) {
         '{', '['
     );
 
+    // Hover provider — show description when hovering over # {key = value} lines
+    const hoverProvider = vscode.languages.registerHoverProvider('chordpro', {
+        provideHover(document, position) {
+            const line = document.lineAt(position).text;
+            const match = line.match(/^\s*#.*\{\s*(config|suffix|output|options)\s*=\s*([^}]*)\}/);
+            if (!match) { return undefined; }
+            const key = match[1];
+            const value = match[2].trim().replace(/^["']|["']$/g, '');
+            const info = RENDER_OPTIONS[key];
+            const md = new vscode.MarkdownString();
+            md.appendMarkdown(`**\`${key}\`** — ${info.description}`);
+            if (value) { md.appendMarkdown(`\n\nCurrent value: \`${value}\``); }
+            if (info.presets) { md.appendMarkdown(`\n\nValid presets: ${info.presets.map(p => `\`${p}\``).join(', ')}`); }
+            if (info.flags) {
+                md.appendMarkdown('\n\n**Common flags:**\n\n');
+                md.appendMarkdown(info.flags.map(f => `- \`${f.flag}\` — ${f.detail}`).join('\n'));
+            }
+            return new vscode.Hover(md);
+        }
+    });
+
+    // CodeLens provider — "⚙ Configure rendering" button at line 0
+    const codeLensProvider = vscode.languages.registerCodeLensProvider('chordpro', {
+        provideCodeLenses(document) {
+            return [new vscode.CodeLens(new vscode.Range(0, 0, 0, 0), {
+                title: '⚙ Configure rendering',
+                command: 'extension.configureRendering',
+                arguments: [document],
+            })];
+        }
+    });
+
+    // Configure rendering command — QuickPick UI to insert/update # {key = value} lines
+    const configureRendering = vscode.commands.registerCommand('extension.configureRendering', async (document) => {
+        const doc = document ?? vscode.window.activeTextEditor?.document;
+        if (!doc) { return; }
+
+        const optionItems = Object.entries(RENDER_OPTIONS).map(([key, info]) => ({
+            label: key,
+            description: info.placeholder,
+            detail: info.description,
+        }));
+        const picked = await vscode.window.showQuickPick(optionItems, { placeHolder: 'Select a rendering option to configure' });
+        if (!picked) { return; }
+
+        const key = picked.label;
+        const info = RENDER_OPTIONS[key];
+        let value;
+
+        if (key === 'config') {
+            const presetItems = [
+                ...info.presets.map(p => ({ label: p })),
+                { label: '$(edit) Enter custom path...', custom: true },
+            ];
+            const choice = await vscode.window.showQuickPick(presetItems, { placeHolder: 'Select a preset or enter a custom JSON path' });
+            if (!choice) { return; }
+            if (choice.custom) {
+                value = await vscode.window.showInputBox({ prompt: 'Path to config JSON file', placeHolder: info.placeholder });
+            } else {
+                value = choice.label;
+            }
+        } else if (key === 'options' && info.flags) {
+            const flagItems = [
+                ...info.flags.map(f => ({ label: f.flag, description: f.detail })),
+                { label: '$(edit) Enter custom flags...', custom: true },
+            ];
+            const choice = await vscode.window.showQuickPick(flagItems, { placeHolder: 'Select a flag or enter custom flags' });
+            if (!choice) { return; }
+            if (choice.custom) {
+                value = await vscode.window.showInputBox({ prompt: 'CLI flags to pass to chordpro', placeHolder: info.placeholder });
+            } else {
+                value = choice.label;
+            }
+        } else {
+            value = await vscode.window.showInputBox({ prompt: `Value for ${key}`, placeHolder: info.placeholder });
+        }
+        if (value === undefined) { return; }
+
+        const newLine = `# {${key} = "${value}"}`;
+        const lineCount = Math.min(25, doc.lineCount);
+        const keyRegex = new RegExp(`^\\s*#.*\\{\\s*${key}\\s*=`);
+        let existingLineIndex = -1;
+        for (let i = 0; i < lineCount; i++) {
+            if (keyRegex.test(doc.lineAt(i).text)) { existingLineIndex = i; break; }
+        }
+
+        const edit = new vscode.WorkspaceEdit();
+        if (existingLineIndex >= 0) {
+            edit.replace(doc.uri, doc.lineAt(existingLineIndex).range, newLine);
+        } else {
+            edit.insert(doc.uri, new vscode.Position(0, 0), newLine + '\n');
+        }
+        await vscode.workspace.applyEdit(edit);
+    });
+
     // Add disposables to context.subscriptions
     context.subscriptions.push(
         renderOnly,
         previewChordPro,
         completionProvider,
+        hoverProvider,
+        codeLensProvider,
+        configureRendering,
         openChordProMinimalTemplate,
         openChordProExampleTemplate,
         openChordProTemplateCommand,

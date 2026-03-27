@@ -41,8 +41,8 @@ Open the **Chord Builder** panel (`Ctrl+Alt+D` or from the panel at the bottom).
 
 Auto-completion activates automatically in `.cho` / `.chordpro` files.
 
-- Type `{` → suggestions for all ChordPro directives (`title`, `key`, `start_of_chorus`, `define`, …)
-- Type `[` → suggestions for chords — your saved chords appear first, followed by all standard chords
+- Type `{` → suggestions for all ChordPro directives (`title`, `key`, `start_of_chorus`, `define`, font/colour directives, …)
+- Type `[` → suggestions for chords — your saved chords appear first, followed by all standard chords (including extensions like `7b9`, `maj7`, `dim7`, …)
 
 ## Rendering Parameters
 
@@ -58,6 +58,9 @@ Parameters can be written in the first 25 lines of your `.cho` file:
 - **config** can be a [preset name](https://www.chordpro.org/chordpro/chordpro-configuration-presets/#preset-configurations) (`modern1`, `dark`, …) or a path to a `.json` file (absolute or relative to the `.cho` file). Defaults to `modern1`.
 - **suffix** is appended to the output filename: `mysong_lyrics_only.pdf`
 - **output** sets the output filename directly
+- **options** passes extra CLI flags verbatim, e.g. `-l`, `--toc`, `--no-chord-grids`, `--page-size=a4`
+
+Hover over any `# {key = ...}` line to see a description, valid values, and common flags. Click **⚙ Configure rendering** (CodeLens at line 1) to use a guided picker UI.
 
 ## Requirements
 
@@ -80,12 +83,21 @@ Install ChordPro from the [official website](https://www.chordpro.org/chordpro/c
 
 ## Release Notes
 
+### 0.5.0
+- Expanded directive completions: `sorttitle`, `sortartist`, `tag`, `chorus`, `highlight`, `start_of_abc/ly/svg`, font/colour directives, `transpose`, and more
+- Expanded chord completions: `7b9`, `7#9`, `maj9`, `dim7`, `mmaj7`, `m7b5`, and other extended qualities
+- Syntax highlighting now covers `start_of_abc/ly/svg`, `chorus`, `sob/eob`, `sog/eog` section markers
+- Options helper: hover over `# {options = ...}` now shows a full list of common CLI flags
+- Options helper: **⚙ Configure rendering** CodeLens now offers a flag picker for the `options` field
+
 ### 0.1.0
 - Added interactive Chord Builder with fretboard webview
 - Added Preview ChordPro PDF command (renders + opens beside editor)
 - Added auto-completion for directives (`{`) and chords (`[`)
 - Saved chords from the Chord Builder appear first in chord completions
 - Registered `.cho` / `.chordpro` / `.chopro` as ChordPro language
+- Added syntax highlighting with TextMate grammar
+- Added options helper: completion, hover tooltip, and CodeLens for `# {key = value}` rendering params
 
 ### 0.0.1
 Initial release with basic render and template functions.
