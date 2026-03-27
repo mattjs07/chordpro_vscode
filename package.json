@@ -107,6 +107,10 @@
       {
         "command": "extension.openTabEditor",
         "title": "Open Tab Editor"
+      },
+      {
+        "command": "extension.transposeChords",
+        "title": "Transpose Chords"
       }
     ],
     "keybindings": [
@@ -175,7 +179,8 @@
     "onCommand:chordproFretboard.insertChordFromList",
     "onCommand:extension.openChordAnalyzer",
     "onCommand:extension.autoScrollPreview",
-    "onCommand:extension.openTabEditor"
+    "onCommand:extension.openTabEditor",
+    "onCommand:extension.transposeChords"
   ],
   "devDependencies": {
     "@types/mocha": "^10.0.10",

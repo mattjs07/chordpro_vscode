@@ -21,6 +21,35 @@ function openChordProTemplate(context, templateName) {
     });
 }
 
+// ─────────────────────────────────────────────
+// Transpose helpers
+// ─────────────────────────────────────────────
+
+const SHARPS = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const FLATS  = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+
+function transposeNote(note, semitones) {
+    const inFlats  = FLATS.indexOf(note);
+    const inSharps = SHARPS.indexOf(note);
+    // Prefer flats if the original note is a flat accidental (Db, Eb, Gb, Ab, Bb)
+    const preferFlats = inFlats !== -1 && inSharps === -1;
+    const idx = inSharps !== -1 ? inSharps : inFlats;
+    if (idx === -1) return note;
+    const newIdx = ((idx + semitones) % 12 + 12) % 12;
+    return preferFlats ? FLATS[newIdx] : SHARPS[newIdx];
+}
+
+function transposeChordToken(chordStr, semitones) {
+    // Match root[b#]? + quality + optional /bass
+    const m = chordStr.match(/^([A-G][b#]?)([^/]*)(\/([A-G][b#]?)(.*))?$/);
+    if (!m) return chordStr;
+    const newRoot = transposeNote(m[1], semitones);
+    const newBass = m[4] ? transposeNote(m[4], semitones) : null;
+    return newRoot + m[2] + (newBass ? '/' + newBass + (m[5] || '') : '');
+}
+
+// ─────────────────────────────────────────────
+
 function resolveConfigPath(configPath, fileDirname) {
     // Check if configPath ends with '.json'
     if (configPath.endsWith('.json')) {
@@ -1028,6 +1057,69 @@ updateUI();
     }
 
     // ─────────────────────────────────────────────
+    // Transpose Chords
+    // ─────────────────────────────────────────────
+
+    const TRANSPOSE_ITEMS = [
+        { label: '+1',  description: 'up a half step',             n:  1 },
+        { label: '+2',  description: 'up a whole step',            n:  2 },
+        { label: '+3',  description: 'up a minor third',           n:  3 },
+        { label: '+4',  description: 'up a major third',           n:  4 },
+        { label: '+5',  description: 'up a fourth',                n:  5 },
+        { label: '+6',  description: 'up a tritone',               n:  6 },
+        { label: '-1',  description: 'down a half step',           n: -1 },
+        { label: '-2',  description: 'down a whole step',          n: -2 },
+        { label: '-3',  description: 'down a minor third',         n: -3 },
+        { label: '-4',  description: 'down a major third',         n: -4 },
+        { label: '-5',  description: 'down a fourth / up a fifth', n: -5 },
+        { label: '-6',  description: 'down a tritone',             n: -6 },
+        { label: '$(edit) Custom…', description: 'enter any number of semitones', custom: true },
+    ];
+
+    const transposeChords = vscode.commands.registerCommand('extension.transposeChords', async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) { vscode.window.showErrorMessage('No active editor'); return; }
+
+        const picked = await vscode.window.showQuickPick(TRANSPOSE_ITEMS, {
+            placeHolder: 'Transpose by how many semitones?'
+        });
+        if (!picked) return;
+
+        let n;
+        if (picked.custom) {
+            const input = await vscode.window.showInputBox({
+                prompt: 'Semitones to transpose (positive = up, negative = down)',
+                placeHolder: 'e.g. 2 or -3',
+                validateInput: v => (isNaN(parseInt(v, 10)) ? 'Enter a whole number' : null)
+            });
+            if (!input) return;
+            n = parseInt(input, 10);
+        } else {
+            n = picked.n;
+        }
+
+        const doc = editor.document;
+        const hasSelection = !editor.selection.isEmpty;
+        const range = hasSelection
+            ? editor.selection
+            : new vscode.Range(doc.positionAt(0), doc.positionAt(doc.getText().length));
+        const text = doc.getText(hasSelection ? editor.selection : undefined);
+
+        const result = text
+            .replace(/\[([A-G][b#]?[^\]]*)\]/g, (_, chord) => '[' + transposeChordToken(chord, n) + ']')
+            .replace(/(\{key\s*:\s*)([A-G][b#]?)([^}]*)(\})/gi, (_, pre, root, rest, close) =>
+                pre + transposeNote(root, n) + rest + close
+            );
+
+        const edit = new vscode.WorkspaceEdit();
+        edit.replace(doc.uri, range, result);
+        await vscode.workspace.applyEdit(edit);
+
+        const label = n > 0 ? `+${n}` : `${n}`;
+        vscode.window.showInformationMessage(`Transposed ${label} semitone${Math.abs(n) !== 1 ? 's' : ''}`);
+    });
+
+    // ─────────────────────────────────────────────
     // Oolimo Chord Analyzer
     // ─────────────────────────────────────────────
 
@@ -1121,7 +1213,8 @@ updateUI();
         insertChordFromList,
         openChordAnalyzer,
         autoScrollPreview,
-        registerTabEditor(context)
+        registerTabEditor(context),
+        transposeChords
     );
 }
 

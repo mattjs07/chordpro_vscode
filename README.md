@@ -15,6 +15,7 @@ Edit, render, and build ChordPro songs in VSCode — with PDF preview, an intera
 - [x] **Auto-completion** — type `{` for directive suggestions, `[` for chord suggestions
 - [x] Chords saved in the Chord Builder appear first in the `[` completion list
 - [x] **Syntax highlighting** — chords, directives, sections, comments
+- [x] **Transpose** — shift all chords (or a selection) up/down by semitones, with musical interval labels
 - [ ] Ultimate Guitar to/from ChordPro converter
 
 ## Commands
@@ -32,6 +33,7 @@ Edit, render, and build ChordPro songs in VSCode — with PDF preview, an intera
 | Open ChordPro Minimal Template | — | Blank template to start a new song |
 | Open ChordPro Example Template | — | Example file (Yesterday by The Beatles) |
 | Configure ChordPro Rendering | — | Guided UI to set config, options, suffix, output (also via ⚙ CodeLens) |
+| Transpose Chords | — | Transpose all chords (or a selection) by any number of semitones |
 
 ## Chord Builder
 
@@ -65,6 +67,30 @@ Press `Ctrl+Alt+S` to render the current song as HTML and open it in a side pane
 - **Space** = play/pause · **↑** = faster · **↓** = slower
 - Speed adjusts in 10 px/s increments (5–300 px/s); auto-stops at the end
 - Re-running the command while the panel is open reloads the content
+
+## Transposing
+
+There are two ways to transpose a song, and they serve different purposes:
+
+**1. `{transpose: N}` directive** (ChordPro CLI)
+
+Add `{transpose: 2}` anywhere in your `.cho` file. The CLI will apply the transposition at render time — the chord names in the source are unchanged.
+
+- ✓ PDF output is transposed
+- ✗ Auto-scroll HTML preview is **not** affected (our JS renderer ignores this directive)
+- ✓ Non-destructive — remove the directive to revert instantly
+
+**2. Transpose Chords command** (this extension)
+
+Open the command palette (`Ctrl+Shift+P`) → **Transpose Chords**. Pick an interval or enter a custom number of semitones.
+
+- ✓ Rewrites chord names directly in the source file (`[Am]` → `[Bm]`)
+- ✓ PDF output is transposed (source reflects the new key)
+- ✓ Auto-scroll HTML preview is transposed (reads from source)
+- ✓ Apply to the whole file or just a selection
+- ✓ Fully undoable with `Ctrl+Z`
+
+**Rule of thumb:** use `{transpose}` for a quick one-off PDF in a different key; use the **Transpose Chords** command when you want to permanently change the key across all outputs.
 
 ## Auto-completion
 
@@ -127,6 +153,14 @@ Install ChordPro from the [official website](https://www.chordpro.org/chordpro/c
 - The `config` preset `modern1` is a good default; try `dark` for a dark-themed PDF
 
 ## Release Notes
+
+### 0.9.0
+- Added **Transpose Chords** command (command palette: "Transpose Chords")
+- Transposes all `[chord]` tokens in the document, or only the selected text
+- QuickPick with common intervals: half step, whole step, minor/major third, fourth, tritone (±1 to ±6), plus custom input
+- Also updates `{key: ...}` directives automatically
+- Correctly preserves sharp/flat spelling (flat notes stay flat, sharp notes stay sharp)
+- Slash chords (e.g. `[G/B]`) have both root and bass transposed
 
 ### 0.8.0
 - Added **Tab Editor** (`Ctrl+Alt+T`): visual grid with 6 string lines
