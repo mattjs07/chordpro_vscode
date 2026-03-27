@@ -27,6 +27,8 @@ Edit, render, and build ChordPro songs in VSCode — with PDF preview, an intera
 | Open ChordPro Minimal Template | — | Blank template to start a new song |
 | Open ChordPro Example Template | — | Example file (Yesterday by The Beatles) |
 | Open Chord Analyzer | `Ctrl+Alt+A` | Open Oolimo chord analyzer in a side panel |
+| Auto-scroll Preview | `Ctrl+Alt+S` | Render to HTML and open an auto-scrolling preview |
+| Open Tab Editor | `Ctrl+Alt+T` | Visual tab editor — click cells, type fret numbers, insert tab |
 
 ## Chord Builder
 
@@ -83,6 +85,21 @@ Install ChordPro from the [official website](https://www.chordpro.org/chordpro/c
 - Combine with [ChordPro by ricardomfmsousa](https://marketplace.visualstudio.com/items/?itemName=ricardomfmsousa.chordpro) for syntax highlighting
 
 ## Release Notes
+
+### 0.8.0
+- Added **Tab Editor** (`Ctrl+Alt+T`): visual grid with 6 string lines
+- Click a cell to select it, type fret numbers (0–24), backspace to clear
+- Arrow keys and Tab to navigate between cells
+- **+ Column** adds a position, **| Bar** inserts a bar line, **Delete last** removes the last column
+- **Clear** empties all values, **Insert tab** wraps output in `{start_of_tab}` / `{end_of_tab}` and inserts at cursor
+- Live tab preview shown below the grid
+
+### 0.7.0
+- Added **Auto-scroll Preview** (`Ctrl+Alt+S`): renders the song to HTML and opens it in a side panel with a floating control bar
+- Controls: Play/Pause, Faster (+10 px/s), Slower (−10 px/s), speed display
+- Keyboard shortcuts in the preview: `Space` = play/pause, `↑`/`↓` = speed
+- Auto-stops at the end of the song
+- Re-running the command on an updated file reloads the preview panel
 
 ### 0.6.0
 - Added **Chord Analyzer** panel (`Ctrl+Alt+A`): opens Oolimo in a side panel

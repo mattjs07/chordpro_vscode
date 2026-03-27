@@ -1120,8 +1120,269 @@ updateUI();
         insertChord,
         insertChordFromList,
         openChordAnalyzer,
-        autoScrollPreview
+        autoScrollPreview,
+        registerTabEditor(context)
     );
+}
+
+// ─────────────────────────────────────────────
+// Tab Editor (outside activate — pure webview HTML)
+// ─────────────────────────────────────────────
+function registerTabEditor(context) {
+    return vscode.commands.registerCommand('extension.openTabEditor', () => {
+        const panel = vscode.window.createWebviewPanel(
+            'chordproTabEditor',
+            'Tab Editor',
+            vscode.ViewColumn.Beside,
+            { enableScripts: true, retainContextWhenHidden: true }
+        );
+        panel.webview.html = getTabEditorContent();
+        panel.webview.onDidReceiveMessage(msg => {
+            if (msg.command === 'insertTab') {
+                const editor = vscode.window.activeTextEditor;
+                if (!editor) { vscode.window.showErrorMessage('No active editor'); return; }
+                const text = '{start_of_tab}\n' + msg.tab + '\n{end_of_tab}';
+                editor.insertSnippet(new vscode.SnippetString(text));
+            }
+        });
+    });
+}
+
+function getTabEditorContent() {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #111118; color: #d4c5a0; font-family: sans-serif;
+  padding: 12px; display: flex; flex-direction: column; height: 100vh; gap: 10px;
+}
+#toolbar { display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0; }
+.btn {
+  padding: 4px 14px; background: #2a2a3a; border: 1px solid #4a4a6a;
+  color: #d4c5a0; border-radius: 3px; cursor: pointer; font-size: 12px;
+}
+.btn:hover { background: #3a3a50; }
+.btn-insert { background: #2a5a28; border-color: #4a8a38; color: #b8e890; }
+.btn-insert:hover { background: #3a6a38; }
+
+#grid-wrap { overflow-x: auto; flex-shrink: 0; }
+
+table { border-collapse: collapse; }
+.str-label {
+  width: 18px; text-align: right; padding-right: 8px;
+  font-size: 13px; color: #888; font-family: monospace;
+  vertical-align: middle;
+}
+.open-bar, .close-bar {
+  width: 6px; vertical-align: middle; position: relative;
+}
+.open-bar  { border-right: 2px solid #aaa; }
+.close-bar { border-left:  2px solid #aaa; }
+.open-bar::after, .close-bar::after {
+  content: ''; position: absolute; top: 50%; left: 0; right: 0;
+  height: 1.5px; background: #666;
+}
+
+.cell {
+  width: 32px; min-width: 32px; height: 28px;
+  text-align: center; vertical-align: middle;
+  cursor: pointer; font-size: 13px; font-family: monospace;
+  color: #ccc; position: relative; user-select: none;
+}
+.cell::after {
+  content: ''; position: absolute;
+  top: 50%; left: 0; right: 0; height: 1.5px;
+  background: #555; z-index: 0;
+}
+.cell span {
+  position: relative; z-index: 1;
+  background: #111118; padding: 0 3px; min-width: 14px; display: inline-block;
+}
+.cell.selected span {
+  background: #2255aa; color: #fff; border-radius: 2px; outline: 1px solid #4488ee;
+}
+.cell.has-value span { color: #e8e8b0; }
+
+.bar-col {
+  width: 12px; min-width: 12px; height: 28px;
+  position: relative; vertical-align: middle; cursor: default;
+}
+.bar-col::after {
+  content: ''; position: absolute;
+  top: 50%; left: 0; right: 0; height: 1.5px; background: #555; z-index: 0;
+}
+.bar-col::before {
+  content: ''; position: absolute;
+  top: 0; bottom: 0; left: 50%;
+  width: 2px; background: #aaa; z-index: 1; transform: translateX(-50%);
+}
+
+#preview-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
+#preview-label { font-size: 11px; color: #666; }
+#preview {
+  font-family: 'Courier New', monospace; font-size: 13px;
+  background: #1a1a28; padding: 10px 14px; border-radius: 4px;
+  border: 1px solid #2a2a45; color: #99aacc; white-space: pre;
+  overflow: auto; flex: 1;
+}
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <button class="btn" id="btn-col">+ Column</button>
+  <button class="btn" id="btn-bar">| Bar</button>
+  <button class="btn" id="btn-del">Delete last</button>
+  <button class="btn" id="btn-clear">Clear</button>
+  <button class="btn btn-insert" id="btn-insert">Insert tab</button>
+</div>
+<div id="grid-wrap"><table id="grid"></table></div>
+<div id="preview-wrap">
+  <div id="preview-label">Preview</div>
+  <div id="preview"></div>
+</div>
+<script>
+const vscode = acquireVsCodeApi();
+const STRINGS = ['e','B','G','D','A','E'];
+const NS = 6;
+
+let cols = [];    // { type: 'notes', values: string[NS] } | { type: 'bar' }
+let selC = -1, selS = -1, inputBuf = '';
+
+// Start with 8 columns, bar, 8 columns
+for (let i = 0; i < 8; i++) addNote();
+addBar();
+for (let i = 0; i < 8; i++) addNote();
+
+function addNote() { cols.push({ type: 'notes', values: Array(NS).fill('') }); }
+function addBar()  { cols.push({ type: 'bar' }); }
+
+function colWidth(c) {
+  if (cols[c].type === 'bar') return 0;
+  return Math.max(1, ...cols[c].values.map(v => v.length));
+}
+
+function generateTab() {
+  return STRINGS.map((name, s) => {
+    let line = name + '|';
+    for (let c = 0; c < cols.length; c++) {
+      if (cols[c].type === 'bar') {
+        line += '|';
+      } else {
+        const w = colWidth(c);
+        const v = cols[c].values[s];
+        line += '--' + (v ? v.padEnd(w, '-') : '-'.repeat(w));
+      }
+    }
+    return line + '--|';
+  }).join('\\n');
+}
+
+function render() {
+  const rows = STRINGS.map((name, s) => {
+    let row = '<tr><td class="str-label">' + name + '</td><td class="open-bar"></td>';
+    for (let c = 0; c < cols.length; c++) {
+      if (cols[c].type === 'bar') {
+        row += '<td class="bar-col"></td>';
+      } else {
+        const v = cols[c].values[s];
+        const isSel = (c === selC && s === selS);
+        const display = isSel && inputBuf ? inputBuf : v;
+        const cls = 'cell' + (isSel ? ' selected' : '') + (v && !isSel ? ' has-value' : '');
+        row += '<td class="' + cls + '" data-c="' + c + '" data-s="' + s + '">'
+             + '<span>' + (display || '') + '</span></td>';
+      }
+    }
+    row += '<td class="close-bar"></td></tr>';
+    return row;
+  });
+  document.getElementById('grid').innerHTML = rows.join('');
+  document.getElementById('preview').textContent = generateTab();
+}
+
+function commit() {
+  if (selC >= 0 && selS >= 0 && cols[selC] && cols[selC].type === 'notes' && inputBuf) {
+    cols[selC].values[selS] = inputBuf;
+  }
+  inputBuf = '';
+}
+
+function moveSel(dc, ds) {
+  commit();
+  let c = selC + dc, s = selStr_clamped(selS + ds);
+  if (dc !== 0) {
+    const dir = dc > 0 ? 1 : -1;
+    while (c >= 0 && c < cols.length && cols[c].type === 'bar') c += dir;
+  }
+  c = Math.max(0, Math.min(cols.length - 1, c));
+  if (cols[c] && cols[c].type === 'notes') { selC = c; selS = s; }
+  render();
+}
+
+function selStr_clamped(s) { return Math.max(0, Math.min(NS - 1, s)); }
+
+document.getElementById('grid').addEventListener('click', e => {
+  const td = e.target.closest('td[data-c]');
+  if (!td) return;
+  const c = +td.dataset.c, s = +td.dataset.s;
+  commit();
+  selC = c; selS = s; inputBuf = '';
+  render();
+});
+
+document.addEventListener('keydown', e => {
+  if (selC < 0) return;
+  if (e.key >= '0' && e.key <= '9') {
+    const next = inputBuf + e.key;
+    inputBuf = (+next <= 24 && next.length <= 2) ? next : e.key;
+    render(); e.preventDefault();
+  } else if (e.key === 'Backspace') {
+    inputBuf = '';
+    if (cols[selC]) cols[selC].values[selS] = '';
+    render(); e.preventDefault();
+  } else if (e.key === 'ArrowRight' || e.key === 'Tab') {
+    moveSel(1, 0); e.preventDefault();
+  } else if (e.key === 'ArrowLeft') {
+    moveSel(-1, 0); e.preventDefault();
+  } else if (e.key === 'ArrowUp') {
+    moveSel(0, -1); e.preventDefault();
+  } else if (e.key === 'ArrowDown') {
+    moveSel(0, 1); e.preventDefault();
+  } else if (e.key === 'Enter') {
+    commit(); moveSel(1, 0); e.preventDefault();
+  } else if (e.key === 'Escape') {
+    commit(); selC = -1; selS = -1; render();
+  }
+});
+
+document.getElementById('btn-col').addEventListener('click',    () => { commit(); addNote(); render(); });
+document.getElementById('btn-bar').addEventListener('click',    () => {
+  commit();
+  if (selC >= 0) cols.splice(selC + 1, 0, { type: 'bar' });
+  else addBar();
+  selC = -1; selS = -1; render();
+});
+document.getElementById('btn-del').addEventListener('click',    () => {
+  if (!cols.length) return;
+  if (selC === cols.length - 1) { selC = -1; selS = -1; }
+  cols.pop(); render();
+});
+document.getElementById('btn-clear').addEventListener('click',  () => {
+  cols.forEach(col => { if (col.type === 'notes') col.values = Array(NS).fill(''); });
+  selC = -1; selS = -1; inputBuf = ''; render();
+});
+document.getElementById('btn-insert').addEventListener('click', () => {
+  commit(); render();
+  vscode.postMessage({ command: 'insertTab', tab: generateTab() });
+});
+
+render();
+</script>
+</body>
+</html>`;
 }
 
 

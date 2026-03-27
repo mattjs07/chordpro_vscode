@@ -99,6 +99,14 @@
       {
         "command": "extension.openChordAnalyzer",
         "title": "Open Chord Analyzer (Oolimo)"
+      },
+      {
+        "command": "extension.autoScrollPreview",
+        "title": "Auto-scroll Preview"
+      },
+      {
+        "command": "extension.openTabEditor",
+        "title": "Open Tab Editor"
       }
     ],
     "keybindings": [
@@ -131,6 +139,16 @@
         "command": "extension.openChordAnalyzer",
         "key": "ctrl+alt+a",
         "when": "editorLangId == 'chordpro'"
+      },
+      {
+        "command": "extension.autoScrollPreview",
+        "key": "ctrl+alt+s",
+        "when": "editorLangId == 'chordpro'"
+      },
+      {
+        "command": "extension.openTabEditor",
+        "key": "ctrl+alt+t",
+        "when": "editorLangId == 'chordpro'"
       }
     ],
     "configuration": {
@@ -155,7 +173,9 @@
     "onCommand:chordproFretboard.openBuilder",
     "onCommand:chordproFretboard.insertChord",
     "onCommand:chordproFretboard.insertChordFromList",
-    "onCommand:extension.openChordAnalyzer"
+    "onCommand:extension.openChordAnalyzer",
+    "onCommand:extension.autoScrollPreview",
+    "onCommand:extension.openTabEditor"
   ],
   "devDependencies": {
     "@types/mocha": "^10.0.10",
