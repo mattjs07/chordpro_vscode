@@ -3,7 +3,7 @@
   "displayName": "ChordPro VSCode",
   "description": "Edit, render, and build ChordPro songs in VSCode — includes PDF rendering, templates, and an interactive chord builder with fretboard.",
   "publisher": "mattjs07",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "categories": [
     "Other"
   ],
@@ -111,6 +111,14 @@
       {
         "command": "extension.transposeChords",
         "title": "Transpose Chords"
+      },
+      {
+        "command": "extension.capoHelper",
+        "title": "Show Concert Pitch Chords (Capo Helper)"
+      },
+      {
+        "command": "extension.detectKey",
+        "title": "Detect Key"
       }
     ],
     "keybindings": [
@@ -180,7 +188,9 @@
     "onCommand:extension.openChordAnalyzer",
     "onCommand:extension.autoScrollPreview",
     "onCommand:extension.openTabEditor",
-    "onCommand:extension.transposeChords"
+    "onCommand:extension.transposeChords",
+    "onCommand:extension.capoHelper",
+    "onCommand:extension.detectKey"
   ],
   "devDependencies": {
     "@types/mocha": "^10.0.10",

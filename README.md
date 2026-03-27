@@ -6,7 +6,7 @@ Edit, render, and build ChordPro songs in VSCode — with PDF preview, an intera
 
 - [x] Compile `.cho` files with **Render ChordPro PDF** (`Ctrl+Shift+B`)
 - [x] **Preview ChordPro PDF** — renders and opens the PDF automatically in a side panel (`Ctrl+Shift+V`)
-- [x] **Auto-scroll Preview** — renders the song as HTML and scrolls it automatically (`Ctrl+Alt+S`); auto-sets scroll speed from `{tempo:}` if present; save as standalone HTML with the 💾 button
+- [x] **Auto-scroll Preview** — renders the song as HTML and scrolls it automatically (`Ctrl+Alt+S`); auto-sets scroll speed from `{tempo:}` if present; save as standalone HTML with the 💾 button; live transpose, two-column layout, dark/light theme toggle
 - [x] Build on save (enable from extension settings)
 - [x] **Rendering Parameters** — write config/options directly in the source file, with completion, hover docs, and a guided ⚙ configurator
 - [x] **Interactive Chord Builder** — fretboard panel to build and insert chord definitions (`Ctrl+Alt+D`)
@@ -40,6 +40,8 @@ Edit, render, and build ChordPro songs in VSCode — with PDF preview, an intera
 | Open ChordPro Example Template | — | Example file (Yesterday by The Beatles) |
 | Configure ChordPro Rendering | — | Guided UI to set config, options, suffix, output (also via ⚙ CodeLens) |
 | Transpose Chords | — | Transpose all chords (or a selection) by any number of semitones |
+| Show Concert Pitch Chords | — | Show the effective (concert pitch) chord names given the current `{capo:}` |
+| Detect Key | — | Analyse all chords and suggest the key; optionally insert `{key:}` |
 
 ## Chord Diagram Hover
 
@@ -86,9 +88,13 @@ Press `Ctrl+Alt+S` to render the current song as HTML and open it in **performan
 - **Auto-reload on save** — the preview refreshes automatically every time you save the file
 - **Chord diagrams** — hover over any chord name in the preview to see a fretboard diagram popup (same fingering priority as the source hover: file `{define:}` > Chord Builder > built-in library)
 - **Tempo-based speed** — if the file contains `{tempo: N}`, the scroll speed is auto-set so the song scrolls at the right pace (1 bar per chord line); a ♩ button appears in the control bar (gold when active); click it any time to snap back to tempo speed
+- **Live transpose** — ♭ / ♯ buttons in the control bar shift all chord names in the view by semitones without touching the source file; counter shows current offset (gold when non-zero)
+- **Two-column layout** — ⊞ button toggles two-column mode; useful for long songs
+- **Theme toggle** — 🌙/☀️ button manually overrides the OS dark/light preference
+- **Scroll position memory** — auto-reload on save restores your scroll position
 - **Save as HTML** — click the 💾 button to save a standalone `{basename}_preview.html` to disk; works in any browser with all controls functional
-- **Dark mode** — automatically adapts to the OS dark/light theme (`prefers-color-scheme`)
-- **Font size controls** — A− / A+ buttons in the control bar to resize text (11–28 px)
+- **Dark mode** — automatically adapts to the OS dark/light theme (`prefers-color-scheme`); overridable per-session with the theme toggle button
+- **Font size controls** — A− / A+ buttons in the control bar to resize text (11–28 px); tempo speed recalculates automatically
 - **Capo badge** — capo number shown as a distinct pill badge in the song header
 - **Progress bar** — thin bar at the top of the page shows scroll position
 - **Print-friendly** — `@media print` stylesheet hides controls and renders cleanly on paper
@@ -178,6 +184,15 @@ Install ChordPro from the [official website](https://www.chordpro.org/chordpro/c
 - The `config` preset `modern1` is a good default; try `dark` for a dark-themed PDF
 
 ## Release Notes
+
+### 1.5.0
+- **Live transpose in preview** — ♭ / ♯ buttons in the control bar shift all displayed chord names without modifying the source; offset shown in gold when non-zero
+- **Two-column layout** — ⊞ button toggles two-column mode in the performance view
+- **Theme toggle** — 🌙/☀️ button overrides OS dark/light preference per-session
+- **Scroll position memory** — auto-reload on save now restores scroll position instead of jumping to top
+- **Chord hover: usage count** — hover tooltip now shows how many times the chord appears in the file
+- **Capo Helper** — command palette: *Show Concert Pitch Chords* — shows what chords other instruments hear given the `{capo:}` value
+- **Detect Key** — command palette: *Detect Key* — analyses chords and suggests the key; offers to insert `{key:}` if missing
 
 ### 1.4.0
 - **Dark mode** — preview auto-adapts to OS dark/light theme via `prefers-color-scheme`

@@ -406,6 +406,39 @@ function transposeChordToken(chordStr, semitones) {
 }
 
 // ─────────────────────────────────────────────
+// Key detection helpers
+// ─────────────────────────────────────────────
+
+const MAJOR_SCALE_ROOTS = {
+    'C':  ['C','D','E','F','G','A','B'],
+    'G':  ['G','A','B','C','D','E','F#'],
+    'D':  ['D','E','F#','G','A','B','C#'],
+    'A':  ['A','B','C#','D','E','F#','G#'],
+    'E':  ['E','F#','G#','A','B','C#','D#'],
+    'B':  ['B','C#','D#','E','F#','G#','A#'],
+    'F#': ['F#','G#','A#','B','C#','D#','F'],
+    'F':  ['F','G','A','Bb','C','D','E'],
+    'Bb': ['Bb','C','D','Eb','F','G','A'],
+    'Eb': ['Eb','F','G','Ab','Bb','C','D'],
+    'Ab': ['Ab','Bb','C','Db','Eb','F','G'],
+    'Db': ['Db','Eb','F','Gb','Ab','Bb','C'],
+    'Gb': ['Gb','Ab','Bb','Cb','Db','Eb','F'],
+};
+const RELATIVE_MINORS = {
+    'C':'Am','G':'Em','D':'Bm','A':'F#m','E':'C#m','B':'G#m','F#':'D#m',
+    'F':'Dm','Bb':'Gm','Eb':'Cm','Ab':'Fm','Db':'Bbm','Gb':'Ebm',
+};
+function detectKeyFromChords(chordNames) {
+    const roots = [...new Set(chordNames.map(c => { const m = c.match(/^([A-G][b#]?)/); return m ? m[1] : null; }).filter(Boolean))];
+    let bestKey = 'C', bestScore = -1;
+    for (const [key, scale] of Object.entries(MAJOR_SCALE_ROOTS)) {
+        const score = roots.filter(r => scale.includes(r)).length;
+        if (score > bestScore) { bestScore = score; bestKey = key; }
+    }
+    return { major: bestKey, minor: RELATIVE_MINORS[bestKey] || '' };
+}
+
+// ─────────────────────────────────────────────
 
 function resolveConfigPath(configPath, fileDirname) {
     // Check if configPath ends with '.json'
@@ -1193,12 +1226,8 @@ function activate(context) {
     // Pre-render SVG strings for every chord token that appears in the source
     function buildChordSvgMap(source, chordData) {
         const map = {};
-        const re = /\[([A-G][b#]?[^\]]*)\]/g;
-        let m;
-        while ((m = re.exec(source)) !== null) {
-            const name = m[1];
-            if (map[name] === undefined && chordData[name])
-                map[name] = generateChordSvg(chordData[name], name);
+        for (const [name, frets] of Object.entries(chordData)) {
+            map[name] = generateChordSvg(frets, name);
         }
         return map;
     }
@@ -1356,6 +1385,39 @@ body {
 #tempo-btn:hover { opacity: 1; }
 #tempo-btn.active { opacity: 1; color: #ffd700; border-color: #ffd700; }
 #font-smaller, #font-larger { font-size: 11px; font-family: sans-serif; letter-spacing: -0.5px; border-radius: 6px !important; width: auto !important; padding: 0 7px !important; }
+/* ── Theme manual override (takes precedence over prefers-color-scheme) ───── */
+:root[data-theme="light"] {
+  --bg: #fafaf8; --fg: #1a1a1a; --fg-dim: #555; --fg-muted: #888;
+  --border: #ddd; --chord: #1a5fb4;
+  --sec-chorus-bg: #e8f0fe; --sec-chorus-fg: #2a5bbf;
+  --sec-verse-bg: #f0f0f0;  --sec-verse-fg: #555;
+  --sec-bridge-bg: #fef0d0; --sec-bridge-fg: #a05000;
+  --sec-tab-bg: #f0f4e8;    --sec-tab-fg: #4a6a20;
+  --tab-bg: #f4f4f0; --tab-border: #bbb;
+  --tip-bg: #fff; --tip-border: #ccc; --tip-fg: #333;
+  --capo-bg: #ffe8b0; --capo-fg: #7a4000;
+}
+:root[data-theme="dark"] {
+  --bg: #1e1e1e; --fg: #d4d4d4; --fg-dim: #999; --fg-muted: #666;
+  --border: #444; --chord: #79b8ff;
+  --sec-chorus-bg: #1e2a4a; --sec-chorus-fg: #79b8ff;
+  --sec-verse-bg: #2a2a2a;  --sec-verse-fg: #aaa;
+  --sec-bridge-bg: #3a2a10; --sec-bridge-fg: #e8a050;
+  --sec-tab-bg: #1e2a14;    --sec-tab-fg: #90c040;
+  --tab-bg: #252525; --tab-border: #555;
+  --tip-bg: #2d2d2d; --tip-border: #555; --tip-fg: #ccc;
+  --capo-bg: #4a3010; --capo-fg: #ffcc60;
+}
+/* ── Two-column layout ────────────────────────────────────────────────────── */
+#song.two-col { column-count: 2; column-gap: 3em; column-rule: 1px solid var(--border); }
+#song.two-col .section { break-inside: avoid-column; }
+/* ── Additional button styles ────────────────────────────────────────────── */
+#theme-btn  { font-size: 14px; }
+#twocol-btn { font-size: 14px; }
+#twocol-btn.active { color: #ffd700; border-color: #ffd700; }
+#trans-down, #trans-up { font-size: 13px; }
+#trans-label { min-width: 28px; text-align: center; font-size: 12px; color: #aaa; padding: 0 2px; }
+#trans-label.active { color: #ffd700; }
 /* ── Print ────────────────────────────────────────────────────────────────── */
 @media print {
   #scroll-bar, #progress-bar { display: none !important; }
@@ -1375,16 +1437,42 @@ body {
 <div id="progress-bar"></div>
 <div id="song"></div>
 <div id="scroll-bar">
-  <button id="font-smaller" title="Smaller text (A−)">A−</button>
-  <button id="font-larger"  title="Larger text (A+)">A+</button>
+  <button id="trans-down"   title="Transpose down (♭)">♭</button>
+  <span   id="trans-label">0</span>
+  <button id="trans-up"     title="Transpose up (♯)">♯</button>
   <button id="slower-btn"   title="Slower (↓)">−</button>
   <button id="play-btn"     title="Play / Pause (Space)">▶</button>
   <button id="faster-btn"   title="Faster (↑)">+</button>
   <span   id="speed-label">30 px/s</span>
   <button id="tempo-btn"    title="Snap to tempo speed" style="display:none">♩</button>
+  <button id="font-smaller" title="Smaller text (A−)">A−</button>
+  <button id="font-larger"  title="Larger text (A+)">A+</button>
+  <button id="twocol-btn"   title="Toggle two-column layout">⊞</button>
+  <button id="theme-btn"    title="Toggle dark/light theme">🌙</button>
   <button id="save-btn"     title="Save as HTML">💾</button>
 </div>
 <script>
+// ── Browser transpose helpers ─────────────────────────────────────────────
+var _SH = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+var _FL = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+function _tn(root, n) {
+  var fi = _FL.indexOf(root), si = _SH.indexOf(root);
+  var pf = fi !== -1 && si === -1;
+  var idx = si !== -1 ? si : fi;
+  if (idx < 0) return root;
+  return (pf ? _FL : _SH)[((idx + n) % 12 + 12) % 12];
+}
+function transposeChordName(chord, n) {
+  if (!n) return chord;
+  var sl = chord.indexOf('/');
+  var main = sl >= 0 ? chord.slice(0, sl) : chord;
+  var bass = sl >= 0 ? chord.slice(sl + 1) : null;
+  var rm   = main.match(/^([A-G][b#]?)(.*)/);
+  if (!rm) return chord;
+  return _tn(rm[1], n) + rm[2] + (bass ? '/' + _tn(bass, n) : '');
+}
+var previewTranspose = 0;
+
 // ── ChordPro parser ──────────────────────────────────────────────────────────
 function parseChordLine(line) {
   const segs = [], re = /\\[([^\\]]*)\\]/g;
@@ -1452,7 +1540,7 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-function render({ meta, sections }) {
+function render({ meta, sections }, transpose) {
   const out = ['<div class="song-header">'];
   if (meta.title)    out.push('<div class="song-title">'    + esc(meta.title)    + '</div>');
   if (meta.subtitle) out.push('<div class="song-subtitle">' + esc(meta.subtitle) + '</div>');
@@ -1478,9 +1566,10 @@ function render({ meta, sections }) {
         if (l.type === 'chord-line') {
           out.push('<div class="chord-line">');
           for (const s of l.segs) {
+            var dc = transposeChordName(s.chord || '', transpose || 0);
             out.push('<span class="pair">'
-              + '<span class="chord"' + (s.chord ? ' data-chord="' + esc(s.chord) + '"' : '') + '>'
-              + (s.chord ? esc(s.chord) : '&nbsp;') + '</span>'
+              + '<span class="chord"' + (dc ? ' data-chord="' + esc(dc) + '"' : '') + '>'
+              + (dc ? esc(dc) : '&nbsp;') + '</span>'
               + '<span class="lyric">'  + esc(s.lyric || ' ') + '</span>'
               + '</span>');
           }
@@ -1543,11 +1632,51 @@ var fontSize = 17;
 function changeFontSize(delta) {
   fontSize = Math.max(11, Math.min(28, fontSize + delta));
   document.body.style.fontSize = fontSize + 'px';
-  // tempo speed depends on scrollHeight which changes with font size
   if (tempoSpeed) setTimeout(function() { applyTempoSpeed(PARSED.meta, false, true); }, 100);
 }
 document.getElementById('font-smaller').addEventListener('click', function() { changeFontSize(-1); });
 document.getElementById('font-larger').addEventListener('click',  function() { changeFontSize(+1); });
+
+// ── Rerender (called when transpose or any display param changes) ─────────
+function rerender() {
+  document.getElementById('song').innerHTML = render(PARSED, previewTranspose);
+  bindTooltips();
+  if (tempoSpeed) setTimeout(function() { applyTempoSpeed(PARSED.meta, false, true); }, 100);
+}
+
+// ── Theme toggle ──────────────────────────────────────────────────────────
+var themeBtn  = document.getElementById('theme-btn');
+var _sysDark  = window.matchMedia('(prefers-color-scheme: dark)').matches;
+function _updateThemeBtn() {
+  var cur = document.documentElement.dataset.theme || (_sysDark ? 'dark' : 'light');
+  themeBtn.textContent = cur === 'dark' ? '☀️' : '🌙';
+}
+themeBtn.addEventListener('click', function() {
+  var cur = document.documentElement.dataset.theme || (_sysDark ? 'dark' : 'light');
+  document.documentElement.dataset.theme = cur === 'dark' ? 'light' : 'dark';
+  _updateThemeBtn();
+});
+
+// ── Two-column toggle ─────────────────────────────────────────────────────
+var twoColBtn = document.getElementById('twocol-btn');
+twoColBtn.addEventListener('click', function() {
+  var on = document.getElementById('song').classList.toggle('two-col');
+  twoColBtn.classList.toggle('active', on);
+});
+
+// ── Live transpose ────────────────────────────────────────────────────────
+var transLabel = document.getElementById('trans-label');
+function _updateTransLabel() {
+  transLabel.textContent = previewTranspose > 0 ? '+' + previewTranspose
+                         : previewTranspose < 0 ? String(previewTranspose) : '0';
+  transLabel.classList.toggle('active', previewTranspose !== 0);
+}
+document.getElementById('trans-down').addEventListener('click', function() {
+  previewTranspose--; _updateTransLabel(); rerender();
+});
+document.getElementById('trans-up').addEventListener('click', function() {
+  previewTranspose++; _updateTransLabel(); rerender();
+});
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 const vscodeApi = acquireVsCodeApi();
@@ -1629,15 +1758,17 @@ document.addEventListener('keydown', e => {
 // Reload when file changes (triggered by save or re-running the command)
 window.addEventListener('message', function(e) {
   if (e.data.command === 'reload') {
+    var savedY = e.data.preserveScroll ? window.scrollY : 0;
     if (e.data.chordSvgs) CHORD_SVGS = e.data.chordSvgs;
     PARSED = parse(e.data.source);
-    document.getElementById('song').innerHTML = render(PARSED);
+    document.getElementById('song').innerHTML = render(PARSED, previewTranspose);
     bindTooltips();
-    window.scrollTo(0, 0);
+    window.scrollTo(0, savedY);
     setTimeout(function() { applyTempoSpeed(PARSED.meta); }, 200);
   }
 });
 
+_updateThemeBtn();
 updateUI();
 setTimeout(function() { applyTempoSpeed(PARSED.meta); }, 200);
 </script>
@@ -1801,6 +1932,8 @@ setTimeout(function() { applyTempoSpeed(PARSED.meta); }, 200);
                     let frets = docDefines[chordName]
                         ?? (saved ? [...saved.frets].reverse() : null)
                         ?? CHORD_DB[chordName];
+                    const usageRe = new RegExp('\\[' + escapeRegex(chordName) + '\\]', 'g');
+                    const usageCount = (document.getText().match(usageRe) || []).length;
                     const md = new vscode.MarkdownString();
                     md.isTrusted = true;
                     md.supportHtml = true;
@@ -1811,6 +1944,7 @@ setTimeout(function() { applyTempoSpeed(PARSED.meta); }, 200);
                     } else {
                         md.appendMarkdown(`**${chordName}**`);
                     }
+                    md.appendMarkdown(`\n\n*Used ${usageCount}× in this file*`);
                     return new vscode.Hover(md, new vscode.Range(position.line, start, position.line, end));
                 }
             }
@@ -2019,7 +2153,7 @@ setTimeout(function() { applyTempoSpeed(PARSED.meta); }, 200);
         if (!scrollPanel || doc.uri.toString() !== scrollDocUri) return;
         const source    = doc.getText();
         const chordSvgs = buildChordSvgMap(source, buildChordData(doc));
-        scrollPanel.webview.postMessage({ command: 'reload', source, chordSvgs });
+        scrollPanel.webview.postMessage({ command: 'reload', source, chordSvgs, preserveScroll: true });
     });
 
     let diagDebounce;
@@ -2030,6 +2164,65 @@ setTimeout(function() { applyTempoSpeed(PARSED.meta); }, 200);
     });
     const onCloseDiag  = vscode.workspace.onDidCloseTextDocument(doc => diagnosticCollection.delete(doc.uri));
     vscode.workspace.textDocuments.forEach(doc => updateDiagnostics(doc));
+
+    // ── Capo Helper ───────────────────────────────────────────────────────
+    const capoHelper = vscode.commands.registerCommand('extension.capoHelper', () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor || editor.document.languageId !== 'chordpro') {
+            vscode.window.showInformationMessage('Open a .cho file first.');
+            return;
+        }
+        const text = editor.document.getText();
+        const capoMatch = text.match(/\{capo:?\s*(\d+)\}/i);
+        if (!capoMatch) {
+            vscode.window.showInformationMessage('No {capo:} directive found in this file.');
+            return;
+        }
+        const capo = parseInt(capoMatch[1]);
+        const chordRe = /\[([A-G][b#]?[^\]]*)\]/g;
+        const seen = new Set();
+        let cm;
+        while ((cm = chordRe.exec(text)) !== null) seen.add(cm[1]);
+        const mappings = [...seen].sort().map(c => `${c} → ${transposeChordToken(c, capo)}`);
+        vscode.window.showInformationMessage(`Capo ${capo} — concert pitch: ${mappings.join(', ')}`);
+    });
+
+    // ── Key Detection ─────────────────────────────────────────────────────────
+    const detectKey = vscode.commands.registerCommand('extension.detectKey', () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor || editor.document.languageId !== 'chordpro') {
+            vscode.window.showInformationMessage('Open a .cho file first.');
+            return;
+        }
+        const text = editor.document.getText();
+        const chordRe = /\[([A-G][b#]?[^\]]*)\]/g;
+        const chords = [];
+        let km;
+        while ((km = chordRe.exec(text)) !== null) chords.push(km[1]);
+        if (!chords.length) {
+            vscode.window.showInformationMessage('No chords found in this file.');
+            return;
+        }
+        const { major, minor } = detectKeyFromChords(chords);
+        const label = minor ? `${major} major  /  ${minor}` : `${major} major`;
+        const hasKey = /\{key:/i.test(text);
+        if (!hasKey) {
+            vscode.window.showInformationMessage(`Detected key: ${label}`, 'Insert {key:}').then(sel => {
+                if (sel !== 'Insert {key:}') return;
+                const lines = text.split(/\r?\n/);
+                let insertLine = 0;
+                for (let i = 0; i < lines.length; i++) {
+                    if (/^\s*#/.test(lines[i]) || !lines[i].trim()) insertLine = i + 1;
+                    else break;
+                }
+                const edit = new vscode.WorkspaceEdit();
+                edit.insert(editor.document.uri, new vscode.Position(insertLine, 0), `{key: ${major}}\n`);
+                vscode.workspace.applyEdit(edit);
+            });
+        } else {
+            vscode.window.showInformationMessage(`Detected key: ${label}`);
+        }
+    });
 
     // Add disposables to context.subscriptions
     context.subscriptions.push(
@@ -2058,6 +2251,8 @@ setTimeout(function() { applyTempoSpeed(PARSED.meta); }, 200);
         foldingProvider,
         diagnosticCollection,
         onSaveScrollReload,
+        capoHelper,
+        detectKey,
         onOpenDiag,
         onChangeDiag,
         onCloseDiag
