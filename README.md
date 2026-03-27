@@ -6,7 +6,7 @@ Edit, render, and build ChordPro songs in VSCode — with PDF preview, an intera
 
 - [x] Compile `.cho` files with **Render ChordPro PDF** (`Ctrl+Shift+B`)
 - [x] **Preview ChordPro PDF** — renders and opens the PDF automatically in a side panel (`Ctrl+Shift+V`)
-- [x] **Auto-scroll Preview** — renders the song as HTML and scrolls it automatically (`Ctrl+Alt+S`)
+- [x] **Auto-scroll Preview** — renders the song as HTML and scrolls it automatically (`Ctrl+Alt+S`); auto-sets scroll speed from `{tempo:}` if present; save as standalone HTML with the 💾 button
 - [x] Build on save (enable from extension settings)
 - [x] **Rendering Parameters** — write config/options directly in the source file, with completion, hover docs, and a guided ⚙ configurator
 - [x] **Interactive Chord Builder** — fretboard panel to build and insert chord definitions (`Ctrl+Alt+D`)
@@ -85,6 +85,8 @@ Press `Ctrl+Alt+S` to render the current song as HTML and open it in **performan
 - Re-running the command while the panel is open reloads the content
 - **Auto-reload on save** — the preview refreshes automatically every time you save the file
 - **Chord diagrams** — hover over any chord name in the preview to see a fretboard diagram popup (same fingering priority as the source hover: file `{define:}` > Chord Builder > built-in library)
+- **Tempo-based speed** — if the file contains `{tempo: N}`, the scroll speed is auto-set so the song scrolls at the right pace (1 bar per chord line); a ♩ indicator shows when the speed was auto-set; manual ±10 adjustments clear it
+- **Save as HTML** — click the 💾 button in the control bar to save a standalone `{basename}_preview.html` to disk; the file works in any browser with scroll controls fully functional
 
 ## Transposing
 
@@ -171,6 +173,10 @@ Install ChordPro from the [official website](https://www.chordpro.org/chordpro/c
 - The `config` preset `modern1` is a good default; try `dark` for a dark-themed PDF
 
 ## Release Notes
+
+### 1.3.0
+- **Tempo-based scroll speed** — if `{tempo: N}` is set in the file, the auto-scroll speed is automatically calculated so the song scrolls at the correct pace (1 bar per chord line); a ♩ indicator shows in the speed label; manual ±10 adjustments clear the auto-set flag
+- **Save as HTML** — 💾 button in the auto-scroll preview saves a self-contained `{basename}_preview.html` file to disk; the exported file works in any browser with all scroll controls functional
 
 ### 1.2.0
 - **Auto-scroll preview auto-reload** — preview panel now refreshes automatically on every file save (no need to re-run the command)

@@ -1226,6 +1226,24 @@ function activate(context) {
             { enableScripts: true, retainContextWhenHidden: true }
         );
         scrollPanel.webview.html = getScrollWebviewContent(source, chordSvgs);
+        scrollPanel.webview.onDidReceiveMessage(msg => {
+            if (msg.command === 'saveHtml') {
+                const srcPath = editor.document.uri.fsPath;
+                const outPath = srcPath.replace(/\.[^.]+$/, '') + '_preview.html';
+                // Strip VSCode CSP and replace acquireVsCodeApi with a no-op for browser use
+                const standalone = getScrollWebviewContent(
+                    editor.document.getText(),
+                    buildChordSvgMap(editor.document.getText(), buildChordData(editor.document))
+                )
+                    .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>\n?/, '')
+                    .replace('const vscodeApi = acquireVsCodeApi();',
+                             'const vscodeApi = { postMessage: function() {} };');
+                fs.writeFile(outPath, standalone, err => {
+                    if (err) vscode.window.showErrorMessage('Failed to save HTML: ' + err.message);
+                    else vscode.window.showInformationMessage('Saved: ' + path.basename(outPath));
+                });
+            }
+        });
         scrollPanel.onDidDispose(() => { scrollPanel = null; scrollDocUri = null; });
     });
 
@@ -1296,6 +1314,11 @@ body {
 #scroll-bar button:hover { background: #555; }
 #play-btn    { width: 38px; height: 38px; font-size: 18px; }
 #speed-label { min-width: 56px; text-align: center; font-size: 12px; color: #aaa; }
+#save-btn    { font-size: 14px; opacity: 0.7; }
+#save-btn:hover { opacity: 1; }
+#tempo-btn   { font-size: 15px; opacity: 0.7; }
+#tempo-btn:hover { opacity: 1; }
+#tempo-btn.active { opacity: 1; color: #ffd700; border-color: #ffd700; }
 </style>
 </head>
 <body>
@@ -1305,6 +1328,8 @@ body {
   <button id="play-btn"   title="Play / Pause (Space)">▶</button>
   <button id="faster-btn" title="Faster (↑)">+</button>
   <span   id="speed-label">30 px/s</span>
+  <button id="tempo-btn"  title="Snap to tempo speed" style="display:none">♩</button>
+  <button id="save-btn"   title="Save as HTML">💾</button>
 </div>
 <script>
 // ── ChordPro parser ──────────────────────────────────────────────────────────
@@ -1452,8 +1477,10 @@ function bindTooltips() {
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
+const vscodeApi = acquireVsCodeApi();
 const SOURCE = ${safeSource};
-document.getElementById('song').innerHTML = render(parse(SOURCE));
+var PARSED = parse(SOURCE);
+document.getElementById('song').innerHTML = render(PARSED);
 bindTooltips();
 
 // ── Auto-scroll ──────────────────────────────────────────────────────────────
@@ -1461,9 +1488,38 @@ let speed = 30, playing = false, lastTs = null, accum = 0;
 const playBtn      = document.getElementById('play-btn');
 const speedLabel   = document.getElementById('speed-label');
 
+var tempoSpeed = 0; // non-zero when a {tempo:} was detected
+const tempoBtn = document.getElementById('tempo-btn');
+
 function updateUI() {
   playBtn.textContent = playing ? '⏸' : '▶';
   speedLabel.textContent = speed + ' px/s';
+  if (tempoSpeed) {
+    tempoBtn.style.display = 'flex';
+    tempoBtn.classList.toggle('active', speed === tempoSpeed);
+    tempoBtn.title = 'Tempo speed (' + tempoSpeed + ' px/s)';
+  }
+}
+
+// Set scroll speed from {tempo:} — 1 chord-line ≈ 1 bar (4 beats)
+function applyTempoSpeed(meta, _retry) {
+  var bpm = parseInt(meta.tempo || '0');
+  if (!bpm) return;
+  var lines = document.querySelectorAll('.chord-line').length;
+  if (!lines) return;
+  var scrollable = Math.max(
+    document.body.scrollHeight - window.innerHeight,
+    document.documentElement.scrollHeight - document.documentElement.clientHeight
+  );
+  if (scrollable <= 0) {
+    if (_retry) return; // give up after one retry
+    setTimeout(function() { applyTempoSpeed(meta, true); }, 400);
+    return;
+  }
+  var totalSecs = lines * (4 * 60 / bpm); // 4 beats per line at BPM
+  tempoSpeed = Math.max(5, Math.min(300, Math.round(scrollable / totalSecs)));
+  speed = tempoSpeed;
+  updateUI();
 }
 
 function step(ts) {
@@ -1484,8 +1540,10 @@ playBtn.addEventListener('click', () => {
   playing = !playing; updateUI();
   if (playing) requestAnimationFrame(step);
 });
-document.getElementById('faster-btn').addEventListener('click', () => { speed = Math.min(speed + 10, 300); updateUI(); });
-document.getElementById('slower-btn').addEventListener('click', () => { speed = Math.max(speed - 10, 5);   updateUI(); });
+document.getElementById('faster-btn').addEventListener('click', () => { speed = Math.min(speed + 5, 300); updateUI(); });
+document.getElementById('slower-btn').addEventListener('click', () => { speed = Math.max(speed - 5, 5);   updateUI(); });
+document.getElementById('save-btn').addEventListener('click',   () => { vscodeApi.postMessage({ command: 'saveHtml' }); });
+tempoBtn.addEventListener('click', () => { if (tempoSpeed) { speed = tempoSpeed; updateUI(); } });
 document.addEventListener('keydown', e => {
   if (e.code === 'Space')     { playBtn.click(); e.preventDefault(); }
   if (e.code === 'ArrowUp')   { document.getElementById('faster-btn').click(); e.preventDefault(); }
@@ -1496,13 +1554,16 @@ document.addEventListener('keydown', e => {
 window.addEventListener('message', function(e) {
   if (e.data.command === 'reload') {
     if (e.data.chordSvgs) CHORD_SVGS = e.data.chordSvgs;
-    document.getElementById('song').innerHTML = render(parse(e.data.source));
+    PARSED = parse(e.data.source);
+    document.getElementById('song').innerHTML = render(PARSED);
     bindTooltips();
     window.scrollTo(0, 0);
+    setTimeout(function() { applyTempoSpeed(PARSED.meta); }, 200);
   }
 });
 
 updateUI();
+setTimeout(function() { applyTempoSpeed(PARSED.meta); }, 200);
 </script>
 </body>
 </html>`;
