@@ -83,6 +83,8 @@ Press `Ctrl+Alt+S` to render the current song as HTML and open it in **performan
 - **Space** = play/pause · **↑** = faster · **↓** = slower
 - Speed adjusts in 10 px/s increments (5–300 px/s); auto-stops at the end
 - Re-running the command while the panel is open reloads the content
+- **Auto-reload on save** — the preview refreshes automatically every time you save the file
+- **Chord diagrams** — hover over any chord name in the preview to see a fretboard diagram popup (same fingering priority as the source hover: file `{define:}` > Chord Builder > built-in library)
 
 ## Transposing
 
@@ -169,6 +171,10 @@ Install ChordPro from the [official website](https://www.chordpro.org/chordpro/c
 - The `config` preset `modern1` is a good default; try `dark` for a dark-themed PDF
 
 ## Release Notes
+
+### 1.2.0
+- **Auto-scroll preview auto-reload** — preview panel now refreshes automatically on every file save (no need to re-run the command)
+- **Chord diagrams in the preview** — hover over any chord name in the performance view to see a fretboard diagram tooltip; fingering priority matches the source hover (file `{define:}` > Chord Builder > built-in library); diagrams update on reload
 
 ### 1.1.0
 - **Document Outline** — song title and every section (Verse, Chorus, Bridge, Tab, Grid…) appear in the Outline panel (Explorer sidebar → Outline section, at the bottom); sections with a `label=` attribute or `: label` show their custom label, duplicates are auto-numbered

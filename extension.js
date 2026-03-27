@@ -1174,37 +1174,69 @@ function activate(context) {
     // ─────────────────────────────────────────────
 
     let scrollPanel = null;
+    let scrollDocUri = null;
+
+    // Merge CHORD_DB + Chord Builder saves + document {define:} into one fingering map
+    function buildChordData(document) {
+        const data = Object.assign({}, CHORD_DB);
+        for (const key of context.globalState.keys()) {
+            if (key.startsWith('chord_')) {
+                const chord = context.globalState.get(key);
+                if (chord && chord.frets)
+                    data[key.slice('chord_'.length)] = [...chord.frets].reverse();
+            }
+        }
+        Object.assign(data, parseDocumentDefines(document)); // doc defines win
+        return data;
+    }
+
+    // Pre-render SVG strings for every chord token that appears in the source
+    function buildChordSvgMap(source, chordData) {
+        const map = {};
+        const re = /\[([A-G][b#]?[^\]]*)\]/g;
+        let m;
+        while ((m = re.exec(source)) !== null) {
+            const name = m[1];
+            if (map[name] === undefined && chordData[name])
+                map[name] = generateChordSvg(chordData[name], name);
+        }
+        return map;
+    }
 
     const autoScrollPreview = vscode.commands.registerCommand('extension.autoScrollPreview', () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor) { vscode.window.showErrorMessage('No active editor found'); return; }
 
-        const source = editor.document.getText();
-        const title = path.basename(editor.document.uri.fsPath, path.extname(editor.document.uri.fsPath));
+        const source   = editor.document.getText();
+        const title    = path.basename(editor.document.uri.fsPath, path.extname(editor.document.uri.fsPath));
+        const chordData = buildChordData(editor.document);
+        const chordSvgs = buildChordSvgMap(source, chordData);
 
         if (scrollPanel) {
             scrollPanel.reveal(vscode.ViewColumn.Beside);
-            scrollPanel.webview.postMessage({ command: 'reload', source });
+            scrollPanel.webview.postMessage({ command: 'reload', source, chordSvgs });
             return;
         }
 
-        scrollPanel = vscode.window.createWebviewPanel(
+        scrollDocUri = editor.document.uri.toString();
+        scrollPanel  = vscode.window.createWebviewPanel(
             'chordproScrollPreview',
             title + ' — Preview',
             vscode.ViewColumn.Beside,
             { enableScripts: true, retainContextWhenHidden: true }
         );
-        scrollPanel.webview.html = getScrollWebviewContent(source);
-        scrollPanel.onDidDispose(() => { scrollPanel = null; });
+        scrollPanel.webview.html = getScrollWebviewContent(source, chordSvgs);
+        scrollPanel.onDidDispose(() => { scrollPanel = null; scrollDocUri = null; });
     });
 
-    function getScrollWebviewContent(source) {
+    function getScrollWebviewContent(source, chordSvgs) {
         const safeSource = JSON.stringify(source);
+        const safeChordSvgs = JSON.stringify(chordSvgs || {});
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:;">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -1228,7 +1260,15 @@ body {
 .section-tab     .section-label { background: #f0f4e8; color: #4a6a20; }
 .chord-line  { display: flex; flex-wrap: wrap; line-height: 1; margin-bottom: 4px; }
 .pair        { display: inline-flex; flex-direction: column; align-items: flex-start; }
-.chord       { color: #1a5fb4; font-weight: bold; font-size: 0.82em; min-height: 1.3em; font-family: sans-serif; white-space: pre; }
+.chord       { color: #1a5fb4; font-weight: bold; font-size: 0.82em; min-height: 1.3em; font-family: sans-serif; white-space: pre; cursor: default; }
+.chord[data-chord] { cursor: help; }
+#chord-tip {
+  display: none; position: fixed; z-index: 9998; pointer-events: none;
+  background: #fff; border: 1px solid #ccc; border-radius: 7px;
+  padding: 6px 8px 4px; box-shadow: 0 4px 18px rgba(0,0,0,0.18);
+  text-align: center; font-family: sans-serif; font-size: 11px; color: #333;
+}
+#chord-tip svg { display: block; margin: 0 auto 3px; }
 .lyric       { white-space: pre; }
 .lyric-line  { white-space: pre-wrap; margin-bottom: 2px; }
 .empty-line  { height: 0.75em; }
@@ -1360,7 +1400,8 @@ function render({ meta, sections }) {
           out.push('<div class="chord-line">');
           for (const s of l.segs) {
             out.push('<span class="pair">'
-              + '<span class="chord">' + (s.chord ? esc(s.chord) : '&nbsp;') + '</span>'
+              + '<span class="chord"' + (s.chord ? ' data-chord="' + esc(s.chord) + '"' : '') + '>'
+              + (s.chord ? esc(s.chord) : '&nbsp;') + '</span>'
               + '<span class="lyric">'  + esc(s.lyric || ' ') + '</span>'
               + '</span>');
           }
@@ -1378,9 +1419,42 @@ function render({ meta, sections }) {
   return out.join('\\n');
 }
 
+// ── Chord diagram tooltips ────────────────────────────────────────────────────
+var CHORD_SVGS = ${safeChordSvgs};
+
+var tip = document.createElement('div');
+tip.id = 'chord-tip';
+document.body.appendChild(tip);
+
+function showTip(el, e) {
+  var name = el.dataset.chord;
+  var svg  = CHORD_SVGS[name];
+  if (!svg) return;
+  tip.innerHTML = svg + '<div>' + name + '</div>';
+  tip.style.display = 'block';
+  positionTip(e);
+}
+function positionTip(e) {
+  var x = e.clientX + 12, y = e.clientY + 16;
+  if (x + 130 > window.innerWidth)  x = e.clientX - 130;
+  if (y + 160 > window.innerHeight) y = e.clientY - 160;
+  tip.style.left = x + 'px';
+  tip.style.top  = y + 'px';
+}
+function hideTip() { tip.style.display = 'none'; }
+
+function bindTooltips() {
+  document.querySelectorAll('.chord[data-chord]').forEach(function(el) {
+    el.addEventListener('mouseenter', function(e) { showTip(el, e); });
+    el.addEventListener('mousemove',  function(e) { positionTip(e); });
+    el.addEventListener('mouseleave', hideTip);
+  });
+}
+
 // ── Boot ─────────────────────────────────────────────────────────────────────
 const SOURCE = ${safeSource};
 document.getElementById('song').innerHTML = render(parse(SOURCE));
+bindTooltips();
 
 // ── Auto-scroll ──────────────────────────────────────────────────────────────
 let speed = 30, playing = false, lastTs = null, accum = 0;
@@ -1418,10 +1492,12 @@ document.addEventListener('keydown', e => {
   if (e.code === 'ArrowDown') { document.getElementById('slower-btn').click(); e.preventDefault(); }
 });
 
-// Reload when file changes
-window.addEventListener('message', e => {
+// Reload when file changes (triggered by save or re-running the command)
+window.addEventListener('message', function(e) {
   if (e.data.command === 'reload') {
+    if (e.data.chordSvgs) CHORD_SVGS = e.data.chordSvgs;
     document.getElementById('song').innerHTML = render(parse(e.data.source));
+    bindTooltips();
     window.scrollTo(0, 0);
   }
 });
@@ -1801,6 +1877,14 @@ updateUI();
         diagnosticCollection.set(document.uri, diags);
     }
 
+    // Auto-reload preview on save
+    const onSaveScrollReload = vscode.workspace.onDidSaveTextDocument(doc => {
+        if (!scrollPanel || doc.uri.toString() !== scrollDocUri) return;
+        const source    = doc.getText();
+        const chordSvgs = buildChordSvgMap(source, buildChordData(doc));
+        scrollPanel.webview.postMessage({ command: 'reload', source, chordSvgs });
+    });
+
     let diagDebounce;
     const onOpenDiag   = vscode.workspace.onDidOpenTextDocument(doc => updateDiagnostics(doc));
     const onChangeDiag = vscode.workspace.onDidChangeTextDocument(e => {
@@ -1836,6 +1920,7 @@ updateUI();
         renameProvider,
         foldingProvider,
         diagnosticCollection,
+        onSaveScrollReload,
         onOpenDiag,
         onChangeDiag,
         onCloseDiag
