@@ -15,6 +15,11 @@ Edit, render, and build ChordPro songs in VSCode — with PDF preview, an intera
 - [x] **Auto-completion** — type `{` for directive suggestions, `[` for chord suggestions
 - [x] Chords defined in the file (`{define:}`) and saved in the Chord Builder appear first in the `[` completion list
 - [x] **Chord Diagram Hover** — hover over any `[chord]` token to see a fretboard diagram
+- [x] **Document Outline** — lists the song title and all sections (Verse, Chorus, Bridge…) in the Outline panel (Explorer sidebar → Outline section)
+- [x] **Go to Definition** — `Ctrl+click` a `[chord]` token to jump to its `{define:}` block
+- [x] **Rename Chord** — right-click a chord → Rename Symbol to update every `[token]` and the `{define:}` block at once
+- [x] **Section Folding** — fold `{start_of_chorus}` … `{end_of_chorus}` blocks like code
+- [x] **Diagnostics** — info squiggle for chords with no known fingering; hint for unused `{define:}` blocks
 - [x] **Syntax highlighting** — chords, directives, sections, comments
 - [x] **Transpose** — shift all chords (or a selection) up/down by semitones, with musical interval labels
 - [ ] Ultimate Guitar to/from ChordPro converter
@@ -164,6 +169,15 @@ Install ChordPro from the [official website](https://www.chordpro.org/chordpro/c
 - The `config` preset `modern1` is a good default; try `dark` for a dark-themed PDF
 
 ## Release Notes
+
+### 1.1.0
+- **Document Outline** — song title and every section (Verse, Chorus, Bridge, Tab, Grid…) appear in the Outline panel (Explorer sidebar → Outline section, at the bottom); sections with a `label=` attribute or `: label` show their custom label, duplicates are auto-numbered
+- **Go to Definition** — `Ctrl+click` any `[chord]` token to jump to its `{define:}` block in the same file
+- **Rename Chord** — right-click a chord → *Rename Symbol* (`F2`) to rename it everywhere: all `[token]` occurrences and the `{define:}` block are updated atomically and are fully undoable
+- **Section Folding** — `{start_of_chorus}` … `{end_of_chorus}` (and all other section pairs) fold and unfold like code blocks
+- **Diagnostics**:
+  - *Info* squiggle on any `[chord]` that has no known fingering (not in the file, Chord Builder, or built-in library) — suggests adding a `{define:}` or using the Chord Builder
+  - *Hint* on any `{define:}` whose chord name never appears as a `[token]` in the song
 
 ### 1.0.0
 - Added **Chord Diagram Hover** — hover over any `[chord]` token to see an SVG fretboard popup

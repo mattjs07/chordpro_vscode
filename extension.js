@@ -22,6 +22,31 @@ function openChordProTemplate(context, templateName) {
 }
 
 // ─────────────────────────────────────────────
+// Shared helpers
+// ─────────────────────────────────────────────
+
+function escapeRegex(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Returns { name, nameRange } if the cursor is inside a [chord] token, else null.
+function chordTokenAtPosition(document, position) {
+    const line = document.lineAt(position).text;
+    const re = /\[([A-G][b#]?[^\]]*)\]/g;
+    let m;
+    while ((m = re.exec(line)) !== null) {
+        const start = m.index, end = m.index + m[0].length;
+        if (position.character >= start && position.character <= end) {
+            return {
+                name: m[1],
+                nameRange: new vscode.Range(position.line, start + 1, position.line, end - 1)
+            };
+        }
+    }
+    return null;
+}
+
+// ─────────────────────────────────────────────
 // Chord diagram hover — database + SVG generator
 // ─────────────────────────────────────────────
 
@@ -1579,6 +1604,212 @@ updateUI();
         }
     });
 
+    // ── Editing & Navigation ──────────────────────────────────────────────
+
+    // Section type → display name
+    const SECTION_NAMES = {
+        start_of_chorus: 'Chorus', soc: 'Chorus',
+        start_of_verse:  'Verse',  sov: 'Verse',
+        start_of_bridge: 'Bridge', sob: 'Bridge',
+        start_of_tab:    'Tab',    sot: 'Tab',
+        start_of_grid:   'Grid',   sog: 'Grid',
+        start_of_abc:    'ABC Notation',
+        start_of_ly:     'LilyPond',
+        start_of_svg:    'SVG',
+    };
+    const SECTION_START_RE = /\{(start_of_chorus|start_of_verse|start_of_bridge|start_of_tab|start_of_grid|start_of_abc|start_of_ly|start_of_svg|soc|sov|sob|sot|sog)([^}]*)\}/i;
+    const SECTION_END_RE   = /\{(end_of_chorus|end_of_verse|end_of_bridge|end_of_tab|end_of_grid|end_of_abc|end_of_ly|end_of_svg|eoc|eov|eob|eot|eog)\}/i;
+
+    // Document Symbol Provider — Outline panel lists song title + all sections
+    const symbolProvider = vscode.languages.registerDocumentSymbolProvider('chordpro', {
+        provideDocumentSymbols(document) {
+            const symbols = [];
+            const lc = document.lineCount;
+
+            // First pass: count per section type (to decide whether to number them)
+            const typeCounts = {};
+            for (let i = 0; i < lc; i++) {
+                const m = document.lineAt(i).text.match(SECTION_START_RE);
+                if (m) {
+                    const key = SECTION_NAMES[m[1].toLowerCase()] || m[1];
+                    typeCounts[key] = (typeCounts[key] || 0) + 1;
+                }
+            }
+
+            // Second pass: build symbols
+            const typeIndex = {}, stack = [];
+            for (let i = 0; i < lc; i++) {
+                const lineText = document.lineAt(i).text;
+                const startM = lineText.match(SECTION_START_RE);
+                if (startM) {
+                    const directive = startM[1].toLowerCase();
+                    const baseName  = SECTION_NAMES[directive] || directive;
+                    // Extract optional label from e.g. {start_of_verse: Verse 2} or label="..."
+                    const labelM = startM[2].match(/(?:label\s*=\s*["']?([^"'}\n]+)["']?|:\s*([^}\n]+))/i);
+                    let label = labelM ? (labelM[1] || labelM[2]).trim() : null;
+                    if (!label) {
+                        typeIndex[baseName] = (typeIndex[baseName] || 0) + 1;
+                        label = typeCounts[baseName] > 1
+                            ? `${baseName} ${typeIndex[baseName]}`
+                            : baseName;
+                    }
+                    stack.push({ label, startLine: i });
+                    continue;
+                }
+                const endM = lineText.match(SECTION_END_RE);
+                if (endM && stack.length > 0) {
+                    const { label, startLine } = stack.pop();
+                    const range    = new vscode.Range(startLine, 0, i, lineText.length);
+                    const selRange = new vscode.Range(startLine, 0, startLine, document.lineAt(startLine).text.length);
+                    symbols.push(new vscode.DocumentSymbol(label, '', vscode.SymbolKind.Module, range, selRange));
+                }
+            }
+
+            // Prepend song title (scan first 20 lines)
+            for (let i = 0; i < Math.min(lc, 20); i++) {
+                const line = document.lineAt(i).text;
+                const m = line.match(/\{(?:title|t):\s*([^}]+)\}/i);
+                if (m) {
+                    const range = new vscode.Range(i, 0, i, line.length);
+                    symbols.unshift(new vscode.DocumentSymbol(`♪ ${m[1].trim()}`, '', vscode.SymbolKind.String, range, range));
+                    break;
+                }
+            }
+            return symbols;
+        }
+    });
+
+    // Definition Provider — Ctrl+click [chord] → jump to its {define:} block
+    const definitionProvider = vscode.languages.registerDefinitionProvider('chordpro', {
+        provideDefinition(document, position) {
+            const token = chordTokenAtPosition(document, position);
+            if (!token) return null;
+            const lines = document.getText().split('\n');
+            const re = new RegExp(`\\{(?:define|chord):?\\s+${escapeRegex(token.name)}\\b`, 'i');
+            for (let i = 0; i < lines.length; i++) {
+                if (re.test(lines[i]))
+                    return new vscode.Location(document.uri, new vscode.Position(i, lines[i].search(re)));
+            }
+            return null;
+        }
+    });
+
+    // Rename Provider — rename a chord everywhere (all [tokens] + {define:} block)
+    const renameProvider = vscode.languages.registerRenameProvider('chordpro', {
+        prepareRename(document, position) {
+            const token = chordTokenAtPosition(document, position);
+            if (!token) throw new Error('Place cursor inside a [chord] token to rename');
+            return { range: token.nameRange, placeholder: token.name };
+        },
+        provideRenameEdits(document, position, newName) {
+            const token = chordTokenAtPosition(document, position);
+            if (!token) return null;
+            const edit = new vscode.WorkspaceEdit();
+            const text = document.getText();
+
+            // All [chordName] occurrences — replace only the name, keep brackets
+            const chordRe = new RegExp(`\\[${escapeRegex(token.name)}\\]`, 'g');
+            let m;
+            while ((m = chordRe.exec(text)) !== null) {
+                edit.replace(document.uri,
+                    new vscode.Range(document.positionAt(m.index + 1),
+                                     document.positionAt(m.index + 1 + token.name.length)),
+                    newName);
+            }
+            // {define: chordName ...} — replace only the name
+            const defineRe = new RegExp(`(\\{(?:define|chord):?\\s+)${escapeRegex(token.name)}(?=\\s)`, 'gi');
+            while ((m = defineRe.exec(text)) !== null) {
+                const ns = m.index + m[1].length;
+                edit.replace(document.uri,
+                    new vscode.Range(document.positionAt(ns),
+                                     document.positionAt(ns + token.name.length)),
+                    newName);
+            }
+            return edit;
+        }
+    });
+
+    // Folding Range Provider — fold {start_of_X} … {end_of_X} blocks
+    const foldingProvider = vscode.languages.registerFoldingRangeProvider('chordpro', {
+        provideFoldingRanges(document) {
+            const ranges = [], stack = [];
+            for (let i = 0; i < document.lineCount; i++) {
+                const line = document.lineAt(i).text;
+                if (SECTION_START_RE.test(line))      stack.push(i);
+                else if (SECTION_END_RE.test(line) && stack.length > 0)
+                    ranges.push(new vscode.FoldingRange(stack.pop(), i));
+            }
+            return ranges;
+        }
+    });
+
+    // ── Diagnostics ───────────────────────────────────────────────────────
+
+    const diagnosticCollection = vscode.languages.createDiagnosticCollection('chordpro');
+
+    function updateDiagnostics(document) {
+        if (document.languageId !== 'chordpro') return;
+        const diags = [];
+        const lines = document.getText().split('\n');
+
+        const docDefines = parseDocumentDefines(document);
+        const savedNames = new Set(
+            context.globalState.keys()
+                .filter(k => k.startsWith('chord_'))
+                .map(k => k.slice('chord_'.length))
+        );
+
+        const usedChords = new Set();
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (/\{(?:define|chord):?\s/i.test(line)) continue; // skip define lines
+
+            const re = /\[([A-G][b#]?[^\]]*)\]/g;
+            let m;
+            while ((m = re.exec(line)) !== null) {
+                const name = m[1];
+                usedChords.add(name);
+                if (!docDefines[name] && !savedNames.has(name) && !CHORD_DB[name]) {
+                    diags.push(new vscode.Diagnostic(
+                        new vscode.Range(i, m.index + 1, i, m.index + 1 + name.length),
+                        `No fingering known for "${name}" — add a {define:} block or use the Chord Builder`,
+                        vscode.DiagnosticSeverity.Information
+                    ));
+                }
+            }
+        }
+
+        // Warn about {define:} blocks whose chord never appears as [chord]
+        const defineLineRe = /\{(?:define|chord):?\s+(\S+)/gi;
+        for (let i = 0; i < lines.length; i++) {
+            defineLineRe.lastIndex = 0;
+            let dm;
+            while ((dm = defineLineRe.exec(lines[i])) !== null) {
+                const name = dm[1];
+                if (!usedChords.has(name)) {
+                    const col = dm.index + dm[0].length - name.length;
+                    diags.push(new vscode.Diagnostic(
+                        new vscode.Range(i, col, i, col + name.length),
+                        `"${name}" is defined but never used in the song`,
+                        vscode.DiagnosticSeverity.Hint
+                    ));
+                }
+            }
+        }
+
+        diagnosticCollection.set(document.uri, diags);
+    }
+
+    let diagDebounce;
+    const onOpenDiag   = vscode.workspace.onDidOpenTextDocument(doc => updateDiagnostics(doc));
+    const onChangeDiag = vscode.workspace.onDidChangeTextDocument(e => {
+        clearTimeout(diagDebounce);
+        diagDebounce = setTimeout(() => updateDiagnostics(e.document), 500);
+    });
+    const onCloseDiag  = vscode.workspace.onDidCloseTextDocument(doc => diagnosticCollection.delete(doc.uri));
+    vscode.workspace.textDocuments.forEach(doc => updateDiagnostics(doc));
+
     // Add disposables to context.subscriptions
     context.subscriptions.push(
         renderOnly,
@@ -1599,7 +1830,15 @@ updateUI();
         openChordAnalyzer,
         autoScrollPreview,
         registerTabEditor(context),
-        transposeChords
+        transposeChords,
+        symbolProvider,
+        definitionProvider,
+        renameProvider,
+        foldingProvider,
+        diagnosticCollection,
+        onOpenDiag,
+        onChangeDiag,
+        onCloseDiag
     );
 }
 
