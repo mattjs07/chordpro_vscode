@@ -771,28 +771,8 @@ function activate(context) {
     let oolimoPanel = null;
 
     const openChordAnalyzer = vscode.commands.registerCommand('extension.openChordAnalyzer', () => {
-        // Try to detect chord name at cursor
-        let chordAtCursor = '';
-        const editor = vscode.window.activeTextEditor;
-        if (editor) {
-            const pos = editor.selection.active;
-            const line = editor.document.lineAt(pos).text;
-            // Find all [Chord] tokens on the line and pick the one under the cursor
-            const chordRe = /\[([A-G][^\]]*)\]/g;
-            let m;
-            while ((m = chordRe.exec(line)) !== null) {
-                if (pos.character >= m.index && pos.character <= m.index + m[0].length) {
-                    chordAtCursor = m[1].trim();
-                    break;
-                }
-            }
-        }
-
         if (oolimoPanel) {
             oolimoPanel.reveal(vscode.ViewColumn.Beside);
-            if (chordAtCursor) {
-                oolimoPanel.webview.postMessage({ command: 'setChord', chord: chordAtCursor });
-            }
             return;
         }
 
@@ -803,7 +783,7 @@ function activate(context) {
             { enableScripts: true, retainContextWhenHidden: true }
         );
 
-        oolimoPanel.webview.html = getOolimoWebviewContent(chordAtCursor);
+        oolimoPanel.webview.html = getOolimoWebviewContent();
 
         oolimoPanel.webview.onDidReceiveMessage(msg => {
             if (msg.command === 'openExternal') {
@@ -814,9 +794,8 @@ function activate(context) {
         oolimoPanel.onDidDispose(() => { oolimoPanel = null; });
     });
 
-    function getOolimoWebviewContent(initialChord) {
-        const baseUrl = 'https://www.oolimo.com/en/guitar-chords/analyze';
-        const escapedChord = initialChord.replace(/'/g, "\\'");
+    function getOolimoWebviewContent() {
+        const url = 'https://www.oolimo.com/en/guitar-chords/analyze';
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -825,33 +804,14 @@ function activate(context) {
 <title>Chord Analyzer</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { display: flex; flex-direction: column; height: 100vh; background: #1e1e1e; color: #ccc; font-family: sans-serif; }
-  #toolbar {
-    display: flex; align-items: center; gap: 8px;
-    padding: 6px 10px; background: #252526; border-bottom: 1px solid #3c3c3c; flex-shrink: 0;
-  }
-  #toolbar input {
-    flex: 1; padding: 4px 8px; background: #3c3c3c; border: 1px solid #555; color: #eee;
-    border-radius: 3px; font-size: 13px; outline: none;
-  }
-  #toolbar button {
-    padding: 4px 12px; background: #0e639c; border: none; color: #fff;
-    border-radius: 3px; cursor: pointer; font-size: 13px;
-  }
-  #toolbar button:hover { background: #1177bb; }
-  #ext-btn {
-    padding: 4px 10px; background: #3c3c3c; border: 1px solid #555; color: #ccc;
-    border-radius: 3px; cursor: pointer; font-size: 12px;
-  }
-  #ext-btn:hover { background: #4a4a4a; }
-  #frame-container { flex: 1; position: relative; }
-  iframe { width: 100%; height: 100%; border: none; }
+  body { height: 100vh; overflow: hidden; background: #1e1e1e; }
+  iframe { width: 100%; height: 100%; border: none; display: block; }
   #blocked-msg {
-    display: none; position: absolute; inset: 0;
+    display: none; position: fixed; inset: 0;
     flex-direction: column; align-items: center; justify-content: center; gap: 12px;
-    background: #1e1e1e; text-align: center; padding: 20px;
+    background: #1e1e1e; text-align: center; padding: 20px; color: #aaa; font-family: sans-serif;
   }
-  #blocked-msg p { color: #aaa; font-size: 14px; line-height: 1.5; }
+  #blocked-msg p { font-size: 14px; line-height: 1.6; }
   #blocked-open-btn {
     padding: 8px 20px; background: #0e639c; border: none; color: #fff;
     border-radius: 4px; cursor: pointer; font-size: 14px;
@@ -860,59 +820,21 @@ function activate(context) {
 </style>
 </head>
 <body>
-<div id="toolbar">
-  <input id="chordInput" placeholder="Chord name (e.g. Am7, Cmaj7)" value="${escapedChord}" />
-  <button id="goBtn">Analyze</button>
-  <button id="ext-btn" title="Open in browser">↗</button>
-</div>
-<div id="frame-container">
-  <iframe id="frame" src="${baseUrl}" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
-  <div id="blocked-msg">
-    <p>Oolimo cannot be embedded here (the site blocks iframes).<br>Click below to open it in your browser.</p>
-    <button id="blocked-open-btn">Open Oolimo in browser</button>
-  </div>
+<iframe id="frame" src="${url}" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+<div id="blocked-msg">
+  <p>Oolimo cannot be embedded here (the site blocks iframes).<br>Click below to open it in your browser.</p>
+  <button id="blocked-open-btn">Open Oolimo in browser</button>
 </div>
 <script>
   const vscode = acquireVsCodeApi();
-  const frame = document.getElementById('frame');
-  const input = document.getElementById('chordInput');
-  const baseUrl = '${baseUrl}';
-
-  function getUrl() {
-    const chord = input.value.trim();
-    return chord ? baseUrl + '?oolimo=' + encodeURIComponent(chord) : baseUrl;
-  }
-
-  function navigate() { frame.src = getUrl(); }
-
-  document.getElementById('goBtn').addEventListener('click', navigate);
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') navigate(); });
-  document.getElementById('ext-btn').addEventListener('click', () => {
-    vscode.postMessage({ command: 'openExternal', url: getUrl() });
-  });
-  document.getElementById('blocked-open-btn').addEventListener('click', () => {
-    vscode.postMessage({ command: 'openExternal', url: getUrl() });
-  });
-
-  // Detect if the iframe was blocked (no load event within 5 s or load fires but empty)
   let loaded = false;
-  frame.addEventListener('load', () => { loaded = true; });
+  document.getElementById('frame').addEventListener('load', () => { loaded = true; });
   setTimeout(() => {
-    if (!loaded) {
-      document.getElementById('blocked-msg').style.display = 'flex';
-    }
+    if (!loaded) { document.getElementById('blocked-msg').style.display = 'flex'; }
   }, 6000);
-
-  // Handle chord set from extension (when panel already open)
-  window.addEventListener('message', e => {
-    const msg = e.data;
-    if (msg.command === 'setChord') {
-      input.value = msg.chord;
-      navigate();
-    }
+  document.getElementById('blocked-open-btn').addEventListener('click', () => {
+    vscode.postMessage({ command: 'openExternal', url: '${url}' });
   });
-
-  ${initialChord ? 'navigate();' : ''}
 </script>
 </body>
 </html>`;
