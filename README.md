@@ -44,11 +44,11 @@ ChordPro VSCode turns VSCode into a full-featured songwriting and performance en
 
 ## Quick Start
 
-1. Install the extension and open (or create) a `.cho` file
-2. Press `Ctrl+Alt+S` to open the **Auto-scroll Preview**
+1. Install the extension and open (or create) a `.cho` file — syntax highlighting activates automatically
+2. Press `Ctrl+Alt+S` to open the **Auto-scroll Preview** (no CLI needed), or `Ctrl+Shift+V` for the **PDF preview**
 3. Press **Space** to start scrolling — use the control bar to adjust speed, transpose, or jump to a section
 
-No ChordPro CLI required for the preview. PDF rendering requires the [ChordPro CLI](https://www.chordpro.org/chordpro/chordpro-installation/) on your PATH.
+PDF rendering requires the [ChordPro CLI](https://www.chordpro.org/chordpro/chordpro-installation/) installed and on your PATH. For the ChordPro format itself, see the [official documentation](https://www.chordpro.org/chordpro/home/).
 
 ---
 
@@ -184,11 +184,38 @@ Open with `Ctrl+Alt+T`.
 
 **For PDF only:** add `{transpose: 2}` in the file; the CLI applies it at render time without changing the source (note: the HTML preview ignores this directive).
 
+### Syntax Highlighting
+
+`.cho`, `.chordpro`, and `.chopro` files get full syntax highlighting automatically: chord tokens `[Am]`, directives `{title:}`, section markers, comments, and rendering parameters are all coloured distinctly.
+
 ### Auto-completion
 
 - Type `{` → suggestions for all ChordPro directives; section pairs (`{start_of_chorus}` etc.) insert the closing tag automatically with the cursor placed between them
 - Type `[` → chord suggestions; your saved and defined chords appear first
 - Rendering parameters (`# {config = ...}`, etc.) have their own completions in the first 25 lines
+
+### Rendering Parameters (PDF config)
+
+Add these in the **first 25 lines** of your `.cho` file to control how the PDF is generated:
+
+```
+# {config = "modern1"}
+# {options = --no-chord-grids}
+# {suffix = "chords_only"}
+# {output = mysong_out.pdf}
+```
+
+| Parameter | Description |
+|---|---|
+| `config` | Preset name (`modern1`, `dark`, …) or path to a `.json` config file |
+| `options` | Extra CLI flags passed verbatim (e.g. `--no-chord-grids`, `-l`, `--toc`) |
+| `suffix` | Appended to the output filename: `mysong_<suffix>.pdf` |
+| `output` | Full output filename, overrides the default |
+
+**Three ways to configure:**
+- **Auto-completion** — type `# {` in the first 25 lines for a dropdown of parameters; `config` offers a preset picker
+- **Hover tooltip** — hover over a `# {key = ...}` line to see a description, valid values, and common CLI flags
+- **⚙ CodeLens** — click the **⚙ Configure rendering** button above line 1 for a guided step-by-step UI
 
 ### Chord Analyzer (Oolimo)
 
@@ -206,10 +233,17 @@ The **Auto-scroll Preview**, **Song Library**, **Setlist**, **Chord Builder**, *
 
 ## Useful Links
 
-- [ChordPro format reference](https://www.chordpro.org/chordpro/chordpro-directives/)
+- [ChordPro official site & documentation](https://www.chordpro.org/chordpro/home/)
+- [ChordPro directive reference](https://www.chordpro.org/chordpro/chordpro-directives/)
 - [Oolimo chord analyzer](https://www.oolimo.com/en/guitar-chords/analyze)
 - [Songcraft.io](https://songcraft.io/) — BPM, autoscrolling, visual editor, chord progressions
 - [Full Changelog](CHANGELOG.md)
+
+---
+
+## Suggestions & Feedback
+
+Have an idea, found a bug, or want to request a feature? Open an issue on [GitHub](https://github.com/mattjs07/chordpro_vscode/issues) — all suggestions are welcome!
 
 ---
 
