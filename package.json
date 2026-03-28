@@ -3,7 +3,7 @@
   "displayName": "ChordPro VSCode",
   "description": "Edit, render, and build ChordPro songs in VSCode — includes PDF rendering, templates, and an interactive chord builder with fretboard.",
   "publisher": "mattjs07",
-  "version": "1.7.3",
+  "version": "1.8.0",
   "icon": "images/icon.png",
   "categories": [
     "Other"
@@ -135,20 +135,55 @@
         "command": "extension.detectKey",
         "title": "Detect Key"
       },
-      { "command": "chordpro.setLibraryFolder", "title": "Set Library Folder", "icon": "$(folder-opened)" },
-      { "command": "chordpro.refreshLibrary", "title": "Refresh Library", "icon": "$(refresh)" },
-      { "command": "chordpro.openSetlistPreview", "title": "Play as Setlist", "icon": "$(play)" },
-      { "command": "chordpro.previewSongFromLibrary", "title": "Preview Song", "icon": "$(play)" },
-      { "command": "chordpro.openSong", "title": "Open Song" }
+      {
+        "command": "chordpro.setLibraryFolder",
+        "title": "Set Library Folder",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "chordpro.refreshLibrary",
+        "title": "Refresh Library",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "chordpro.openSetlistPreview",
+        "title": "Play as Setlist",
+        "icon": "$(play)"
+      },
+      {
+        "command": "chordpro.previewSongFromLibrary",
+        "title": "Preview Song",
+        "icon": "$(play)"
+      },
+      {
+        "command": "chordpro.openSong",
+        "title": "Open Song"
+      }
     ],
     "menus": {
       "view/title": [
-        { "command": "chordpro.setLibraryFolder", "when": "view == chordproLibraryView", "group": "navigation" },
-        { "command": "chordpro.refreshLibrary", "when": "view == chordproLibraryView", "group": "navigation" },
-        { "command": "chordpro.openSetlistPreview", "when": "view == chordproLibraryView", "group": "navigation" }
+        {
+          "command": "chordpro.setLibraryFolder",
+          "when": "view == chordproLibraryView",
+          "group": "navigation"
+        },
+        {
+          "command": "chordpro.refreshLibrary",
+          "when": "view == chordproLibraryView",
+          "group": "navigation"
+        },
+        {
+          "command": "chordpro.openSetlistPreview",
+          "when": "view == chordproLibraryView",
+          "group": "navigation"
+        }
       ],
       "view/item/context": [
-        { "command": "chordpro.previewSongFromLibrary", "when": "viewItem == song", "group": "inline" }
+        {
+          "command": "chordpro.previewSongFromLibrary",
+          "when": "viewItem == song",
+          "group": "inline"
+        }
       ]
     },
     "keybindings": [
