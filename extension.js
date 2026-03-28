@@ -1728,6 +1728,15 @@ document.body.appendChild(tip);
 function showTip(el, e) {
   var name = el.dataset.chord;
   var svg  = CHORD_SVGS[name];
+  if (!svg) {
+    // Try enharmonic equivalent (C# ↔ Db, D# ↔ Eb, etc.)
+    var rm = name && name.match(/^([A-G][b#]?)(.*)/);
+    if (rm) {
+      var si = _SH.indexOf(rm[1]), fi = _FL.indexOf(rm[1]);
+      if (si >= 0) svg = CHORD_SVGS[_FL[si] + rm[2]];
+      if (!svg && fi >= 0) svg = CHORD_SVGS[_SH[fi] + rm[2]];
+    }
+  }
   if (!svg) return;
   tip.innerHTML = svg + '<div>' + name + '</div>';
   tip.style.display = 'block';
@@ -2364,8 +2373,18 @@ function render({ meta, sections }, transpose) {
 var tip = document.createElement('div');
 tip.id = 'chord-tip'; document.body.appendChild(tip);
 function showTip(el, e) {
-  var svg = CHORD_SVGS[el.dataset.chord]; if (!svg) return;
-  tip.innerHTML = svg + '<div>' + el.dataset.chord + '</div>';
+  var name = el.dataset.chord;
+  var svg = CHORD_SVGS[name];
+  if (!svg) {
+    var rm = name && name.match(/^([A-G][b#]?)(.*)/);
+    if (rm) {
+      var si = _SH.indexOf(rm[1]), fi = _FL.indexOf(rm[1]);
+      if (si >= 0) svg = CHORD_SVGS[_FL[si] + rm[2]];
+      if (!svg && fi >= 0) svg = CHORD_SVGS[_SH[fi] + rm[2]];
+    }
+  }
+  if (!svg) return;
+  tip.innerHTML = svg + '<div>' + name + '</div>';
   tip.style.display = 'block'; positionTip(e);
 }
 function positionTip(e) {
