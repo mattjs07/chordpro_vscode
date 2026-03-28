@@ -6,7 +6,7 @@ Edit, render, and build ChordPro songs in VSCode — with PDF preview, an intera
 
 - [x] Compile `.cho` files with **Render ChordPro PDF** (`Ctrl+Shift+B`)
 - [x] **Preview ChordPro PDF** — renders and opens the PDF automatically in a side panel (`Ctrl+Shift+V`)
-- [x] **Auto-scroll Preview** — renders the song as HTML and scrolls it automatically (`Ctrl+Alt+S`); auto-sets scroll speed from `{tempo:}` if present; save as standalone HTML with the 💾 button; live transpose, two-column layout, dark/light theme toggle
+- [x] **Auto-scroll Preview** — renders the song as HTML and scrolls it automatically (`Ctrl+Alt+S`); tap tempo, section jump, lyrics-only mode, full-screen, live transpose, two-column layout, dark/light theme toggle, save as standalone HTML
 - [x] Build on save (enable from extension settings)
 - [x] **Rendering Parameters** — write config/options directly in the source file, with completion, hover docs, and a guided ⚙ configurator
 - [x] **Interactive Chord Builder** — fretboard panel to build and insert chord definitions (`Ctrl+Alt+D`)
@@ -88,6 +88,10 @@ Press `Ctrl+Alt+S` to render the current song as HTML and open it in **performan
 - **Auto-reload on save** — the preview refreshes automatically every time you save the file
 - **Chord diagrams** — hover over any chord name in the preview to see a fretboard diagram popup (same fingering priority as the source hover: file `{define:}` > Chord Builder > built-in library)
 - **Tempo-based speed** — if the file contains `{tempo: N}`, the scroll speed is auto-set so the song scrolls at the right pace (1 bar per chord line); a ♩ button appears in the control bar (gold when active); click it any time to snap back to tempo speed
+- **Tap tempo** — click **Tap** (or press `T`) to tap the beat; BPM is averaged from the last 8 taps and sets the scroll speed automatically; resets if no tap for 3 seconds
+- **Section jump** — click **§** to open a section list; click any entry to scroll smoothly to that part of the song
+- **Lyrics-only mode** — click **Ly** (or press `L`) to fade out all chord symbols; the layout is preserved so lines don't shift
+- **Full-screen** — click **⤢** (or press `F`) to enter full-screen mode (shown in browsers; `⤡` to exit); keyboard shortcut works in the saved HTML too
 - **Live transpose** — ♭ / ♯ buttons in the control bar shift all chord names in the view by semitones without touching the source file; counter shows current offset (gold when non-zero)
 - **Two-column layout** — ⊞ button toggles two-column mode; useful for long songs
 - **Theme toggle** — 🌙/☀️ button manually overrides the OS dark/light preference
@@ -184,6 +188,12 @@ Install ChordPro from the [official website](https://www.chordpro.org/chordpro/c
 - The `config` preset `modern1` is a good default; try `dark` for a dark-themed PDF
 
 ## Release Notes
+
+### 1.6.0
+- **Tap tempo** — tap `T` (or the Tap button) to measure BPM from your rhythm; auto-sets scroll speed; averages last 8 taps, resets after 3 s idle
+- **Section jump** — `§` button opens a popup list of all song sections; click to scroll smoothly to any section
+- **Lyrics-only mode** — `L` key or **Ly** button fades out chord symbols without shifting layout (CSS opacity transition)
+- **Full-screen** — `F` key or **⤢** button; available in saved HTML and in browsers (not in the VSCode webview)
 
 ### 1.5.0
 - **Live transpose in preview** — ♭ / ♯ buttons in the control bar shift all displayed chord names without modifying the source; offset shown in gold when non-zero

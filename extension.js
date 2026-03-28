@@ -1418,6 +1418,27 @@ body {
 #trans-down, #trans-up { font-size: 13px; }
 #trans-label { min-width: 28px; text-align: center; font-size: 12px; color: #aaa; padding: 0 2px; }
 #trans-label.active { color: #ffd700; }
+#tap-btn    { font-size: 11px; font-family: sans-serif; border-radius: 6px !important; width: auto !important; padding: 0 7px !important; }
+#tap-label  { min-width: 44px; text-align: center; font-size: 11px; color: #888; padding: 0 2px; }
+#lyrics-btn { font-size: 11px; font-family: sans-serif; border-radius: 6px !important; width: auto !important; padding: 0 7px !important; }
+#lyrics-btn.active { color: #ffd700; border-color: #ffd700; }
+#fs-btn     { font-size: 14px; }
+/* ── Lyrics-only mode ────────────────────────────────────────────────────── */
+.chord { transition: opacity 0.2s; }
+#song.lyrics-only .chord { opacity: 0; }
+/* ── Section jump popup ──────────────────────────────────────────────────── */
+#sec-popup {
+  display: none; position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%);
+  background: rgba(20,20,20,0.96); border: 1px solid #555; border-radius: 10px;
+  padding: 6px; z-index: 9998; min-width: 150px; max-height: 280px; overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+.sec-item {
+  display: block; width: 100%; text-align: left; padding: 7px 14px;
+  background: none; border: none; color: #eee; cursor: pointer; border-radius: 5px;
+  font-family: sans-serif; font-size: 13px; white-space: nowrap;
+}
+.sec-item:hover { background: #3a3a3a; }
 /* ── Print ────────────────────────────────────────────────────────────────── */
 @media print {
   #scroll-bar, #progress-bar { display: none !important; }
@@ -1436,7 +1457,10 @@ body {
 <body>
 <div id="progress-bar"></div>
 <div id="song"></div>
+<div id="sec-popup"></div>
 <div id="scroll-bar">
+  <button id="tap-btn"      title="Tap tempo (T)">Tap</button>
+  <span   id="tap-label"></span>
   <button id="trans-down"   title="Transpose down (♭)">♭</button>
   <span   id="trans-label">0</span>
   <button id="trans-up"     title="Transpose up (♯)">♯</button>
@@ -1447,6 +1471,9 @@ body {
   <button id="tempo-btn"    title="Snap to tempo speed" style="display:none">♩</button>
   <button id="font-smaller" title="Smaller text (A−)">A−</button>
   <button id="font-larger"  title="Larger text (A+)">A+</button>
+  <button id="lyrics-btn"   title="Lyrics only — hide chords (L)">Ly</button>
+  <button id="sec-btn"      title="Jump to section (§)">§</button>
+  <button id="fs-btn"       title="Full screen (F)" style="display:none">⤢</button>
   <button id="twocol-btn"   title="Toggle two-column layout">⊞</button>
   <button id="theme-btn"    title="Toggle dark/light theme">🌙</button>
   <button id="save-btn"     title="Save as HTML">💾</button>
@@ -1490,10 +1517,10 @@ function parseChordLine(line) {
 function parse(text) {
   const meta = { title: '', subtitle: '', artist: '', key: '', capo: '', tempo: '' };
   const sections = [];
-  let cur = { type: 'verse', label: '', lines: [] };
+  let cur = { type: 'verse', label: '', lines: [], nav: false };
 
   function flush() { if (cur.lines.length) { sections.push(cur); } }
-  function next(type, label) { flush(); cur = { type, label, lines: [] }; }
+  function next(type, label, nav) { flush(); cur = { type, label, lines: [], nav: !!nav }; }
 
   for (const raw of text.split(/\\r?\\n/)) {
     const line = raw.trimEnd();
@@ -1510,14 +1537,14 @@ function parse(text) {
       if (k === 'key')                   { meta.key      = v; continue; }
       if (k === 'capo')                  { meta.capo     = v; continue; }
       if (k === 'tempo')                 { meta.tempo    = v; continue; }
-      if (k === 'start_of_chorus'||k==='soc') { next('chorus',  v||'Chorus');  continue; }
-      if (k === 'end_of_chorus'  ||k==='eoc') { next('verse',   '');           continue; }
-      if (k === 'start_of_verse' ||k==='sov') { next('verse',   v||'');        continue; }
-      if (k === 'end_of_verse'   ||k==='eov') { next('verse',   '');           continue; }
-      if (k === 'start_of_bridge'||k==='sob') { next('bridge',  v||'Bridge');  continue; }
-      if (k === 'end_of_bridge'  ||k==='eob') { next('verse',   '');           continue; }
-      if (k === 'start_of_tab'   ||k==='sot') { next('tab',     v||'Tab');     continue; }
-      if (k === 'end_of_tab'     ||k==='eot') { next('verse',   '');           continue; }
+      if (k === 'start_of_chorus'||k==='soc') { next('chorus',  v||'Chorus', true);  continue; }
+      if (k === 'end_of_chorus'  ||k==='eoc') { next('verse',   '',          false); continue; }
+      if (k === 'start_of_verse' ||k==='sov') { next('verse',   v||'Verse',  true);  continue; }
+      if (k === 'end_of_verse'   ||k==='eov') { next('verse',   '',          false); continue; }
+      if (k === 'start_of_bridge'||k==='sob') { next('bridge',  v||'Bridge', true);  continue; }
+      if (k === 'end_of_bridge'  ||k==='eob') { next('verse',   '',          false); continue; }
+      if (k === 'start_of_tab'   ||k==='sot') { next('tab',     v||'Tab',    true);  continue; }
+      if (k === 'end_of_tab'     ||k==='eot') { next('verse',   '',          false); continue; }
       if (k === 'comment'||k==='c'||k==='highlight') { cur.lines.push({ type:'comment',     text:v }); continue; }
       if (k === 'comment_italic' ||k==='ci')          { cur.lines.push({ type:'comment',     text:v }); continue; }
       if (k === 'comment_box'    ||k==='cb')          { cur.lines.push({ type:'comment-box', text:v }); continue; }
@@ -1553,8 +1580,9 @@ function render({ meta, sections }, transpose) {
   if (metaLine || capoBadge) out.push('<div class="song-meta">' + metaLine + capoBadge + '</div>');
   out.push('</div>');
 
+  var secIdx = 0;
   for (const sec of sections) {
-    out.push('<div class="section section-' + sec.type + '">');
+    out.push('<div class="section section-' + sec.type + '" id="sec-' + (secIdx++) + '"' + (sec.nav ? ' data-nav="1"' : '') + '>');
     if (sec.label) out.push('<div class="section-label">' + esc(sec.label) + '</div>');
 
     if (sec.type === 'tab') {
@@ -1703,24 +1731,29 @@ function updateUI() {
   }
 }
 
+// Returns computed px/s for a given BPM, or 0 if layout isn't ready
+function computeScrollSpeed(bpm) {
+  var lines = document.querySelectorAll('.chord-line').length;
+  if (!lines) return 0;
+  var scrollable = Math.max(
+    document.body.scrollHeight - window.innerHeight,
+    document.documentElement.scrollHeight - document.documentElement.clientHeight
+  );
+  if (scrollable <= 0) return 0;
+  return Math.max(5, Math.min(300, Math.round(scrollable / (lines * 4 * 60 / bpm))));
+}
+
 // Set scroll speed from {tempo:} — 1 chord-line ≈ 1 bar (4 beats)
 // keepManual=true: update tempoSpeed but don't change speed if user had manually overridden it
 function applyTempoSpeed(meta, _retry, keepManual) {
   var bpm = parseInt(meta.tempo || '0');
   if (!bpm) return;
-  var lines = document.querySelectorAll('.chord-line').length;
-  if (!lines) return;
-  var scrollable = Math.max(
-    document.body.scrollHeight - window.innerHeight,
-    document.documentElement.scrollHeight - document.documentElement.clientHeight
-  );
-  if (scrollable <= 0) {
-    if (_retry) return; // give up after one retry
+  var newTempo = computeScrollSpeed(bpm);
+  if (!newTempo) {
+    if (_retry) return;
     setTimeout(function() { applyTempoSpeed(meta, true, keepManual); }, 400);
     return;
   }
-  var totalSecs = lines * (4 * 60 / bpm); // 4 beats per line at BPM
-  var newTempo = Math.max(5, Math.min(300, Math.round(scrollable / totalSecs)));
   var wasOnTempo = (tempoSpeed > 0 && speed === tempoSpeed);
   tempoSpeed = newTempo;
   if (!keepManual || wasOnTempo) speed = tempoSpeed;
@@ -1749,10 +1782,96 @@ document.getElementById('faster-btn').addEventListener('click', function() { spe
 document.getElementById('slower-btn').addEventListener('click', function() { speed = Math.max(speed - 5, 5);   updateUI(); });
 document.getElementById('save-btn').addEventListener('click',   function() { vscodeApi.postMessage({ command: 'saveHtml' }); });
 tempoBtn.addEventListener('click', function() { if (tempoSpeed) { speed = tempoSpeed; updateUI(); } });
+// ── Tap tempo ─────────────────────────────────────────────────────────────
+var tapTimes = [];
+var tapLabel = document.getElementById('tap-label');
+document.getElementById('tap-btn').addEventListener('click', function() {
+  var now = Date.now();
+  if (tapTimes.length && now - tapTimes[tapTimes.length - 1] > 3000) tapTimes = [];
+  tapTimes.push(now);
+  if (tapTimes.length < 2) { tapLabel.textContent = '…'; return; }
+  if (tapTimes.length > 8) tapTimes.shift();
+  var intervals = [];
+  for (var i = 1; i < tapTimes.length; i++) intervals.push(tapTimes[i] - tapTimes[i - 1]);
+  var bpm = Math.round(60000 / (intervals.reduce(function(a,b){return a+b;},0) / intervals.length));
+  tapLabel.textContent = bpm + ' ♩';
+  var computed = computeScrollSpeed(bpm);
+  if (computed > 0) { tempoSpeed = computed; speed = tempoSpeed; updateUI(); }
+});
+
+// ── Section jump ──────────────────────────────────────────────────────────
+var secPopup = document.getElementById('sec-popup');
+var secBtn   = document.getElementById('sec-btn');
+var SECTION_TYPE_LABELS = { chorus:'Chorus', verse:'Verse', bridge:'Bridge', tab:'Tab', grid:'Grid' };
+function buildSectionNav() {
+  secPopup.innerHTML = '';
+  var secs = document.querySelectorAll('.section[data-nav]');
+  var typeCounts = {};
+  secs.forEach(function(sec, idx) {
+    // Robust type extraction: find the class that starts with 'section-' (but isn't 'section')
+    var type = '';
+    var cls = sec.className.split(/\s+/);
+    for (var ci = 0; ci < cls.length; ci++) {
+      if (cls[ci].indexOf('section-') === 0 && cls[ci] !== 'section') {
+        type = cls[ci].slice(8); break;
+      }
+    }
+    var labelEl  = sec.querySelector('.section-label');
+    var baseName = labelEl ? labelEl.textContent.trim()
+                           : (SECTION_TYPE_LABELS[type] || (type ? type.charAt(0).toUpperCase() + type.slice(1) : 'Section'));
+    typeCounts[baseName] = (typeCounts[baseName] || 0) + 1;
+    var text = (idx + 1) + '. ' + baseName;
+    var item = document.createElement('button');
+    item.className   = 'sec-item';
+    item.textContent = text;
+    item.addEventListener('click', function() {
+      sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      secPopup.style.display = 'none';
+    });
+    secPopup.appendChild(item);
+  });
+}
+secBtn.addEventListener('click', function() {
+  if (secPopup.style.display === 'block') { secPopup.style.display = 'none'; return; }
+  buildSectionNav();
+  secPopup.style.display = 'block';
+});
+document.addEventListener('click', function(e) {
+  if (!secBtn.contains(e.target) && !secPopup.contains(e.target)) secPopup.style.display = 'none';
+});
+
+// ── Lyrics-only toggle ────────────────────────────────────────────────────
+var lyricsBtn = document.getElementById('lyrics-btn');
+lyricsBtn.addEventListener('click', function() {
+  var on = document.getElementById('song').classList.toggle('lyrics-only');
+  lyricsBtn.classList.toggle('active', on);
+  lyricsBtn.title = on ? 'Show chords (L)' : 'Lyrics only — hide chords (L)';
+});
+
+// ── Full-screen ───────────────────────────────────────────────────────────
+var fsBtn = document.getElementById('fs-btn');
+fsBtn.style.display = 'flex'; // always show; silently fails in VSCode webview
+fsBtn.addEventListener('click', function() {
+  try {
+    if (!document.fullscreenElement) {
+      var p = document.documentElement.requestFullscreen();
+      if (p && p.catch) p.catch(function() {});
+    } else {
+      document.exitFullscreen();
+    }
+  } catch(e) {}
+});
+document.addEventListener('fullscreenchange', function() {
+  fsBtn.textContent = document.fullscreenElement ? '⤡' : '⤢';
+});
+
 document.addEventListener('keydown', e => {
   if (e.code === 'Space')     { playBtn.click(); e.preventDefault(); }
   if (e.code === 'ArrowUp')   { document.getElementById('faster-btn').click(); e.preventDefault(); }
   if (e.code === 'ArrowDown') { document.getElementById('slower-btn').click(); e.preventDefault(); }
+  if (e.key  === 't' || e.key === 'T') { document.getElementById('tap-btn').click(); e.preventDefault(); }
+  if (e.key  === 'l' || e.key === 'L') { lyricsBtn.click(); e.preventDefault(); }
+  if (e.key  === 'f' || e.key === 'F') { if (fsBtn.style.display !== 'none') fsBtn.click(); e.preventDefault(); }
 });
 
 // Reload when file changes (triggered by save or re-running the command)
