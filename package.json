@@ -41,6 +41,13 @@
       }
     ],
     "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "chordproLibrary",
+          "title": "ChordPro Library",
+          "icon": "$(music)"
+        }
+      ],
       "panel": [
         {
           "id": "chordBuilder",
@@ -50,6 +57,13 @@
       ]
     },
     "views": {
+      "chordproLibrary": [
+        {
+          "id": "chordproLibraryView",
+          "name": "Song Library",
+          "icon": "$(music)"
+        }
+      ],
       "chordBuilder": [
         {
           "type": "webview",
@@ -119,8 +133,23 @@
       {
         "command": "extension.detectKey",
         "title": "Detect Key"
-      }
+      },
+      { "command": "chordpro.setLibraryFolder", "title": "Set Library Folder", "icon": "$(folder-opened)" },
+      { "command": "chordpro.refreshLibrary", "title": "Refresh Library", "icon": "$(refresh)" },
+      { "command": "chordpro.openSetlistPreview", "title": "Play as Setlist", "icon": "$(play)" },
+      { "command": "chordpro.previewSongFromLibrary", "title": "Preview Song", "icon": "$(play)" },
+      { "command": "chordpro.openSong", "title": "Open Song" }
     ],
+    "menus": {
+      "view/title": [
+        { "command": "chordpro.setLibraryFolder", "when": "view == chordproLibraryView", "group": "navigation" },
+        { "command": "chordpro.refreshLibrary", "when": "view == chordproLibraryView", "group": "navigation" },
+        { "command": "chordpro.openSetlistPreview", "when": "view == chordproLibraryView", "group": "navigation" }
+      ],
+      "view/item/context": [
+        { "command": "chordpro.previewSongFromLibrary", "when": "viewItem == song", "group": "inline" }
+      ]
+    },
     "keybindings": [
       {
         "command": "extension.renderChordPro",
@@ -190,7 +219,13 @@
     "onCommand:extension.openTabEditor",
     "onCommand:extension.transposeChords",
     "onCommand:extension.capoHelper",
-    "onCommand:extension.detectKey"
+    "onCommand:extension.detectKey",
+    "onView:chordproLibraryView",
+    "onCommand:chordpro.setLibraryFolder",
+    "onCommand:chordpro.refreshLibrary",
+    "onCommand:chordpro.openSetlistPreview",
+    "onCommand:chordpro.previewSongFromLibrary",
+    "onCommand:chordpro.openSong"
   ],
   "devDependencies": {
     "@types/mocha": "^10.0.10",

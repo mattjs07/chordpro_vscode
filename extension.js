@@ -943,6 +943,86 @@ const RENDER_OPTIONS = {
 };
 
 // ─────────────────────────────────────────────
+// Song Library TreeDataProvider
+// ─────────────────────────────────────────────
+
+class SongLibraryProvider {
+    constructor(context) {
+        this._ctx = context;
+        this._onDidChangeTreeData = new vscode.EventEmitter();
+        this.onDidChangeTreeData = this._onDidChangeTreeData.event;
+        this._songs = [];
+        this._folder = context.globalState.get('libraryFolder') || null;
+        if (this._folder) this._loadSongs();
+    }
+
+    setFolder(folder) {
+        this._folder = folder;
+        this._ctx.globalState.update('libraryFolder', folder);
+        this._loadSongs();
+        this._onDidChangeTreeData.fire();
+    }
+
+    refresh() {
+        this._loadSongs();
+        this._onDidChangeTreeData.fire();
+    }
+
+    _loadSongs() {
+        this._songs = [];
+        if (!this._folder) return;
+        const collect = (dir) => {
+            let entries;
+            try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch(e) { return; }
+            for (const entry of entries) {
+                const fpath = path.join(dir, entry.name);
+                if (entry.isDirectory()) {
+                    collect(fpath);
+                } else if (/\.(cho|chordpro|chopro)$/i.test(entry.name)) {
+                    try {
+                        const source = fs.readFileSync(fpath, 'utf8');
+                        const title  = (source.match(/\{(?:title|t)\s*:\s*([^}]+)\}/) || [])[1] || path.basename(entry.name, path.extname(entry.name));
+                        const artist = (source.match(/\{artist\s*:\s*([^}]+)\}/) || [])[1] || '';
+                        this._songs.push({ title: title.trim(), artist: artist.trim(), filePath: fpath, source });
+                    } catch(e) {
+                        this._songs.push({ title: entry.name, artist: '', filePath: fpath, source: '' });
+                    }
+                }
+            }
+        };
+        collect(this._folder);
+        this._songs.sort((a, b) => a.title.localeCompare(b.title));
+    }
+
+    getSongs()  { return this._songs; }
+    getFolder() { return this._folder; }
+
+    getTreeItem(element) {
+        if (element.isPlaceholder) {
+            const item = new vscode.TreeItem(element.label);
+            if (!this._folder) item.command = { command: 'chordpro.setLibraryFolder', title: 'Set Library Folder', arguments: [] };
+            return item;
+        }
+        const item = new vscode.TreeItem(element.title, vscode.TreeItemCollapsibleState.None);
+        item.description = element.artist;
+        item.tooltip = element.filePath;
+        item.command = { command: 'chordpro.openSong', title: 'Open', arguments: [element] };
+        item.contextValue = 'song';
+        return item;
+    }
+
+    getChildren() {
+        if (!this._folder) {
+            return [{ isPlaceholder: true, label: 'Click 📂 to set library folder' }];
+        }
+        if (!this._songs.length) {
+            return [{ isPlaceholder: true, label: 'No .cho files found in folder' }];
+        }
+        return this._songs;
+    }
+}
+
+// ─────────────────────────────────────────────
 
 function activate(context) {
     // Register the renderChordPro command
@@ -1232,6 +1312,25 @@ function activate(context) {
         return map;
     }
 
+    // All standard CHORD_DB SVGs — built once and shared across setlist songs
+    function buildSharedSvgMap() {
+        const map = {};
+        for (const [name, frets] of Object.entries(CHORD_DB)) {
+            map[name] = generateChordSvg(frets, name);
+        }
+        return map;
+    }
+
+    // Only {define:} / {chord:} SVGs from a single source file (for setlist per-song data)
+    function buildCustomSvgMap(source) {
+        const defines = parseDocumentDefines({ getText: () => source });
+        const map = {};
+        for (const [name, frets] of Object.entries(defines)) {
+            map[name] = generateChordSvg(frets, name);
+        }
+        return map;
+    }
+
     const autoScrollPreview = vscode.commands.registerCommand('extension.autoScrollPreview', () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor) { vscode.window.showErrorMessage('No active editor found'); return; }
@@ -1384,6 +1483,9 @@ body {
 #tempo-btn   { font-size: 15px; opacity: 0.7; }
 #tempo-btn:hover { opacity: 1; }
 #tempo-btn.active { opacity: 1; color: #ffd700; border-color: #ffd700; }
+#metro-btn   { font-size: 15px; opacity: 0.7; }
+#metro-btn:hover { opacity: 1; }
+#metro-btn.active { opacity: 1; color: #ffd700; border-color: #ffd700; }
 #font-smaller, #font-larger { font-size: 11px; font-family: sans-serif; letter-spacing: -0.5px; border-radius: 6px !important; width: auto !important; padding: 0 7px !important; }
 /* ── Theme manual override (takes precedence over prefers-color-scheme) ───── */
 :root[data-theme="light"] {
@@ -1469,6 +1571,7 @@ body {
   <button id="faster-btn"   title="Faster (↑)">+</button>
   <span   id="speed-label">30 px/s</span>
   <button id="tempo-btn"    title="Snap to tempo speed" style="display:none">♩</button>
+  <button id="metro-btn"    title="Metronome (M)" disabled style="opacity:0.3">♪</button>
   <button id="font-smaller" title="Smaller text (A−)">A−</button>
   <button id="font-larger"  title="Larger text (A+)">A+</button>
   <button id="lyrics-btn"   title="Lyrics only — hide chords (L)">Ly</button>
@@ -1719,6 +1822,7 @@ const playBtn      = document.getElementById('play-btn');
 const speedLabel   = document.getElementById('speed-label');
 
 var tempoSpeed = 0; // non-zero when a {tempo:} was detected
+var activeBpm  = 0; // current BPM (from directive or tap tempo) for metronome
 const tempoBtn = document.getElementById('tempo-btn');
 
 function updateUI() {
@@ -1757,6 +1861,9 @@ function applyTempoSpeed(meta, _retry, keepManual) {
   var wasOnTempo = (tempoSpeed > 0 && speed === tempoSpeed);
   tempoSpeed = newTempo;
   if (!keepManual || wasOnTempo) speed = tempoSpeed;
+  activeBpm = bpm;
+  if (_metroActive) startMetronome();
+  _updateMetroBtn();
   updateUI();
 }
 
@@ -1795,6 +1902,9 @@ document.getElementById('tap-btn').addEventListener('click', function() {
   for (var i = 1; i < tapTimes.length; i++) intervals.push(tapTimes[i] - tapTimes[i - 1]);
   var bpm = Math.round(60000 / (intervals.reduce(function(a,b){return a+b;},0) / intervals.length));
   tapLabel.textContent = bpm + ' ♩';
+  activeBpm = bpm;
+  if (_metroActive) startMetronome();
+  _updateMetroBtn();
   var computed = computeScrollSpeed(bpm);
   if (computed > 0) { tempoSpeed = computed; speed = tempoSpeed; updateUI(); }
 });
@@ -1865,6 +1975,58 @@ document.addEventListener('fullscreenchange', function() {
   fsBtn.textContent = document.fullscreenElement ? '⤡' : '⤢';
 });
 
+// ── Metronome ─────────────────────────────────────────────────────────────
+var _metroActive = false;
+var _metroTimer  = null;
+var _metroBeat   = 0;
+var _audioCtx    = null;
+var metroBtn     = document.getElementById('metro-btn');
+
+function _playClick(isDownbeat) {
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    var osc = _audioCtx.createOscillator();
+    var gain = _audioCtx.createGain();
+    osc.connect(gain); gain.connect(_audioCtx.destination);
+    osc.frequency.value = isDownbeat ? 1320 : 880;
+    gain.gain.setValueAtTime(0.6, _audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, _audioCtx.currentTime + 0.05);
+    osc.start(_audioCtx.currentTime);
+    osc.stop(_audioCtx.currentTime + 0.06);
+  } catch(e) {}
+}
+
+function _metroTick() {
+  if (!_metroActive || !activeBpm) { _metroActive = false; _updateMetroBtn(); return; }
+  _playClick(_metroBeat === 0);
+  _metroBeat = (_metroBeat + 1) % 4;
+  _metroTimer = setTimeout(_metroTick, Math.round(60000 / activeBpm));
+}
+
+function startMetronome() {
+  if (!activeBpm) return;
+  _metroActive = true; _metroBeat = 0;
+  clearTimeout(_metroTimer);
+  _metroTick();
+  _updateMetroBtn();
+}
+
+function stopMetronome() {
+  _metroActive = false;
+  clearTimeout(_metroTimer);
+  _updateMetroBtn();
+}
+
+function _updateMetroBtn() {
+  metroBtn.disabled = activeBpm === 0;
+  metroBtn.style.opacity = activeBpm === 0 ? '0.3' : '';
+  metroBtn.classList.toggle('active', _metroActive);
+}
+
+metroBtn.addEventListener('click', function() {
+  if (_metroActive) stopMetronome(); else startMetronome();
+});
+
 document.addEventListener('keydown', e => {
   if (e.code === 'Space')     { playBtn.click(); e.preventDefault(); }
   if (e.code === 'ArrowUp')   { document.getElementById('faster-btn').click(); e.preventDefault(); }
@@ -1872,6 +2034,7 @@ document.addEventListener('keydown', e => {
   if (e.key  === 't' || e.key === 'T') { document.getElementById('tap-btn').click(); e.preventDefault(); }
   if (e.key  === 'l' || e.key === 'L') { lyricsBtn.click(); e.preventDefault(); }
   if (e.key  === 'f' || e.key === 'F') { if (fsBtn.style.display !== 'none') fsBtn.click(); e.preventDefault(); }
+  if (e.key  === 'm' || e.key === 'M') { metroBtn.click(); e.preventDefault(); }
 });
 
 // Reload when file changes (triggered by save or re-running the command)
@@ -1890,6 +2053,508 @@ window.addEventListener('message', function(e) {
 _updateThemeBtn();
 updateUI();
 setTimeout(function() { applyTempoSpeed(PARSED.meta); }, 200);
+</script>
+</body>
+</html>`;
+    }
+
+    // ─────────────────────────────────────────────
+    // Setlist Webview
+    // ─────────────────────────────────────────────
+    function getSetlistWebviewContent(songs, sharedSvgs) {
+        const safeSongs = JSON.stringify(songs.map(s => ({
+            title: s.title, artist: s.artist, source: s.source, customSvgs: s.customSvgs
+        })));
+        const safeSharedSvgs = JSON.stringify(sharedSvgs);
+
+        return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+<meta name="color-scheme" content="dark light">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #1e1e1e; --fg: #d4d4d4; --fg-dim: #999; --fg-muted: #666;
+  --border: #444; --chord: #79b8ff;
+  --sec-chorus-bg: #1e2a4a; --sec-chorus-fg: #79b8ff;
+  --sec-verse-bg: #2a2a2a;  --sec-verse-fg: #aaa;
+  --sec-bridge-bg: #3a2a10; --sec-bridge-fg: #e8a050;
+  --sec-tab-bg: #1e2a14;    --sec-tab-fg: #90c040;
+  --tab-bg: #252525; --tab-border: #555;
+  --tip-bg: #2d2d2d; --tip-border: #555; --tip-fg: #ccc;
+  --capo-bg: #4a3010; --capo-fg: #ffcc60;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #fafaf8; --fg: #1a1a1a; --fg-dim: #555; --fg-muted: #888;
+    --border: #ddd; --chord: #1a5fb4;
+    --sec-chorus-bg: #e8f0fe; --sec-chorus-fg: #2a5bbf;
+    --sec-verse-bg: #f0f0f0;  --sec-verse-fg: #555;
+    --sec-bridge-bg: #fef0d0; --sec-bridge-fg: #a05000;
+    --sec-tab-bg: #f0f4e8;    --sec-tab-fg: #4a6a20;
+    --tab-bg: #f4f4f0; --tab-border: #bbb;
+    --tip-bg: #fff; --tip-border: #ccc; --tip-fg: #333;
+    --capo-bg: #ffe8b0; --capo-fg: #7a4000;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #fafaf8; --fg: #1a1a1a; --fg-dim: #555; --fg-muted: #888;
+  --border: #ddd; --chord: #1a5fb4;
+  --sec-chorus-bg: #e8f0fe; --sec-chorus-fg: #2a5bbf;
+  --sec-verse-bg: #f0f0f0;  --sec-verse-fg: #555;
+  --sec-bridge-bg: #fef0d0; --sec-bridge-fg: #a05000;
+  --sec-tab-bg: #f0f4e8;    --sec-tab-fg: #4a6a20;
+  --tab-bg: #f4f4f0; --tab-border: #bbb;
+  --tip-bg: #fff; --tip-border: #ccc; --tip-fg: #333;
+  --capo-bg: #ffe8b0; --capo-fg: #7a4000;
+}
+:root[data-theme="dark"] {
+  --bg: #1e1e1e; --fg: #d4d4d4; --fg-dim: #999; --fg-muted: #666;
+  --border: #444; --chord: #79b8ff;
+  --sec-chorus-bg: #1e2a4a; --sec-chorus-fg: #79b8ff;
+  --sec-verse-bg: #2a2a2a;  --sec-verse-fg: #aaa;
+  --sec-bridge-bg: #3a2a10; --sec-bridge-fg: #e8a050;
+  --sec-tab-bg: #1e2a14;    --sec-tab-fg: #90c040;
+  --tab-bg: #252525; --tab-border: #555;
+  --tip-bg: #2d2d2d; --tip-border: #555; --tip-fg: #ccc;
+  --capo-bg: #4a3010; --capo-fg: #ffcc60;
+}
+html, body { background: var(--bg); color: var(--fg); font-family: Georgia, serif; font-size: 17px; }
+body { padding-top: 52px; padding-bottom: 80px; }
+#nav-bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 9998;
+  background: rgba(20,20,20,0.95); border-bottom: 1px solid #555;
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 14px; font-family: sans-serif; color: #eee; user-select: none;
+}
+#nav-bar button {
+  background: #3a3a3a; border: 1px solid #666; color: #eee;
+  border-radius: 50%; width: 30px; height: 30px; font-size: 15px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0;
+}
+#nav-bar button:hover { background: #555; }
+#nav-bar button:disabled { opacity: 0.3; cursor: default; }
+#song-counter { font-size: 12px; color: #aaa; min-width: 40px; text-align: center; }
+#song-nav-title { flex: 1; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#nav-bar button.active { color: #ffd700; border-color: #ffd700; }
+#progress-bar { position: fixed; top: 50px; left: 0; height: 3px; background: #79b8ff; width: 0%; z-index: 9999; transition: width 0.1s; }
+#song { max-width: 720px; margin: 0 auto; padding: 24px 20px 40px; }
+.song-header { margin-bottom: 18px; }
+.song-title    { font-size: 2em; font-weight: bold; color: var(--fg); }
+.song-subtitle { font-size: 1.1em; color: var(--fg-dim); margin-top: 2px; }
+.song-meta     { font-size: 0.85em; color: var(--fg-muted); margin-top: 6px; }
+.capo-badge { display: inline-block; margin-left: 8px; background: var(--capo-bg); color: var(--capo-fg); padding: 1px 7px; border-radius: 10px; font-size: 0.85em; }
+.section { margin-bottom: 18px; padding: 10px 14px; border-radius: 6px; }
+.section-label { font-size: 0.75em; font-weight: bold; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; opacity: 0.7; }
+.section-chorus .section-label { background: var(--sec-chorus-bg); color: var(--sec-chorus-fg); }
+.section-chorus .chord { color: var(--sec-chorus-fg); }
+.section-verse  .section-label { background: var(--sec-verse-bg);  color: var(--sec-verse-fg); }
+.section-bridge .section-label { background: var(--sec-bridge-bg); color: var(--sec-bridge-fg); }
+.section-tab    { background: var(--sec-tab-bg); color: var(--sec-tab-fg); }
+.chord-line { display: flex; flex-wrap: wrap; margin-bottom: 2px; }
+.pair { display: inline-flex; flex-direction: column; margin-right: 2px; }
+.chord { font-weight: bold; font-size: 0.85em; color: var(--chord); min-height: 1.2em; white-space: pre; cursor: default; }
+.lyric { white-space: pre; }
+.lyric-line { margin-bottom: 2px; }
+.comment { font-style: italic; color: var(--fg-dim); margin: 4px 0; }
+.comment-box { border: 1px solid var(--border); padding: 4px 8px; border-radius: 4px; }
+.chorus-ref { color: var(--fg-muted); font-style: italic; }
+.empty-line { height: 0.6em; }
+.tab-block { font-family: monospace; font-size: 0.9em; background: var(--tab-bg); border: 1px solid var(--tab-border); padding: 8px 12px; border-radius: 4px; overflow-x: auto; white-space: pre; line-height: 1.5; }
+.page-break { border: none; border-top: 1px dashed var(--border); margin: 16px 0; }
+#song.lyrics-only .chord { opacity: 0; }
+#song.two-col { column-count: 2; column-gap: 3em; column-rule: 1px solid var(--border); }
+#song.two-col .section { break-inside: avoid-column; }
+#chord-tip { position: fixed; display: none; background: var(--tip-bg); border: 1px solid var(--tip-border); border-radius: 8px; padding: 8px; z-index: 99999; pointer-events: none; text-align: center; color: var(--tip-fg); font-family: sans-serif; font-size: 12px; }
+#scroll-bar {
+  position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(20,20,20,0.92); border: 1px solid #555; border-radius: 28px;
+  padding: 8px 18px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  font-family: sans-serif; color: #eee; user-select: none; z-index: 9999;
+}
+#scroll-bar button {
+  background: #3a3a3a; border: 1px solid #666; color: #eee;
+  border-radius: 50%; width: 30px; height: 30px; font-size: 15px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0;
+}
+#scroll-bar button:hover { background: #555; }
+#play-btn    { width: 38px; height: 38px; font-size: 18px; }
+#speed-label { min-width: 52px; text-align: center; font-size: 12px; color: #aaa; }
+#tempo-btn   { font-size: 15px; opacity: 0.7; }
+#tempo-btn:hover { opacity: 1; }
+#tempo-btn.active { opacity: 1; color: #ffd700; border-color: #ffd700; }
+#metro-btn   { font-size: 15px; opacity: 0.7; }
+#metro-btn:hover { opacity: 1; }
+#metro-btn.active { opacity: 1; color: #ffd700; border-color: #ffd700; }
+#font-smaller, #font-larger { font-size: 11px; font-family: sans-serif; letter-spacing: -0.5px; border-radius: 6px !important; width: auto !important; padding: 0 7px !important; }
+#theme-btn  { font-size: 14px; }
+#trans-down, #trans-up { font-size: 13px; }
+#trans-label { min-width: 28px; text-align: center; font-size: 12px; color: #aaa; padding: 0 2px; }
+#trans-label.active { color: #ffd700; }
+#save-btn    { font-size: 14px; opacity: 0.7; }
+#save-btn:hover { opacity: 1; }
+#lyrics-btn { font-size: 11px; font-family: sans-serif; border-radius: 6px !important; width: auto !important; padding: 0 7px !important; }
+#lyrics-btn.active { color: #ffd700; border-color: #ffd700; }
+#twocol-btn { font-size: 14px; }
+#twocol-btn.active { color: #ffd700; border-color: #ffd700; }
+#auto-btn.active { color: #ffd700; border-color: #ffd700; }
+</style>
+</head>
+<body>
+<div id="nav-bar">
+  <button id="prev-btn" title="Previous song (PageUp)">◀</button>
+  <span id="song-counter">1/1</span>
+  <span id="song-nav-title"></span>
+  <button id="next-btn" title="Next song (PageDown)">▶</button>
+  <button id="auto-btn" title="Auto-advance to next song at end">Auto</button>
+  <button id="theme-nav-btn" title="Toggle theme">🌙</button>
+  <button id="save-btn" title="Save setlist as HTML">💾</button>
+</div>
+<div id="progress-bar"></div>
+<div id="song"></div>
+<div id="chord-tip"></div>
+<div id="scroll-bar">
+  <button id="trans-down"   title="Transpose down (♭)">♭</button>
+  <span   id="trans-label">0</span>
+  <button id="trans-up"     title="Transpose up (♯)">♯</button>
+  <button id="slower-btn"   title="Slower">−</button>
+  <button id="play-btn"     title="Play / Pause (Space)">▶</button>
+  <button id="faster-btn"   title="Faster">+</button>
+  <span   id="speed-label">30 px/s</span>
+  <button id="tempo-btn"    title="Snap to tempo speed" style="display:none">♩</button>
+  <button id="metro-btn"    title="Metronome (M)" disabled style="opacity:0.3">♪</button>
+  <button id="font-smaller" title="Smaller text">A−</button>
+  <button id="font-larger"  title="Larger text">A+</button>
+  <button id="lyrics-btn"   title="Lyrics only">Ly</button>
+  <button id="twocol-btn"   title="Toggle two-column layout">⊞</button>
+</div>
+<script>
+const vscodeApi = acquireVsCodeApi();
+var SHARED_SVGS = ${safeSharedSvgs};
+var SONGS = ${safeSongs};
+var SONG_IDX = 0;
+var CHORD_SVGS = {};
+var PARSED = null;
+var previewTranspose = 0;
+var autoAdvance = false;
+var fontSize = 17;
+
+// ── Helpers (same as scroll preview) ────────────────────────────────────────
+var _SH = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+var _FL = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+function _tn(root, n) {
+  var fi = _FL.indexOf(root), si = _SH.indexOf(root);
+  var pf = fi !== -1 && si === -1;
+  var idx = si !== -1 ? si : fi;
+  if (idx < 0) return root;
+  return (pf ? _FL : _SH)[((idx + n) % 12 + 12) % 12];
+}
+function transposeChordName(chord, n) {
+  if (!n) return chord;
+  var sl = chord.indexOf('/');
+  var main = sl >= 0 ? chord.slice(0, sl) : chord;
+  var bass = sl >= 0 ? chord.slice(sl + 1) : null;
+  var rm   = main.match(/^([A-G][b#]?)(.*)/);
+  if (!rm) return chord;
+  return _tn(rm[1], n) + rm[2] + (bass ? '/' + _tn(bass, n) : '');
+}
+
+function parseChordLine(line) {
+  var segs = [], re = /\\[([^\\]]*)\\]/g, last = 0, pending = null, m;
+  while ((m = re.exec(line)) !== null) {
+    var before = line.slice(last, m.index);
+    if (pending !== null || before) segs.push({ chord: pending || '', lyric: before });
+    pending = m[1]; last = m.index + m[0].length;
+  }
+  var tail = line.slice(last);
+  if (pending !== null || tail) segs.push({ chord: pending || '', lyric: tail });
+  return segs;
+}
+
+function parse(text) {
+  var meta = { title: '', subtitle: '', artist: '', key: '', capo: '', tempo: '' };
+  var sections = [];
+  var cur = { type: 'verse', label: '', lines: [], nav: false };
+  function flush() { if (cur.lines.length) sections.push(cur); }
+  function next(type, label, nav) { flush(); cur = { type, label, lines: [], nav: !!nav }; }
+  for (var raw of text.split(/\\r?\\n/)) {
+    var line = raw.trimEnd();
+    if (/^\\s*#/.test(line)) continue;
+    var dir = line.trim().match(/^\\{([^}]+)\\}$/);
+    if (dir) {
+      var ci = dir[1].indexOf(':');
+      var k = (ci >= 0 ? dir[1].slice(0, ci) : dir[1]).trim().toLowerCase();
+      var v = ci >= 0 ? dir[1].slice(ci + 1).trim() : '';
+      if (k==='title'||k==='t')   { meta.title=v; continue; }
+      if (k==='subtitle'||k==='st'){ meta.subtitle=v; continue; }
+      if (k==='artist')           { meta.artist=v; continue; }
+      if (k==='key')              { meta.key=v; continue; }
+      if (k==='capo')             { meta.capo=v; continue; }
+      if (k==='tempo')            { meta.tempo=v; continue; }
+      if (k==='start_of_chorus'||k==='soc') { next('chorus',v||'Chorus',true); continue; }
+      if (k==='end_of_chorus'||k==='eoc')   { next('verse','',false); continue; }
+      if (k==='start_of_verse'||k==='sov')  { next('verse',v||'Verse',true); continue; }
+      if (k==='end_of_verse'||k==='eov')    { next('verse','',false); continue; }
+      if (k==='start_of_bridge'||k==='sob') { next('bridge',v||'Bridge',true); continue; }
+      if (k==='end_of_bridge'||k==='eob')   { next('verse','',false); continue; }
+      if (k==='start_of_tab'||k==='sot')    { next('tab',v||'Tab',true); continue; }
+      if (k==='end_of_tab'||k==='eot')      { next('verse','',false); continue; }
+      if (k==='comment'||k==='c'||k==='highlight') { cur.lines.push({type:'comment',text:v}); continue; }
+      if (k==='comment_italic'||k==='ci')           { cur.lines.push({type:'comment',text:v}); continue; }
+      if (k==='comment_box'||k==='cb')              { cur.lines.push({type:'comment-box',text:v}); continue; }
+      if (k==='chorus')                             { cur.lines.push({type:'chorus-ref'}); continue; }
+      if (k==='new_page'||k==='np')                 { cur.lines.push({type:'page-break'}); continue; }
+      continue;
+    }
+    if (cur.type==='tab') { cur.lines.push({type:'tab',text:line}); continue; }
+    if (!line.trim())     { cur.lines.push({type:'empty'}); continue; }
+    if (line.includes('[')) cur.lines.push({type:'chord-line',segs:parseChordLine(line)});
+    else                    cur.lines.push({type:'lyric',text:line});
+  }
+  flush();
+  return { meta, sections };
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function render({ meta, sections }, transpose) {
+  var out = ['<div class="song-header">'];
+  if (meta.title)    out.push('<div class="song-title">'    + esc(meta.title)    + '</div>');
+  if (meta.subtitle) out.push('<div class="song-subtitle">' + esc(meta.subtitle) + '</div>');
+  var mp = [];
+  if (meta.artist) mp.push(esc(meta.artist));
+  if (meta.key)    mp.push('Key: ' + esc(meta.key));
+  if (meta.tempo)  mp.push(esc(meta.tempo) + ' BPM');
+  var capoBadge = meta.capo ? '<span class="capo-badge">Capo ' + esc(meta.capo) + '</span>' : '';
+  if (mp.length || capoBadge) out.push('<div class="song-meta">' + mp.join(' &nbsp;·&nbsp; ') + capoBadge + '</div>');
+  out.push('</div>');
+  for (var sec of sections) {
+    out.push('<div class="section section-' + sec.type + '">');
+    if (sec.label) out.push('<div class="section-label">' + esc(sec.label) + '</div>');
+    if (sec.type === 'tab') {
+      out.push('<pre class="tab-block">');
+      for (var l of sec.lines) if (l.type==='tab') out.push(esc(l.text));
+      out.push('</pre>');
+    } else {
+      for (var l of sec.lines) {
+        if (l.type==='chord-line') {
+          out.push('<div class="chord-line">');
+          for (var s of l.segs) {
+            var dc = transposeChordName(s.chord||'', transpose||0);
+            out.push('<span class="pair"><span class="chord"' + (dc?' data-chord="'+esc(dc)+'"':'') + '>' + (dc?esc(dc):'&nbsp;') + '</span><span class="lyric">' + esc(s.lyric||' ') + '</span></span>');
+          }
+          out.push('</div>');
+        } else if (l.type==='lyric')      out.push('<div class="lyric-line">'  + esc(l.text) + '</div>');
+        else if   (l.type==='comment')    out.push('<div class="comment">'      + esc(l.text) + '</div>');
+        else if   (l.type==='comment-box')out.push('<div class="comment comment-box">' + esc(l.text) + '</div>');
+        else if   (l.type==='chorus-ref') out.push('<div class="chorus-ref">[ Chorus ]</div>');
+        else if   (l.type==='empty')      out.push('<div class="empty-line"></div>');
+        else if   (l.type==='page-break') out.push('<hr class="page-break">');
+      }
+    }
+    out.push('</div>');
+  }
+  return out.join('\\n');
+}
+
+// Chord tooltips
+var tip = document.createElement('div');
+tip.id = 'chord-tip'; document.body.appendChild(tip);
+function showTip(el, e) {
+  var svg = CHORD_SVGS[el.dataset.chord]; if (!svg) return;
+  tip.innerHTML = svg + '<div>' + el.dataset.chord + '</div>';
+  tip.style.display = 'block'; positionTip(e);
+}
+function positionTip(e) {
+  var x = e.clientX+12, y = e.clientY+16;
+  if (x+130>window.innerWidth) x=e.clientX-130;
+  if (y+160>window.innerHeight) y=e.clientY-160;
+  tip.style.left=x+'px'; tip.style.top=y+'px';
+}
+function hideTip() { tip.style.display='none'; }
+function bindTooltips() {
+  document.querySelectorAll('.chord[data-chord]').forEach(function(el) {
+    el.addEventListener('mouseenter', function(e) { showTip(el,e); });
+    el.addEventListener('mousemove',  function(e) { positionTip(e); });
+    el.addEventListener('mouseleave', hideTip);
+  });
+}
+
+// Progress bar
+var progressBar = document.getElementById('progress-bar');
+function updateProgress() {
+  var scrollable = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+  progressBar.style.width = Math.min(100, (window.scrollY/scrollable)*100) + '%';
+}
+window.addEventListener('scroll', updateProgress, { passive: true });
+
+// Auto-scroll
+var speed = 30, playing = false, lastTs = null, accum = 0;
+var tempoSpeed = 0, activeBpm = 0;
+var playBtn   = document.getElementById('play-btn');
+var speedLabel = document.getElementById('speed-label');
+var tempoBtn  = document.getElementById('tempo-btn');
+
+function computeScrollSpeed(bpm) {
+  var lines = document.querySelectorAll('.chord-line').length;
+  if (!lines) return 0;
+  var scrollable = Math.max(document.body.scrollHeight-window.innerHeight, document.documentElement.scrollHeight-document.documentElement.clientHeight);
+  if (scrollable<=0) return 0;
+  return Math.max(5, Math.min(300, Math.round(scrollable/(lines*4*60/bpm))));
+}
+
+function updateUI() {
+  playBtn.textContent = playing ? '⏸' : '▶';
+  speedLabel.textContent = speed + ' px/s';
+  if (tempoSpeed) { tempoBtn.style.display='flex'; tempoBtn.classList.toggle('active', speed===tempoSpeed); }
+}
+
+function applyTempoSpeed(meta, _retry) {
+  var bpm = parseInt(meta.tempo||'0'); if (!bpm) return;
+  var s = computeScrollSpeed(bpm);
+  if (!s) { if (!_retry) setTimeout(function(){applyTempoSpeed(meta,true);},400); return; }
+  tempoSpeed = s; speed = s; activeBpm = bpm;
+  if (_metroActive) startMetronome();
+  _updateMetroBtn();
+  updateUI();
+}
+
+function step(ts) {
+  if (!playing) { lastTs=null; accum=0; return; }
+  if (lastTs!==null) {
+    accum += speed*(ts-lastTs)/1000;
+    var px = Math.floor(accum);
+    if (px>=1) { window.scrollBy(0,px); accum-=px; }
+    if (window.scrollY+window.innerHeight >= document.body.scrollHeight-2) {
+      playing = false; updateUI();
+      if (autoAdvance && SONG_IDX < SONGS.length-1) setTimeout(function(){loadSong(SONG_IDX+1);},800);
+      return;
+    }
+  }
+  lastTs=ts; requestAnimationFrame(step);
+}
+
+playBtn.addEventListener('click', function(){ playing=!playing; updateUI(); if(playing) requestAnimationFrame(step); });
+document.getElementById('faster-btn').addEventListener('click', function(){ speed=Math.min(speed+5,300); updateUI(); });
+document.getElementById('slower-btn').addEventListener('click', function(){ speed=Math.max(speed-5,5);  updateUI(); });
+tempoBtn.addEventListener('click', function(){ if(tempoSpeed){speed=tempoSpeed;updateUI();} });
+
+// Metronome (same as scroll preview)
+var _metroActive=false, _metroTimer=null, _metroBeat=0, _audioCtx=null;
+var metroBtn = document.getElementById('metro-btn');
+function _playClick(isDownbeat) {
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    var osc=_audioCtx.createOscillator(), gain=_audioCtx.createGain();
+    osc.connect(gain); gain.connect(_audioCtx.destination);
+    osc.frequency.value=isDownbeat?1320:880;
+    gain.gain.setValueAtTime(0.6,_audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001,_audioCtx.currentTime+0.05);
+    osc.start(_audioCtx.currentTime); osc.stop(_audioCtx.currentTime+0.06);
+  } catch(e){}
+}
+function _metroTick() {
+  if (!_metroActive||!activeBpm){_metroActive=false;_updateMetroBtn();return;}
+  _playClick(_metroBeat===0); _metroBeat=(_metroBeat+1)%4;
+  _metroTimer=setTimeout(_metroTick,Math.round(60000/activeBpm));
+}
+function startMetronome(){if(!activeBpm)return;_metroActive=true;_metroBeat=0;clearTimeout(_metroTimer);_metroTick();_updateMetroBtn();}
+function stopMetronome(){_metroActive=false;clearTimeout(_metroTimer);_updateMetroBtn();}
+function _updateMetroBtn(){metroBtn.disabled=activeBpm===0;metroBtn.style.opacity=activeBpm===0?'0.3':'';metroBtn.classList.toggle('active',_metroActive);}
+metroBtn.addEventListener('click',function(){if(_metroActive)stopMetronome();else startMetronome();});
+
+// Font size
+document.getElementById('font-smaller').addEventListener('click',function(){fontSize=Math.max(11,fontSize-1);document.body.style.fontSize=fontSize+'px';});
+document.getElementById('font-larger').addEventListener('click', function(){fontSize=Math.min(28,fontSize+1);document.body.style.fontSize=fontSize+'px';});
+
+// Lyrics toggle
+var lyricsBtn = document.getElementById('lyrics-btn');
+lyricsBtn.addEventListener('click',function(){
+  var on=document.getElementById('song').classList.toggle('lyrics-only');
+  lyricsBtn.classList.toggle('active',on);
+});
+
+// Two-column toggle
+var twoColBtn = document.getElementById('twocol-btn');
+twoColBtn.addEventListener('click',function(){
+  var on=document.getElementById('song').classList.toggle('two-col');
+  twoColBtn.classList.toggle('active',on);
+});
+
+// Transpose
+var transLabel = document.getElementById('trans-label');
+function _updateTransLabel(){
+  transLabel.textContent = previewTranspose>0?'+'+previewTranspose:previewTranspose<0?String(previewTranspose):'0';
+  transLabel.classList.toggle('active',previewTranspose!==0);
+}
+document.getElementById('trans-down').addEventListener('click',function(){previewTranspose--;_updateTransLabel();rerender();});
+document.getElementById('trans-up').addEventListener('click',  function(){previewTranspose++;_updateTransLabel();rerender();});
+function rerender(){document.getElementById('song').innerHTML=render(PARSED,previewTranspose);bindTooltips();}
+
+// Theme
+var _sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+var themeNavBtn = document.getElementById('theme-nav-btn');
+function _updateThemeNavBtn(){
+  var cur = document.documentElement.dataset.theme||(_sysDark?'dark':'light');
+  themeNavBtn.textContent = cur==='dark'?'☀️':'🌙';
+}
+themeNavBtn.addEventListener('click',function(){
+  var cur=document.documentElement.dataset.theme||(_sysDark?'dark':'light');
+  document.documentElement.dataset.theme=cur==='dark'?'light':'dark';
+  _updateThemeNavBtn();
+});
+
+// Auto advance
+var autoBtn = document.getElementById('auto-btn');
+autoBtn.addEventListener('click',function(){autoAdvance=!autoAdvance;autoBtn.classList.toggle('active',autoAdvance);});
+
+// Save
+document.getElementById('save-btn').addEventListener('click',function(){vscodeApi.postMessage({command:'saveSetlistHtml'});});
+
+// Navigation
+function updateSongNav(){
+  var s=SONGS[SONG_IDX];
+  document.getElementById('song-counter').textContent=(SONG_IDX+1)+'/'+SONGS.length;
+  document.getElementById('song-nav-title').textContent=s.title+(s.artist?' — '+s.artist:'');
+  document.getElementById('prev-btn').disabled=SONG_IDX===0;
+  document.getElementById('next-btn').disabled=SONG_IDX===SONGS.length-1;
+}
+
+function loadSong(idx){
+  SONG_IDX=idx;
+  var s=SONGS[idx];
+  CHORD_SVGS=Object.assign({},SHARED_SVGS,s.customSvgs||{});
+  previewTranspose=0; _updateTransLabel();
+  PARSED=parse(s.source);
+  document.getElementById('song').innerHTML=render(PARSED,0);
+  bindTooltips();
+  window.scrollTo(0,0);
+  playing=false; updateUI();
+  updateSongNav();
+  tempoSpeed=0; activeBpm=0;
+  if(_metroActive)stopMetronome(); else _updateMetroBtn();
+  setTimeout(function(){applyTempoSpeed(PARSED.meta);},200);
+}
+
+document.getElementById('prev-btn').addEventListener('click',function(){if(SONG_IDX>0)loadSong(SONG_IDX-1);});
+document.getElementById('next-btn').addEventListener('click',function(){if(SONG_IDX<SONGS.length-1)loadSong(SONG_IDX+1);});
+
+document.addEventListener('keydown',function(e){
+  if(e.code==='Space')    {playBtn.click();e.preventDefault();}
+  if(e.code==='ArrowUp')  {document.getElementById('faster-btn').click();e.preventDefault();}
+  if(e.code==='ArrowDown'){document.getElementById('slower-btn').click();e.preventDefault();}
+  if(e.code==='PageUp')   {if(SONG_IDX>0)loadSong(SONG_IDX-1);e.preventDefault();}
+  if(e.code==='PageDown') {if(SONG_IDX<SONGS.length-1)loadSong(SONG_IDX+1);e.preventDefault();}
+  if(e.key==='m'||e.key==='M'){metroBtn.click();e.preventDefault();}
+  if(e.key==='l'||e.key==='L'){lyricsBtn.click();e.preventDefault();}
+});
+
+// Boot
+_updateThemeNavBtn();
+if(SONGS.length) loadSong(0);
 </script>
 </body>
 </html>`;
@@ -2343,6 +3008,83 @@ setTimeout(function() { applyTempoSpeed(PARSED.meta); }, 200);
         }
     });
 
+    // ─────────────────────────────────────────────
+    // Song Library Panel
+    // ─────────────────────────────────────────────
+    const songLibraryProvider = new SongLibraryProvider(context);
+    const libraryTreeView = vscode.window.createTreeView('chordproLibraryView', {
+        treeDataProvider: songLibraryProvider, showCollapseAll: false
+    });
+
+    const setLibraryFolder = vscode.commands.registerCommand('chordpro.setLibraryFolder', async () => {
+        const picked = await vscode.window.showOpenDialog({
+            canSelectFolders: true, canSelectFiles: false, canSelectMany: false,
+            openLabel: 'Select Song Library Folder'
+        });
+        if (picked && picked[0]) {
+            songLibraryProvider.setFolder(picked[0].fsPath);
+            vscode.window.showInformationMessage('Song library: ' + picked[0].fsPath);
+        }
+    });
+
+    const refreshLibrary = vscode.commands.registerCommand('chordpro.refreshLibrary', () => {
+        songLibraryProvider.refresh();
+    });
+
+    const openLibrarySong = vscode.commands.registerCommand('chordpro.openSong', async (element) => {
+        if (!element || !element.filePath) return;
+        const doc = await vscode.workspace.openTextDocument(element.filePath);
+        await vscode.window.showTextDocument(doc);
+    });
+
+    const previewLibrarySong = vscode.commands.registerCommand('chordpro.previewSongFromLibrary', (element) => {
+        if (!element || !element.filePath) return;
+        const source = fs.readFileSync(element.filePath, 'utf8');
+        const chordSvgs = buildChordSvgMap(source, buildChordData({ getText: () => source, getWordRangeAtPosition: () => null }));
+        const title = element.title || path.basename(element.filePath);
+        const panel = vscode.window.createWebviewPanel(
+            'chordproScrollPreview', title + ' — Preview',
+            vscode.ViewColumn.One, { enableScripts: true, retainContextWhenHidden: true }
+        );
+        panel.webview.html = getScrollWebviewContent(source, chordSvgs);
+        panel.webview.onDidReceiveMessage(msg => {
+            if (msg.command === 'saveHtml') {
+                const outPath = element.filePath.replace(/\.[^.]+$/, '') + '_preview.html';
+                const standalone = getScrollWebviewContent(source, buildChordSvgMap(source, buildChordData({ getText: () => source, getWordRangeAtPosition: () => null })))
+                    .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>\n?/, '')
+                    .replace('const vscodeApi = acquireVsCodeApi();', 'const vscodeApi = { postMessage: function() {} };');
+                fs.writeFileSync(outPath, standalone, 'utf8');
+                vscode.window.showInformationMessage('Saved: ' + outPath);
+            }
+        });
+    });
+
+    const openSetlistPreview = vscode.commands.registerCommand('chordpro.openSetlistPreview', () => {
+        const songs = songLibraryProvider.getSongs();
+        if (!songs.length) { vscode.window.showErrorMessage('No songs in library. Set a folder first.'); return; }
+        const sharedSvgs = buildSharedSvgMap();
+        const songData = songs.map(s => ({
+            title: s.title, artist: s.artist, source: s.source,
+            customSvgs: buildCustomSvgMap(s.source)
+        }));
+        const panel = vscode.window.createWebviewPanel(
+            'chordproSetlist', 'Setlist Preview',
+            vscode.ViewColumn.One, { enableScripts: true, retainContextWhenHidden: true }
+        );
+        panel.webview.html = getSetlistWebviewContent(songData, sharedSvgs);
+        panel.webview.onDidReceiveMessage(msg => {
+            if (msg.command === 'saveSetlistHtml') {
+                const folder = songLibraryProvider.getFolder();
+                const outPath = path.join(folder || require('os').homedir(), 'setlist_preview.html');
+                const standalone = getSetlistWebviewContent(songData, sharedSvgs)
+                    .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>\n?/, '')
+                    .replace('const vscodeApi = acquireVsCodeApi();', 'const vscodeApi = { postMessage: function() {} };');
+                fs.writeFileSync(outPath, standalone, 'utf8');
+                vscode.window.showInformationMessage('Setlist saved: ' + outPath);
+            }
+        });
+    });
+
     // Add disposables to context.subscriptions
     context.subscriptions.push(
         renderOnly,
@@ -2374,7 +3116,13 @@ setTimeout(function() { applyTempoSpeed(PARSED.meta); }, 200);
         detectKey,
         onOpenDiag,
         onChangeDiag,
-        onCloseDiag
+        onCloseDiag,
+        libraryTreeView,
+        setLibraryFolder,
+        refreshLibrary,
+        openLibrarySong,
+        previewLibrarySong,
+        openSetlistPreview
     );
 }
 
