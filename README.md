@@ -1,288 +1,212 @@
-# chordpro-vscode
+# ChordPro VSCode
 
-Edit, render, and build ChordPro songs in VSCode — with PDF preview, an interactive chord builder, auto-completion, syntax highlighting, auto-scroll preview, visual tab editor, chord diagram hover, and a guided rendering configurator.
+**Write, rehearse, and perform your songs — without leaving VSCode.**
 
-## Features
+![Installs](https://img.shields.io/visual-studio-marketplace/i/mattjs07.chordpro-vscode?label=installs&color=blue)
 
-- [x] Compile `.cho` files with **Render ChordPro PDF** (`Ctrl+Shift+B`)
-- [x] **Preview ChordPro PDF** — renders and opens the PDF automatically in a side panel (`Ctrl+Shift+V`)
-- [x] **Auto-scroll Preview** — renders the song as HTML and scrolls it automatically (`Ctrl+Alt+S`); tap tempo, section jump, lyrics-only mode, full-screen, live transpose, two-column layout, dark/light theme toggle, save as standalone HTML
-- [x] Build on save (enable from extension settings)
-- [x] **Rendering Parameters** — write config/options directly in the source file, with completion, hover docs, and a guided ⚙ configurator
-- [x] **Interactive Chord Builder** — fretboard panel to build and insert chord definitions (`Ctrl+Alt+D`)
-- [x] **Tab Editor** — visual 6-string grid to write tablature without typing dashes (`Ctrl+Alt+T`)
-- [x] **Chord Analyzer** — opens Oolimo chord analyzer in a side panel (`Ctrl+Alt+A`)
-- [x] **Auto-completion** — type `{` for directive suggestions, `[` for chord suggestions
-- [x] Chords defined in the file (`{define:}`) and saved in the Chord Builder appear first in the `[` completion list
-- [x] **Chord Diagram Hover** — hover over any `[chord]` token to see a fretboard diagram
-- [x] **Document Outline** — lists the song title and all sections (Verse, Chorus, Bridge…) in the Outline panel (Explorer sidebar → Outline section)
-- [x] **Go to Definition** — `Ctrl+click` a `[chord]` token to jump to its `{define:}` block
-- [x] **Rename Chord** — right-click a chord → Rename Symbol to update every `[token]` and the `{define:}` block at once
-- [x] **Section Folding** — fold `{start_of_chorus}` … `{end_of_chorus}` blocks like code
-- [x] **Diagnostics** — info squiggle for chords with no known fingering; hint for unused `{define:}` blocks
-- [x] **Syntax highlighting** — chords, directives, sections, comments
-- [x] **Transpose** — shift all chords (or a selection) up/down by semitones, with musical interval labels
-- [ ] Ultimate Guitar to/from ChordPro converter
-
-## Commands
-
-| Command | Shortcut | Description |
-|---|---|---|
-| Render ChordPro PDF | `Ctrl+Shift+B` | Compile and render the active `.cho` file to PDF |
-| Preview ChordPro PDF | `Ctrl+Shift+V` | Render and open PDF beside the editor |
-| Auto-scroll Preview | `Ctrl+Alt+S` | Render to HTML and open an auto-scrolling performance view |
-| Open Chord Builder | `Ctrl+Alt+D` | Open the interactive fretboard panel |
-| Insert Chord by Name | `Ctrl+I` | Insert a saved chord by typing its name |
-| Insert Chord from List | `Ctrl+L` | Pick a saved chord from a quick-pick list |
-| Open Tab Editor | `Ctrl+Alt+T` | Visual tab editor — click cells, type fret numbers, insert tab |
-| Open Chord Analyzer | `Ctrl+Alt+A` | Open Oolimo chord analyzer in a side panel |
-| Open ChordPro Minimal Template | — | Blank template to start a new song |
-| Open ChordPro Example Template | — | Example file (Yesterday by The Beatles) |
-| Configure ChordPro Rendering | — | Guided UI to set config, options, suffix, output (also via ⚙ CodeLens) |
-| Transpose Chords | — | Transpose all chords (or a selection) by any number of semitones |
-| Show Concert Pitch Chords | — | Show the effective (concert pitch) chord names given the current `{capo:}` |
-| Detect Key | — | Analyse all chords and suggest the key; optionally insert `{key:}` |
-
-## Chord Diagram Hover
-
-Hover over any `[chord]` token in your `.cho` file to see a fretboard diagram popup.
-
-- Diagrams are shown for a built-in library of ~100 common chords (all roots × major, minor, 7th, maj7, sus, dim, aug, 6, 9, 11, 13, m7b5, mmaj7, 69, and more)
-- **`{define:}` blocks in the file take priority** — if a chord is defined in the file, that exact fingering is shown instead of the built-in default
-- Chords saved via the Chord Builder also override the built-in library (priority: file defines > Chord Builder > built-in)
-- If no diagram is available, the chord name is shown in bold
-
-## Chord Builder
-
-Open the **Chord Builder** panel (`Ctrl+Alt+D` or from the panel at the bottom).
-
-- Click strings and frets to place fingers on the fretboard
-- The extension auto-detects the chord name from your finger positions
-- Click a suggestion to fill the name field, or type your own
-- Click **Insert definition** to insert the `{define: ...}` block into the active editor
-- Saved chords appear at the top of the `[` auto-completion list
-- Chords defined via `{define:}` in the file are also recognised — they appear in completions, the insert-from-list picker, and the hover diagram without needing to re-save them in the Chord Builder
-
-## Tab Editor
-
-Open the **Tab Editor** (`Ctrl+Alt+T`). A visual 6-string grid appears beside the editor.
-
-- Click any cell to select it, then type the fret number (0–24)
-- **Backspace** clears a cell; **Enter** / **→** advances to the next cell
-- **↑ ↓** switches between strings; **← →** moves between columns
-- **+ Column** adds a new position at the end
-- **| Bar** inserts a bar line after the selected column (or at the end)
-- **Delete last** removes the rightmost column; **Clear** empties all values
-- A live tab preview is shown below the grid
-- **Insert tab** wraps the result in `{start_of_tab}` / `{end_of_tab}` and inserts it at the cursor
-
-## Auto-scroll Preview
-
-Press `Ctrl+Alt+S` to render the current song as HTML and open it in **performance mode** — a clean, distraction-free side panel designed for playing along.
-
-- The song is parsed and rendered directly — no ChordPro CLI needed for this view
-- A floating control bar at the bottom lets you play/pause and adjust speed
-- **Space** = play/pause · **↑** = faster · **↓** = slower
-- Speed adjusts in 10 px/s increments (5–300 px/s); auto-stops at the end
-- Re-running the command while the panel is open reloads the content
-- **Auto-reload on save** — the preview refreshes automatically every time you save the file
-- **Chord diagrams** — hover over any chord name in the preview to see a fretboard diagram popup (same fingering priority as the source hover: file `{define:}` > Chord Builder > built-in library)
-- **Tempo-based speed** — if the file contains `{tempo: N}`, the scroll speed is auto-set so the song scrolls at the right pace (1 bar per chord line); a ♩ button appears in the control bar (gold when active); click it any time to snap back to tempo speed
-- **Tap tempo** — click **Tap** (or press `T`) to tap the beat; BPM is averaged from the last 8 taps and sets the scroll speed automatically; resets if no tap for 3 seconds
-- **Section jump** — click **§** to open a section list; click any entry to scroll smoothly to that part of the song
-- **Lyrics-only mode** — click **Ly** (or press `L`) to fade out all chord symbols; the layout is preserved so lines don't shift
-- **Full-screen** — click **⤢** (or press `F`) to enter full-screen mode (shown in browsers; `⤡` to exit); keyboard shortcut works in the saved HTML too
-- **Live transpose** — ♭ / ♯ buttons in the control bar shift all chord names in the view by semitones without touching the source file; counter shows current offset (gold when non-zero)
-- **Two-column layout** — ⊞ button toggles two-column mode; useful for long songs
-- **Theme toggle** — 🌙/☀️ button manually overrides the OS dark/light preference
-- **Scroll position memory** — auto-reload on save restores your scroll position
-- **Save as HTML** — click the 💾 button to save a standalone `{basename}_preview.html` to disk; works in any browser with all controls functional
-- **Dark mode** — automatically adapts to the OS dark/light theme (`prefers-color-scheme`); overridable per-session with the theme toggle button
-- **Font size controls** — A− / A+ buttons in the control bar to resize text (11–28 px); tempo speed recalculates automatically
-- **Capo badge** — capo number shown as a distinct pill badge in the song header
-- **Progress bar** — thin bar at the top of the page shows scroll position
-- **Print-friendly** — `@media print` stylesheet hides controls and renders cleanly on paper
-
-## Transposing
-
-There are two ways to transpose a song, and they serve different purposes:
-
-**1. `{transpose: N}` directive** (ChordPro CLI)
-
-Add `{transpose: 2}` anywhere in your `.cho` file. The CLI will apply the transposition at render time — the chord names in the source are unchanged.
-
-- ✓ PDF output is transposed
-- ✗ Auto-scroll HTML preview is **not** affected (our JS renderer ignores this directive)
-- ✓ Non-destructive — remove the directive to revert instantly
-
-**2. Transpose Chords command** (this extension)
-
-Open the command palette (`Ctrl+Shift+P`) → **Transpose Chords**. Pick an interval or enter a custom number of semitones.
-
-- ✓ Rewrites chord names directly in the source file (`[Am]` → `[Bm]`)
-- ✓ PDF output is transposed (source reflects the new key)
-- ✓ Auto-scroll HTML preview is transposed (reads from source)
-- ✓ Apply to the whole file or just a selection
-- ✓ Fully undoable with `Ctrl+Z`
-
-**Rule of thumb:** use `{transpose}` for a quick one-off PDF in a different key; use the **Transpose Chords** command when you want to permanently change the key across all outputs.
-
-## Auto-completion
-
-Auto-completion activates automatically in `.cho` / `.chordpro` files.
-
-- Type `{` → suggestions for all ChordPro directives (`title`, `key`, `capo`, `start_of_chorus`, `define`, font/colour directives, `transpose`, …)
-- Type `[` → suggestions for chords — your saved chords appear first, followed by all standard chords (including extensions like `7b9`, `7#9`, `maj7`, `dim7`, `mmaj7`, …)
-
-## Rendering Parameters
-
-Parameters can be written in the first 25 lines of your `.cho` file:
-
-```
-# {config = "modern1"}
-# {options = -l}
-# {suffix = "lyrics_only"}
-# {output = mysong_out.pdf}
-```
-
-| Parameter | Description |
-|---|---|
-| `config` | Preset name (`modern1`, `dark`, …) or path to a `.json` config file |
-| `options` | Extra CLI flags passed verbatim (e.g. `-l`, `--toc`, `--no-chord-grids`) |
-| `suffix` | Appended to the output filename: `mysong_<suffix>.pdf` |
-| `output` | Full output filename, overrides the default |
-
-### Three ways to configure rendering
-
-**1. Auto-completion** — type `# {` on any line in the first 25 lines to get a dropdown of the four parameters. For `config`, a snippet choice list of all presets is offered automatically.
-
-**2. Hover tooltip** — hover over any `# {key = ...}` line to see a description, the current value, valid presets (for `config`), and a full list of common CLI flags (for `options`).
-
-**3. ⚙ Configure rendering (CodeLens)** — click the **⚙ Configure rendering** button that appears above line 1 of any `.cho` file. A guided multi-step UI lets you:
-- Pick a parameter (`config`, `options`, `suffix`, `output`)
-- For `config`: choose from a preset list or enter a custom JSON path
-- For `options`: choose from a list of 20 common CLI flags or enter custom flags
-- For `suffix` / `output`: type a value in an input box
-- The line is inserted or updated automatically in the file
-
-## Requirements
-
-Install ChordPro from the [official website](https://www.chordpro.org/chordpro/chordpro-installation/) and make sure to **add chordpro to your system PATH**. Required for PDF rendering; not needed for the auto-scroll HTML preview or the tab editor.
-
-## Workflow
-
-1. Open a template: **Open ChordPro Minimal Template** or **Open ChordPro Example Template**
-2. Write your song — use `{` and `[` auto-completion to insert directives and chords
-3. Use the **Chord Builder** to define custom chord fingerings
-4. Use the **Tab Editor** to write tablature sections visually
-5. Click **⚙ Configure rendering** (line 1) to set the config preset and any CLI options
-6. Press `Ctrl+Shift+V` to render and open the PDF preview beside the editor
-7. Press `Ctrl+Alt+S` for a scrollable HTML performance view
-8. Enable **Build on save** in settings to auto-render on every `Ctrl+S`
-
-*Note: if you change the suffix or output filename, you need to open the new PDF file once for it to auto-refresh.*
-
-## Advice
-
-- Use `.cho` as your file extension — the extension registers it as ChordPro automatically
-- The `config` preset `modern1` is a good default; try `dark` for a dark-themed PDF
-
-## Release Notes
-
-### 1.6.0
-- **Tap tempo** — tap `T` (or the Tap button) to measure BPM from your rhythm; auto-sets scroll speed; averages last 8 taps, resets after 3 s idle
-- **Section jump** — `§` button opens a popup list of all song sections; click to scroll smoothly to any section
-- **Lyrics-only mode** — `L` key or **Ly** button fades out chord symbols without shifting layout (CSS opacity transition)
-- **Full-screen** — `F` key or **⤢** button; available in saved HTML and in browsers (not in the VSCode webview)
-
-### 1.5.0
-- **Live transpose in preview** — ♭ / ♯ buttons in the control bar shift all displayed chord names without modifying the source; offset shown in gold when non-zero
-- **Two-column layout** — ⊞ button toggles two-column mode in the performance view
-- **Theme toggle** — 🌙/☀️ button overrides OS dark/light preference per-session
-- **Scroll position memory** — auto-reload on save now restores scroll position instead of jumping to top
-- **Chord hover: usage count** — hover tooltip now shows how many times the chord appears in the file
-- **Capo Helper** — command palette: *Show Concert Pitch Chords* — shows what chords other instruments hear given the `{capo:}` value
-- **Detect Key** — command palette: *Detect Key* — analyses chords and suggests the key; offers to insert `{key:}` if missing
-
-### 1.4.0
-- **Dark mode** — preview auto-adapts to OS dark/light theme via `prefers-color-scheme`
-- **Font size controls** — A− / A+ buttons in the control bar (11–28 px range)
-- **Capo badge** — capo number rendered as a distinct gold pill in the song header
-- **Progress bar** — thin bar at the top tracks scroll position through the song
-- **Print stylesheet** — `@media print` hides controls and produces a clean printed output
-
-### 1.3.0
-- **Tempo-based scroll speed** — if `{tempo: N}` is in the file, scroll speed is auto-calculated (1 bar per chord line); ♩ button appears in the control bar (gold = active), click to snap back to tempo speed at any time; speed increments changed to ±5 px/s
-- **Save as HTML** — 💾 button saves a self-contained `{basename}_preview.html` to disk; works in any browser with all controls functional
-
-### 1.2.0
-- **Auto-scroll preview auto-reload** — preview panel now refreshes automatically on every file save (no need to re-run the command)
-- **Chord diagrams in the preview** — hover over any chord name in the performance view to see a fretboard diagram tooltip; fingering priority matches the source hover (file `{define:}` > Chord Builder > built-in library); diagrams update on reload
-
-### 1.1.0
-- **Document Outline** — song title and every section (Verse, Chorus, Bridge, Tab, Grid…) appear in the Outline panel (Explorer sidebar → Outline section, at the bottom); sections with a `label=` attribute or `: label` show their custom label, duplicates are auto-numbered
-- **Go to Definition** — `Ctrl+click` any `[chord]` token to jump to its `{define:}` block in the same file
-- **Rename Chord** — right-click a chord → *Rename Symbol* (`F2`) to rename it everywhere: all `[token]` occurrences and the `{define:}` block are updated atomically and are fully undoable
-- **Section Folding** — `{start_of_chorus}` … `{end_of_chorus}` (and all other section pairs) fold and unfold like code blocks
-- **Diagnostics**:
-  - *Info* squiggle on any `[chord]` that has no known fingering (not in the file, Chord Builder, or built-in library) — suggests adding a `{define:}` or using the Chord Builder
-  - *Hint* on any `{define:}` whose chord name never appears as a `[token]` in the song
-
-### 1.0.0
-- Added **Chord Diagram Hover** — hover over any `[chord]` token to see an SVG fretboard popup
-- Built-in fingering library covering ~100 chords: all roots × major, minor, 7th, maj7, sus2/4, add9, dim, dim7, aug, 5, 6, m6, 9, maj9, 11, 13, maj13, 69, 7sus4, 7b9, 7#9, 7b5, 7#5, m7b5, mmaj7
-- `{define:}` blocks in the file are parsed automatically — their fingerings appear in the hover diagram, chord completions, and insert-from-list picker without any manual save step
-- Chord Builder saved chords also override the built-in library (priority: file defines > Chord Builder > built-in)
-
-### 0.9.0
-- Added **Transpose Chords** command (command palette: "Transpose Chords")
-- Transposes all `[chord]` tokens in the document, or only the selected text
-- QuickPick with common intervals: half step, whole step, minor/major third, fourth, tritone (±1 to ±6), plus custom input
-- Also updates `{key: ...}` directives automatically
-- Correctly preserves sharp/flat spelling (flat notes stay flat, sharp notes stay sharp)
-- Slash chords (e.g. `[G/B]`) have both root and bass transposed
-
-### 0.8.0
-- Added **Tab Editor** (`Ctrl+Alt+T`): visual grid with 6 string lines
-- Click a cell to select it, type fret numbers (0–24), backspace to clear
-- Arrow keys and Tab to navigate between cells
-- **+ Column**, **| Bar**, **Delete last**, **Clear**, **Insert tab** controls
-- Live tab preview shown below the grid
-
-### 0.7.0
-- Added **Auto-scroll Preview** (`Ctrl+Alt+S`): built-in ChordPro parser + HTML renderer, no CLI needed
-- Floating control bar: Play/Pause, Faster, Slower, speed display
-- Keyboard: `Space` = play/pause, `↑`/`↓` = speed; auto-stops at bottom
-- Re-running the command reloads the panel content
-
-### 0.6.0
-- Added **Chord Analyzer** panel (`Ctrl+Alt+A`): opens Oolimo in a side panel
-- Falls back to opening in the system browser if the site blocks the embedded iframe
-
-### 0.5.0
-- Expanded directive completions: `sorttitle`, `sortartist`, `tag`, `chorus`, `highlight`, `start_of_abc/ly/svg`, font/colour directives, `transpose`, and more
-- Expanded chord completions: `7b9`, `7#9`, `maj9`, `dim7`, `mmaj7`, `m7b5`, and other extended qualities
-- Syntax highlighting: `start_of_abc/ly/svg`, `chorus`, `sob/eob`, `sog/eog`
-- Options helper: hover shows full CLI flag list; **⚙ Configure rendering** CodeLens offers a flag picker for `options`
-
-### 0.1.0
-- Added interactive Chord Builder with fretboard webview
-- Added Preview ChordPro PDF command (renders + opens beside editor)
-- Added auto-completion for directives (`{`) and chords (`[`)
-- Saved chords from the Chord Builder appear first in chord completions
-- Registered `.cho` / `.chordpro` / `.chopro` as ChordPro language
-- Added syntax highlighting with TextMate grammar
-- Added options helper: completion, hover tooltip, and CodeLens for `# {key = value}` rendering params
-
-### 0.0.1
-Initial release with basic render and template functions.
+ChordPro VSCode turns VSCode into a full-featured songwriting and performance environment. Write `.cho` files with rich auto-completion, visualise chord fingerings instantly, scroll through your setlist hands-free, and generate print-ready PDFs — all from the editor you already use.
 
 ---
 
-## Online Tools
+## Highlights
 
-- [Songcraft.io](https://songcraft.io/) — BPM, autoscrolling, visual editor, chord progressions, collaboration
-- [Chordly.io](https://chordly.io/) — Metronome, autoplay. Free as of 2025
-- [Oolimo](https://www.oolimo.com/en/guitar-chords/analyze) — Guitar chord analyzer and diagram lookup
+| | |
+|---|---|
+| 🎸 **Chord diagrams everywhere** | Hover over any `[chord]` in the source *or* in the live preview to see an SVG fretboard diagram |
+| 📜 **Auto-scroll performance view** | Full-screen HTML view with auto-scroll, tap tempo, metronome, section jump, live transpose, and more |
+| 🎵 **Song Library & Setlist** | Browse your entire song folder, select a few songs, and launch a live setlist with one click |
+| 🥁 **Metronome** | Web Audio click track that locks to `{tempo:}` or tap tempo — no external app needed |
+| 🎛 **Visual Chord Builder** | Click strings and frets on an interactive fretboard; the chord name is detected automatically |
+| 🎼 **Visual Tab Editor** | Build guitar tablature by clicking a grid — no dashes to type |
+| 🔄 **Transpose** | Shift chords by any interval in the source, or preview in a different key without touching the file |
+| 🔍 **Chord Analyzer** | Open Oolimo's chord analyzer in a side panel, without leaving VSCode |
 
-**Enjoy!!**
+---
+
+## GIF Showcase
+
+> *GIFs coming soon — see the sections below for a full description of each feature.*
+
+| Feature | Preview |
+|---|---|
+| Auto-scroll performance view | `images/gif_autoscroll.gif` |
+| Chord diagram hover (source + HTML) | `images/gif_hover.gif` |
+| Chord Builder | `images/gif_chord_builder.gif` |
+| Tab Editor | `images/gif_tab_editor.gif` |
+| Song Library & Setlist | `images/gif_setlist.gif` |
+| Oolimo Chord Analyzer | `images/gif_oolimo.gif` |
+
+---
+
+## Quick Start
+
+1. Install the extension and open (or create) a `.cho` file
+2. Press `Ctrl+Alt+S` to open the **Auto-scroll Preview**
+3. Press **Space** to start scrolling — use the control bar to adjust speed, transpose, or jump to a section
+
+No ChordPro CLI required for the preview. PDF rendering requires the [ChordPro CLI](https://www.chordpro.org/chordpro/chordpro-installation/) on your PATH.
+
+---
+
+## Commands & Shortcuts
+
+### Performance & Preview
+
+| Command | Shortcut | Description |
+|---|---|---|
+| Auto-scroll Preview | `Ctrl+Alt+S` | Render the song as HTML and open the performance view |
+| Open Chord Analyzer | `Ctrl+Alt+A` | Open Oolimo in a side panel |
+| Preview ChordPro PDF | `Ctrl+Shift+V` | Render and open the PDF beside the editor |
+| Render ChordPro PDF | `Ctrl+Shift+B` | Compile the active `.cho` file to PDF |
+
+### Auto-scroll controls (inside the preview)
+
+| Key | Action |
+|---|---|
+| `Space` | Play / Pause |
+| `↑` / `↓` | Faster / Slower (±5 px/s) |
+| `T` | Tap tempo — sets scroll speed from your rhythm |
+| `M` | Toggle metronome |
+| `L` | Lyrics-only mode — hide chord symbols |
+| `§` button | Section jump — click any section to scroll there |
+| `F` | Full-screen (works in saved HTML / browsers) |
+| `♭` / `♯` buttons | Live transpose — shift chords in the view without editing the file |
+| `⊞` button | Two-column layout |
+| `♩` button | Snap scroll speed back to tempo speed |
+| `A−` / `A+` | Font size |
+| `🌙` / `☀️` | Toggle dark / light theme |
+| `💾` | Save as standalone HTML |
+
+### Editing & Writing
+
+| Command | Shortcut | Description |
+|---|---|---|
+| Open Chord Builder | `Ctrl+Alt+D` | Interactive fretboard panel to define custom chords |
+| Insert Chord by Name | `Ctrl+I` | Insert a saved chord by typing its name |
+| Insert Chord from List | `Ctrl+L` | Pick a saved chord from a quick-pick list |
+| Open Tab Editor | `Ctrl+Alt+T` | Visual tab editor — click cells, type fret numbers |
+| Transpose Chords | — | Shift all chords (or a selection) by any number of semitones |
+| Show Concert Pitch Chords | — | Show the chords other instruments hear given the current `{capo:}` |
+| Detect Key | — | Analyse all chords and suggest the key; optionally insert `{key:}` |
+
+### Song Library & Setlist
+
+| Command | Description |
+|---|---|
+| Set Library Folder (`📂` button) | Choose the root folder containing your `.cho` files (subfolders are scanned recursively) |
+| Refresh Library (`⟳` button) | Re-scan the library folder |
+| Play as Setlist (`▶` button) | Open selected songs (or all songs) in the Setlist Preview |
+| Click a song | Open the `.cho` file in the editor |
+| Right-click a song → Preview | Open the song in the Auto-scroll Preview |
+
+**Setlist navigation:**
+
+| Key | Action |
+|---|---|
+| `PageUp` / `PageDown` | Previous / Next song |
+| `◀` / `▶` buttons | Previous / Next song |
+| **Auto** button | Auto-advance to the next song when scroll reaches the end |
+
+### Templates & Configuration
+
+| Command | Description |
+|---|---|
+| Open ChordPro Minimal Template | Blank template to start a new song |
+| Open ChordPro Example Template | Example file (Yesterday by The Beatles) |
+| Configure ChordPro Rendering | Guided UI for config, options, suffix, output (also via ⚙ CodeLens above line 1) |
+
+---
+
+## Feature Details
+
+### Chord Diagram Hover
+
+Hover over any `[chord]` token — in your `.cho` source file *or* in the Auto-scroll HTML preview — to see an SVG fretboard diagram popup.
+
+- Built-in library of ~100 chords (all roots × major, minor, 7th, maj7, sus, dim, aug, 6, 9, 11, 13, m7b5, mmaj7, 69, and more)
+- `{define:}` blocks in the file take priority over the built-in library
+- Chords saved via the Chord Builder also override the built-in defaults
+- The hover tooltip also shows how many times the chord appears in the song
+
+### Auto-scroll Performance View
+
+Press `Ctrl+Alt+S` to render the song as HTML and open it in a clean, distraction-free performance view. No ChordPro CLI needed.
+
+- **Tempo-based speed** — add `{tempo: 120}` to your file; scroll speed is calculated automatically so the song passes at the right pace. A `♩` button snaps back to tempo speed at any time.
+- **Tap tempo** — tap `T` repeatedly to set BPM from your rhythm; averaged over the last 8 taps.
+- **Metronome** — `M` key or `♪` button; Web Audio click track locked to the current BPM (from `{tempo:}` or tap tempo); beat 1 accented.
+- **Live transpose** — `♭` / `♯` buttons shift all chord names in the view without touching the source file.
+- **Section jump** — `§` button opens a numbered list of all sections; click to scroll smoothly.
+- **Lyrics-only mode** — `L` key hides chord symbols while preserving layout.
+- **Auto-reload on save** — the preview refreshes automatically every time you save, restoring scroll position.
+- **Save as HTML** — `💾` button saves a fully self-contained `_preview.html` to disk; all controls work in any browser.
+
+### Song Library & Setlist
+
+Open the **Song Library** panel in the activity bar (music note icon).
+
+1. Click `📂` to set your library folder — all `.cho` files in subfolders are found automatically
+2. Songs are listed by title (from `{title:}`) with the artist as a subtitle
+3. **Ctrl+click** or **Shift+click** to select specific songs
+4. Click `▶` **Play as Setlist** to open the selected songs (or all songs if none are selected) in the Setlist Preview
+5. In the Setlist Preview, use `PageUp` / `PageDown` or the `◀ ▶` buttons to navigate; enable **Auto** to advance automatically at the end of each song
+6. The setlist can be saved as a standalone HTML file with the `💾` button
+
+### Chord Builder
+
+Open with `Ctrl+Alt+D` or from the panel at the bottom.
+
+- Click strings and frets to place fingers on the fretboard
+- The chord name is detected automatically from your finger positions
+- Click **Insert definition** to insert the `{define:}` block at the cursor
+- Saved chords appear at the top of the `[` auto-completion list and in the chord hover diagrams
+
+### Tab Editor
+
+Open with `Ctrl+Alt+T`.
+
+- Click any cell to select it, then type the fret number (0–24)
+- `Backspace` clears a cell; `Enter` / `→` advances to the next column; `↑` / `↓` moves between strings
+- **+ Column** inserts a new column after the selected position
+- **| Bar** inserts a bar line; **Delete last** removes the rightmost column; **Clear** empties all values
+- A live tab preview is shown below the grid
+- **Insert tab** wraps the result in `{start_of_tab}` / `{end_of_tab}` and inserts it at the cursor position in the source file
+
+### Transposing
+
+**Live transpose (preview only):** use the `♭` / `♯` buttons in the Auto-scroll or Setlist preview to shift chord display without modifying the source.
+
+**Permanent transpose (source file):** command palette → **Transpose Chords** — pick a musical interval or enter a custom number of semitones. Updates all `[chord]` tokens and `{key:}` directives. Undoable with `Ctrl+Z`.
+
+**For PDF only:** add `{transpose: 2}` in the file; the CLI applies it at render time without changing the source (note: the HTML preview ignores this directive).
+
+### Auto-completion
+
+- Type `{` → suggestions for all ChordPro directives; section pairs (`{start_of_chorus}` etc.) insert the closing tag automatically with the cursor placed between them
+- Type `[` → chord suggestions; your saved and defined chords appear first
+- Rendering parameters (`# {config = ...}`, etc.) have their own completions in the first 25 lines
+
+### Chord Analyzer (Oolimo)
+
+Press `Ctrl+Alt+A` to open [Oolimo](https://www.oolimo.com/en/guitar-chords/analyze) in a VSCode side panel — look up any chord, explore voicings, and analyse progressions without leaving the editor.
+
+---
+
+## Requirements
+
+PDF rendering requires the [ChordPro CLI](https://www.chordpro.org/chordpro/chordpro-installation/) installed and on your system PATH.
+
+The **Auto-scroll Preview**, **Song Library**, **Setlist**, **Chord Builder**, **Tab Editor**, and **Chord Analyzer** work without the CLI.
+
+---
+
+## Useful Links
+
+- [ChordPro format reference](https://www.chordpro.org/chordpro/chordpro-directives/)
+- [Oolimo chord analyzer](https://www.oolimo.com/en/guitar-chords/analyze)
+- [Songcraft.io](https://songcraft.io/) — BPM, autoscrolling, visual editor, chord progressions
+- [Full Changelog](CHANGELOG.md)
+
+---
+
+**Enjoy your playing!**
