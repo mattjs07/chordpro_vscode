@@ -1513,6 +1513,7 @@ body {
 /* ── Two-column layout ────────────────────────────────────────────────────── */
 #song.two-col { column-count: 2; column-gap: 3em; column-rule: 1px solid var(--border); }
 #song.two-col .section { break-inside: avoid-column; }
+#song.two-col .song-header { column-span: all; }
 /* ── Additional button styles ────────────────────────────────────────────── */
 #theme-btn  { font-size: 14px; }
 #twocol-btn { font-size: 14px; }
@@ -2176,6 +2177,7 @@ body { padding-top: 52px; padding-bottom: 80px; }
 #song.lyrics-only .chord { opacity: 0; }
 #song.two-col { column-count: 2; column-gap: 3em; column-rule: 1px solid var(--border); }
 #song.two-col .section { break-inside: avoid-column; }
+#song.two-col .song-header { column-span: all; }
 #chord-tip { position: fixed; display: none; background: var(--tip-bg); border: 1px solid var(--tip-border); border-radius: 8px; padding: 8px; z-index: 99999; pointer-events: none; text-align: center; color: var(--tip-fg); font-family: sans-serif; font-size: 12px; }
 #scroll-bar {
   position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
