@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="images/icon.png" width="96" alt="ChordPro VSCode logo"/>
+</p>
+
 # ChordPro VSCode
 
 **Write, rehearse, and perform your songs — without leaving VSCode.**
