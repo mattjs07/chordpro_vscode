@@ -1450,6 +1450,10 @@ body {
 .comment     { color: var(--fg-muted); font-style: italic; font-size: 0.9em; margin: 3px 0; }
 .comment-box { border: 1px solid var(--border); padding: 1px 8px; border-radius: 3px; display: inline-block; }
 .chorus-ref  { color: var(--sec-chorus-fg); font-style: italic; font-size: 0.9em; margin: 3px 0; }
+.chord-diagrams { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 6px 0; }
+.chord-diagram-cell { display: inline-flex; flex-direction: column; align-items: center; }
+.chord-diagram-cell svg { display: block; }
+.chord-diagram-cell .cd-label { font-size: 0.78em; font-weight: bold; color: var(--chord); margin-top: 2px; }
 .tab-block   {
   font-family: 'Courier New', monospace; font-size: 0.88em;
   background: var(--tab-bg); padding: 12px 16px; border-radius: 4px;
@@ -1654,7 +1658,8 @@ function parse(text) {
       if (k === 'comment_box'    ||k==='cb')          { cur.lines.push({ type:'comment-box', text:v }); continue; }
       if (k === 'chorus')                             { cur.lines.push({ type:'chorus-ref'         }); continue; }
       if (k === 'new_page'||k==='np'||k==='new_physical_page'||k==='npp') { cur.lines.push({ type:'page-break' }); continue; }
-      continue;   // define, chord, column_break, image, …
+      if (k === 'chord' && v && !v.includes('frets')) { cur.lines.push({ type:'chord-diagram', name:v.trim() }); continue; }
+      continue;   // define, column_break, image, …
     }
 
     if (cur.type === 'tab') { cur.lines.push({ type:'tab', text:line }); continue; }
@@ -1669,6 +1674,9 @@ function parse(text) {
 // ── HTML renderer ────────────────────────────────────────────────────────────
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function safeFmt(s) {
+  return esc(s).replace(new RegExp('&lt;(\\/?(b|i|em|strong|u|s))&gt;', 'gi'), '\x3c$1\x3e');
 }
 
 function render({ meta, sections }, transpose) {
@@ -1706,12 +1714,13 @@ function render({ meta, sections }, transpose) {
               + '</span>');
           }
           out.push('</div>');
-        } else if (l.type === 'lyric')      out.push('<div class="lyric-line">'  + esc(l.text) + '</div>');
-        else if   (l.type === 'comment')    out.push('<div class="comment">'      + esc(l.text) + '</div>');
-        else if   (l.type === 'comment-box')out.push('<div class="comment comment-box">' + esc(l.text) + '</div>');
-        else if   (l.type === 'chorus-ref') out.push('<div class="chorus-ref">[ Chorus ]</div>');
-        else if   (l.type === 'empty')      out.push('<div class="empty-line"></div>');
-        else if   (l.type === 'page-break') out.push('<hr class="page-break">');
+        } else if (l.type === 'lyric')        out.push('<div class="lyric-line">'  + safeFmt(l.text) + '</div>');
+        else if   (l.type === 'comment')      out.push('<div class="comment">'      + safeFmt(l.text) + '</div>');
+        else if   (l.type === 'comment-box')  out.push('<div class="comment comment-box">' + safeFmt(l.text) + '</div>');
+        else if   (l.type === 'chorus-ref')   out.push('<div class="chorus-ref">[ Chorus ]</div>');
+        else if   (l.type === 'empty')        out.push('<div class="empty-line"></div>');
+        else if   (l.type === 'page-break')   out.push('<hr class="page-break">');
+        else if   (l.type === 'chord-diagram')out.push('<div class="chord-diagram-cell" data-chord="' + esc(l.name) + '"></div>');
       }
     }
     out.push('</div>');
@@ -1760,6 +1769,22 @@ function bindTooltips() {
   });
 }
 
+function populateChordDiagrams() {
+  document.querySelectorAll('.chord-diagram-cell[data-chord]').forEach(function(cell) {
+    var name = cell.dataset.chord;
+    var svg = CHORD_SVGS[name];
+    if (!svg) {
+      var rm = name && name.match(/^([A-G][b#]?)(.*)/);
+      if (rm) {
+        var si = _SH.indexOf(rm[1]), fi = _FL.indexOf(rm[1]);
+        if (si >= 0) svg = CHORD_SVGS[_FL[si] + rm[2]];
+        if (!svg && fi >= 0) svg = CHORD_SVGS[_SH[fi] + rm[2]];
+      }
+    }
+    if (svg) cell.innerHTML = svg + '<div class="cd-label">' + name + '</div>';
+  });
+}
+
 // ── Progress bar ─────────────────────────────────────────────────────────────
 var progressBar = document.getElementById('progress-bar');
 function updateProgress() {
@@ -1782,6 +1807,7 @@ document.getElementById('font-larger').addEventListener('click',  function() { c
 function rerender() {
   document.getElementById('song').innerHTML = render(PARSED, previewTranspose);
   bindTooltips();
+  populateChordDiagrams();
   if (tempoSpeed) setTimeout(function() { applyTempoSpeed(PARSED.meta, false, true); }, 100);
 }
 
@@ -1825,6 +1851,7 @@ const SOURCE = ${safeSource};
 var PARSED = parse(SOURCE);
 document.getElementById('song').innerHTML = render(PARSED);
 bindTooltips();
+populateChordDiagrams();
 
 // ── Auto-scroll ──────────────────────────────────────────────────────────────
 let speed = 30, playing = false, lastTs = null, accum = 0;
@@ -2055,6 +2082,7 @@ window.addEventListener('message', function(e) {
     PARSED = parse(e.data.source);
     document.getElementById('song').innerHTML = render(PARSED, previewTranspose);
     bindTooltips();
+    populateChordDiagrams();
     window.scrollTo(0, savedY);
     setTimeout(function() { applyTempoSpeed(PARSED.meta); }, 200);
   }
@@ -2174,6 +2202,10 @@ body { padding-top: 52px; padding-bottom: 80px; }
 .empty-line { height: 0.6em; }
 .tab-block { font-family: monospace; font-size: 0.9em; background: var(--tab-bg); border: 1px solid var(--tab-border); padding: 8px 12px; border-radius: 4px; overflow-x: auto; white-space: pre; line-height: 1.5; }
 .page-break { border: none; border-top: 1px dashed var(--border); margin: 16px 0; }
+.chord-diagrams { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 6px 0; }
+.chord-diagram-cell { display: inline-flex; flex-direction: column; align-items: center; }
+.chord-diagram-cell svg { display: block; }
+.chord-diagram-cell .cd-label { font-size: 0.78em; font-weight: bold; color: var(--chord); margin-top: 2px; }
 #song.lyrics-only .chord { opacity: 0; }
 #song.two-col { column-count: 2; column-gap: 3em; column-rule: 1px solid var(--border); }
 #song.two-col .section { break-inside: avoid-column; }
@@ -2318,6 +2350,7 @@ function parse(text) {
       if (k==='comment_box'||k==='cb')              { cur.lines.push({type:'comment-box',text:v}); continue; }
       if (k==='chorus')                             { cur.lines.push({type:'chorus-ref'}); continue; }
       if (k==='new_page'||k==='np')                 { cur.lines.push({type:'page-break'}); continue; }
+      if (k==='chord' && v && !v.includes('frets')) { cur.lines.push({type:'chord-diagram',name:v.trim()}); continue; }
       continue;
     }
     if (cur.type==='tab') { cur.lines.push({type:'tab',text:line}); continue; }
@@ -2330,6 +2363,7 @@ function parse(text) {
 }
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function safeFmt(s) { return esc(s).replace(new RegExp('&lt;(\\/?(b|i|em|strong|u|s))&gt;', 'gi'), '\x3c$1\x3e'); }
 
 function render({ meta, sections }, transpose) {
   var out = ['<div class="song-header">'];
@@ -2358,12 +2392,13 @@ function render({ meta, sections }, transpose) {
             out.push('<span class="pair"><span class="chord"' + (dc?' data-chord="'+esc(dc)+'"':'') + '>' + (dc?esc(dc):'&nbsp;') + '</span><span class="lyric">' + esc(s.lyric||' ') + '</span></span>');
           }
           out.push('</div>');
-        } else if (l.type==='lyric')      out.push('<div class="lyric-line">'  + esc(l.text) + '</div>');
-        else if   (l.type==='comment')    out.push('<div class="comment">'      + esc(l.text) + '</div>');
-        else if   (l.type==='comment-box')out.push('<div class="comment comment-box">' + esc(l.text) + '</div>');
-        else if   (l.type==='chorus-ref') out.push('<div class="chorus-ref">[ Chorus ]</div>');
-        else if   (l.type==='empty')      out.push('<div class="empty-line"></div>');
-        else if   (l.type==='page-break') out.push('<hr class="page-break">');
+        } else if (l.type==='lyric')        out.push('<div class="lyric-line">'  + safeFmt(l.text) + '</div>');
+        else if   (l.type==='comment')      out.push('<div class="comment">'      + safeFmt(l.text) + '</div>');
+        else if   (l.type==='comment-box')  out.push('<div class="comment comment-box">' + safeFmt(l.text) + '</div>');
+        else if   (l.type==='chorus-ref')   out.push('<div class="chorus-ref">[ Chorus ]</div>');
+        else if   (l.type==='empty')        out.push('<div class="empty-line"></div>');
+        else if   (l.type==='page-break')   out.push('<hr class="page-break">');
+        else if   (l.type==='chord-diagram')out.push('<div class="chord-diagram-cell" data-chord="' + esc(l.name) + '"></div>');
       }
     }
     out.push('</div>');
@@ -2401,6 +2436,21 @@ function bindTooltips() {
     el.addEventListener('mouseenter', function(e) { showTip(el,e); });
     el.addEventListener('mousemove',  function(e) { positionTip(e); });
     el.addEventListener('mouseleave', hideTip);
+  });
+}
+function populateChordDiagrams() {
+  document.querySelectorAll('.chord-diagram-cell[data-chord]').forEach(function(cell) {
+    var name = cell.dataset.chord;
+    var svg = CHORD_SVGS[name];
+    if (!svg) {
+      var rm = name && name.match(/^([A-G][b#]?)(.*)/);
+      if (rm) {
+        var si=_SH.indexOf(rm[1]), fi=_FL.indexOf(rm[1]);
+        if (si>=0) svg=CHORD_SVGS[_FL[si]+rm[2]];
+        if (!svg && fi>=0) svg=CHORD_SVGS[_SH[fi]+rm[2]];
+      }
+    }
+    if (svg) cell.innerHTML=svg+'<div class="cd-label">'+name+'</div>';
   });
 }
 
@@ -2513,7 +2563,7 @@ function _updateTransLabel(){
 }
 document.getElementById('trans-down').addEventListener('click',function(){previewTranspose--;_updateTransLabel();rerender();});
 document.getElementById('trans-up').addEventListener('click',  function(){previewTranspose++;_updateTransLabel();rerender();});
-function rerender(){document.getElementById('song').innerHTML=render(PARSED,previewTranspose);bindTooltips();}
+function rerender(){document.getElementById('song').innerHTML=render(PARSED,previewTranspose);bindTooltips();populateChordDiagrams();}
 
 // Theme
 var _sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -2552,6 +2602,7 @@ function loadSong(idx){
   PARSED=parse(s.source);
   document.getElementById('song').innerHTML=render(PARSED,0);
   bindTooltips();
+  populateChordDiagrams();
   window.scrollTo(0,0);
   playing=false; updateUI();
   updateSongNav();

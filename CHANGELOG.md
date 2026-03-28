@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.0
+- **`{chord: Name}` directive** — name-only chord directives (without fret data) now render inline fretboard diagrams in the HTML preview and setlist
+- **Safe inline HTML** — `<b>`, `<i>`, `<em>`, `<strong>`, `<u>`, `<s>` tags in lyric and comment lines are now rendered as formatted text instead of escaped source
+
 ## 1.7.2
 - Section autocomplete now inserts paired `{start_of_*}` / `{end_of_*}` with cursor placed between them (chorus, verse, bridge, tab, grid, textblock)
 - Tab Editor: `+ Column` inserts after the selected column instead of always at the end
