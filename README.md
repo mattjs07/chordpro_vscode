@@ -25,16 +25,20 @@ ChordPro VSCode turns VSCode into a full-featured songwriting and performance en
 
 ## GIF Showcase
 
-> *GIFs coming soon — see the sections below for a full description of each feature.*
+### Auto-scroll Performance View
+![Auto-scroll preview](images/gif_autoscroll.gif)
 
-| Feature | Preview |
-|---|---|
-| Auto-scroll performance view | `images/gif_autoscroll.gif` |
-| Chord diagram hover (source + HTML) | `images/gif_hover.gif` |
-| Chord Builder | `images/gif_chord_builder.gif` |
-| Tab Editor | `images/gif_tab_editor.gif` |
-| Song Library & Setlist | `images/gif_setlist.gif` |
-| Oolimo Chord Analyzer | `images/gif_oolimo.gif` |
+### Chord Diagram Hover — source file & HTML preview
+![Chord hover](images/gif_hover.gif)
+
+### Chord Builder
+![Chord Builder](images/gif_chord_builder.gif)
+
+### Tab Editor
+![Tab Editor](images/gif_tab_editor.gif)
+
+### Song Library & Setlist
+![Setlist](images/gif_setlist.gif)
 
 ---
 
