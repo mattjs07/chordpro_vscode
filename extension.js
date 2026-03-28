@@ -825,19 +825,19 @@ const DIRECTIVES = [
     { label: 'tag',                  detail: 'Arbitrary tag / label',            snippet: 'tag: $1}'                         },
     { label: 'meta',                 detail: 'Custom metadata key-value',        snippet: 'meta: $1}'                        },
     // Sections
-    { label: 'start_of_chorus',      detail: 'Start chorus section',             snippet: 'start_of_chorus}'                 },
-    { label: 'end_of_chorus',        detail: 'End chorus section',               snippet: 'end_of_chorus}'                   },
-    { label: 'chorus',               detail: 'Repeat / reference chorus inline', snippet: 'chorus}'                          },
-    { label: 'start_of_verse',       detail: 'Start verse section',              snippet: 'start_of_verse}'                  },
-    { label: 'end_of_verse',         detail: 'End verse section',                snippet: 'end_of_verse}'                    },
-    { label: 'start_of_bridge',      detail: 'Start bridge section',             snippet: 'start_of_bridge}'                 },
-    { label: 'end_of_bridge',        detail: 'End bridge section',               snippet: 'end_of_bridge}'                   },
-    { label: 'start_of_tab',         detail: 'Start tablature section',          snippet: 'start_of_tab}'                    },
-    { label: 'end_of_tab',           detail: 'End tablature section',            snippet: 'end_of_tab}'                      },
-    { label: 'start_of_grid',        detail: 'Start chord grid section',         snippet: 'start_of_grid}'                   },
-    { label: 'end_of_grid',          detail: 'End chord grid section',           snippet: 'end_of_grid}'                     },
-    { label: 'start_of_textblock',   detail: 'Start raw text block',             snippet: 'start_of_textblock}'              },
-    { label: 'end_of_textblock',     detail: 'End raw text block',               snippet: 'end_of_textblock}'                },
+    { label: 'start_of_chorus',      detail: 'Start chorus section',             snippet: 'start_of_chorus}\n$1\n{end_of_chorus}'     },
+    { label: 'end_of_chorus',        detail: 'End chorus section',               snippet: 'end_of_chorus}'                                },
+    { label: 'chorus',               detail: 'Repeat / reference chorus inline', snippet: 'chorus}'                                       },
+    { label: 'start_of_verse',       detail: 'Start verse section',              snippet: 'start_of_verse}\n$1\n{end_of_verse}'           },
+    { label: 'end_of_verse',         detail: 'End verse section',                snippet: 'end_of_verse}'                                 },
+    { label: 'start_of_bridge',      detail: 'Start bridge section',             snippet: 'start_of_bridge}\n$1\n{end_of_bridge}'         },
+    { label: 'end_of_bridge',        detail: 'End bridge section',               snippet: 'end_of_bridge}'                                },
+    { label: 'start_of_tab',         detail: 'Start tablature section',          snippet: 'start_of_tab}\n$1\n{end_of_tab}'               },
+    { label: 'end_of_tab',           detail: 'End tablature section',            snippet: 'end_of_tab}'                                   },
+    { label: 'start_of_grid',        detail: 'Start chord grid section',         snippet: 'start_of_grid}\n$1\n{end_of_grid}'             },
+    { label: 'end_of_grid',          detail: 'End chord grid section',           snippet: 'end_of_grid}'                                  },
+    { label: 'start_of_textblock',   detail: 'Start raw text block',             snippet: 'start_of_textblock}\n$1\n{end_of_textblock}'   },
+    { label: 'end_of_textblock',     detail: 'End raw text block',               snippet: 'end_of_textblock}'                             },
     { label: 'start_of_abc',         detail: 'Start ABC music notation block',   snippet: 'start_of_abc}\n$1\n{end_of_abc}'  },
     { label: 'end_of_abc',           detail: 'End ABC music notation block',     snippet: 'end_of_abc}'                      },
     { label: 'start_of_ly',          detail: 'Start LilyPond notation block',    snippet: 'start_of_ly}\n$1\n{end_of_ly}'    },
@@ -1412,7 +1412,7 @@ function activate(context) {
 body {
   font-family: Georgia, serif; font-size: 17px; line-height: 1.6;
   background: var(--bg); color: var(--fg);
-  padding: 40px 56px 160px; max-width: 860px; margin: 0 auto;
+  padding: 40px clamp(16px, 6vw, 56px) 160px; max-width: 860px; margin: 0 auto;
 }
 .song-header { text-align: center; margin-bottom: 36px; padding-bottom: 20px; border-bottom: 2px solid var(--border); }
 .song-title  { font-size: 2em; font-weight: bold; }
@@ -2140,7 +2140,7 @@ body { padding-top: 52px; padding-bottom: 80px; }
 #song-nav-title { flex: 1; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #nav-bar button.active { color: #ffd700; border-color: #ffd700; }
 #progress-bar { position: fixed; top: 50px; left: 0; height: 3px; background: #79b8ff; width: 0%; z-index: 9999; transition: width 0.1s; }
-#song { max-width: 720px; margin: 0 auto; padding: 24px 20px 40px; }
+#song { max-width: 720px; margin: 0 auto; padding: 24px clamp(10px, 4vw, 40px) 40px; }
 .song-header { margin-bottom: 18px; }
 .song-title    { font-size: 2em; font-weight: bold; color: var(--fg); }
 .song-subtitle { font-size: 1.1em; color: var(--fg-dim); margin-top: 2px; }
@@ -3013,7 +3013,7 @@ if(SONGS.length) loadSong(0);
     // ─────────────────────────────────────────────
     const songLibraryProvider = new SongLibraryProvider(context);
     const libraryTreeView = vscode.window.createTreeView('chordproLibraryView', {
-        treeDataProvider: songLibraryProvider, showCollapseAll: false
+        treeDataProvider: songLibraryProvider, showCollapseAll: false, canSelectMany: true
     });
 
     const setLibraryFolder = vscode.commands.registerCommand('chordpro.setLibraryFolder', async () => {
@@ -3060,7 +3060,8 @@ if(SONGS.length) loadSong(0);
     });
 
     const openSetlistPreview = vscode.commands.registerCommand('chordpro.openSetlistPreview', () => {
-        const songs = songLibraryProvider.getSongs();
+        const selected = libraryTreeView.selection.filter(s => !s.isPlaceholder);
+        const songs = selected.length > 0 ? selected : songLibraryProvider.getSongs();
         if (!songs.length) { vscode.window.showErrorMessage('No songs in library. Set a folder first.'); return; }
         const sharedSvgs = buildSharedSvgMap();
         const songData = songs.map(s => ({
@@ -3131,6 +3132,7 @@ if(SONGS.length) loadSong(0);
 // ─────────────────────────────────────────────
 function registerTabEditor(context) {
     return vscode.commands.registerCommand('extension.openTabEditor', () => {
+        const targetEditor = vscode.window.activeTextEditor;
         const panel = vscode.window.createWebviewPanel(
             'chordproTabEditor',
             'Tab Editor',
@@ -3140,7 +3142,7 @@ function registerTabEditor(context) {
         panel.webview.html = getTabEditorContent();
         panel.webview.onDidReceiveMessage(msg => {
             if (msg.command === 'insertTab') {
-                const editor = vscode.window.activeTextEditor;
+                const editor = targetEditor || vscode.window.activeTextEditor;
                 if (!editor) { vscode.window.showErrorMessage('No active editor'); return; }
                 const text = '{start_of_tab}\n' + msg.tab + '\n{end_of_tab}';
                 editor.insertSnippet(new vscode.SnippetString(text));
@@ -3359,7 +3361,12 @@ document.addEventListener('keydown', e => {
   }
 });
 
-document.getElementById('btn-col').addEventListener('click',    () => { commit(); addNote(); render(); });
+document.getElementById('btn-col').addEventListener('click', () => {
+  commit();
+  if (selC >= 0) cols.splice(selC + 1, 0, { type: 'notes', values: Array(NS).fill('') });
+  else addNote();
+  selC = -1; selS = -1; render();
+});
 document.getElementById('btn-bar').addEventListener('click',    () => {
   commit();
   if (selC >= 0) cols.splice(selC + 1, 0, { type: 'bar' });
