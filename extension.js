@@ -1556,11 +1556,12 @@ body {
 .chord-diagram-cell { display: inline-flex; flex-direction: column; align-items: center; }
 .chord-diagram-cell svg { display: block; }
 .chord-diagram-cell .cd-label { font-size: 0.78em; font-weight: bold; color: var(--chord); margin-top: 2px; }
-.tab-block   {
+.tab-block, .grid-block {
   font-family: 'Courier New', monospace; font-size: 0.88em;
   background: var(--tab-bg); padding: 12px 16px; border-radius: 4px;
   border-left: 3px solid var(--tab-border); white-space: pre; overflow-x: auto;
 }
+.grid-block .chord { color: var(--chord); font-weight: bold; cursor: pointer; }
 .page-break  { border: none; border-top: 2px dashed var(--border); margin: 28px 0; }
 /* ── Progress bar ─────────────────────────────────────────────────────────── */
 #progress-bar {
@@ -1755,6 +1756,8 @@ function parse(text) {
       if (k === 'end_of_bridge'  ||k==='eob') { next('verse',   '',          false); continue; }
       if (k === 'start_of_tab'   ||k==='sot') { next('tab',     v||'Tab',    true);  continue; }
       if (k === 'end_of_tab'     ||k==='eot') { next('verse',   '',          false); continue; }
+      if (k === 'start_of_grid'  ||k==='sog') { next('grid',    v||'Grid',   true);  continue; }
+      if (k === 'end_of_grid'    ||k==='eog') { next('verse',   '',          false); continue; }
       if (k === 'comment'||k==='c'||k==='highlight') { cur.lines.push({ type:'comment',     text:v }); continue; }
       if (k === 'comment_italic' ||k==='ci')          { cur.lines.push({ type:'comment',     text:v }); continue; }
       if (k === 'comment_box'    ||k==='cb')          { cur.lines.push({ type:'comment-box', text:v }); continue; }
@@ -1764,10 +1767,11 @@ function parse(text) {
       continue;   // define, column_break, image, …
     }
 
-    if (cur.type === 'tab') { cur.lines.push({ type:'tab', text:line }); continue; }
-    if (!line.trim())       { cur.lines.push({ type:'empty' });          continue; }
-    if (line.includes('[')) { cur.lines.push({ type:'chord-line', segs: parseChordLine(line) }); }
-    else                    { cur.lines.push({ type:'lyric', text:line }); }
+    if (cur.type === 'tab')  { cur.lines.push({ type:'tab',       text:line }); continue; }
+    if (cur.type === 'grid') { cur.lines.push({ type:'grid-line', text:line }); continue; }
+    if (!line.trim())        { cur.lines.push({ type:'empty' });                continue; }
+    if (line.includes('['))  { cur.lines.push({ type:'chord-line', segs: parseChordLine(line) }); }
+    else                     { cur.lines.push({ type:'lyric', text:line }); }
   }
   flush();
   return { meta, sections };
@@ -1779,6 +1783,14 @@ function esc(s) {
 }
 function safeFmt(s) {
   return esc(s).replace(new RegExp('&lt;(\\/?(b|i|em|strong|u|s))&gt;', 'gi'), '\x3c$1\x3e');
+}
+function renderGridLine(text) {
+  return text.split(' ').map(function(tok) {
+    if (tok && /^[A-G][b#]?[^|.]*$/.test(tok) && tok !== '.' && CHORD_SVGS[tok]) {
+      return '\x3cspan class="chord" data-chord="' + esc(tok) + '"\x3e' + esc(tok) + '\x3c/span\x3e';
+    }
+    return esc(tok);
+  }).join(' ');
 }
 
 function render({ meta, sections }, transpose) {
@@ -1802,6 +1814,13 @@ function render({ meta, sections }, transpose) {
     if (sec.type === 'tab') {
       out.push('<pre class="tab-block">');
       for (const l of sec.lines) if (l.type === 'tab') out.push(esc(l.text));
+      out.push('</pre>');
+    } else if (sec.type === 'grid') {
+      out.push('<pre class="grid-block">');
+      for (const l of sec.lines) {
+        if (l.type !== 'grid-line') continue;
+        out.push(renderGridLine(l.text));
+      }
       out.push('</pre>');
     } else {
       for (const l of sec.lines) {
@@ -2302,7 +2321,8 @@ body { padding-top: 52px; padding-bottom: 80px; }
 .comment-box { border: 1px solid var(--border); padding: 4px 8px; border-radius: 4px; }
 .chorus-ref { color: var(--fg-muted); font-style: italic; }
 .empty-line { height: 0.6em; }
-.tab-block { font-family: monospace; font-size: 0.9em; background: var(--tab-bg); border: 1px solid var(--tab-border); padding: 8px 12px; border-radius: 4px; overflow-x: auto; white-space: pre; line-height: 1.5; }
+.tab-block, .grid-block { font-family: monospace; font-size: 0.9em; background: var(--tab-bg); border: 1px solid var(--tab-border); padding: 8px 12px; border-radius: 4px; overflow-x: auto; white-space: pre; line-height: 1.5; }
+.grid-block .chord { color: var(--chord); font-weight: bold; cursor: pointer; }
 .page-break { border: none; border-top: 1px dashed var(--border); margin: 16px 0; }
 .chord-diagrams { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 6px 0; }
 .chord-diagram-cell { display: inline-flex; flex-direction: column; align-items: center; }
@@ -2447,6 +2467,8 @@ function parse(text) {
       if (k==='end_of_bridge'||k==='eob')   { next('verse','',false); continue; }
       if (k==='start_of_tab'||k==='sot')    { next('tab',v||'Tab',true); continue; }
       if (k==='end_of_tab'||k==='eot')      { next('verse','',false); continue; }
+      if (k==='start_of_grid'||k==='sog')   { next('grid',v||'Grid',true); continue; }
+      if (k==='end_of_grid'||k==='eog')     { next('verse','',false); continue; }
       if (k==='comment'||k==='c'||k==='highlight') { cur.lines.push({type:'comment',text:v}); continue; }
       if (k==='comment_italic'||k==='ci')           { cur.lines.push({type:'comment',text:v}); continue; }
       if (k==='comment_box'||k==='cb')              { cur.lines.push({type:'comment-box',text:v}); continue; }
@@ -2455,8 +2477,9 @@ function parse(text) {
       if (k==='chord' && v && !v.includes('frets')) { cur.lines.push({type:'chord-diagram',name:v.trim()}); continue; }
       continue;
     }
-    if (cur.type==='tab') { cur.lines.push({type:'tab',text:line}); continue; }
-    if (!line.trim())     { cur.lines.push({type:'empty'}); continue; }
+    if (cur.type==='tab')  { cur.lines.push({type:'tab',       text:line}); continue; }
+    if (cur.type==='grid') { cur.lines.push({type:'grid-line', text:line}); continue; }
+    if (!line.trim())      { cur.lines.push({type:'empty'}); continue; }
     if (line.includes('[')) cur.lines.push({type:'chord-line',segs:parseChordLine(line)});
     else                    cur.lines.push({type:'lyric',text:line});
   }
@@ -2466,6 +2489,14 @@ function parse(text) {
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function safeFmt(s) { return esc(s).replace(new RegExp('&lt;(\\/?(b|i|em|strong|u|s))&gt;', 'gi'), '\x3c$1\x3e'); }
+function renderGridLine(text) {
+  return text.split(' ').map(function(tok) {
+    if (tok && /^[A-G][b#]?[^|.]*$/.test(tok) && tok !== '.' && CHORD_SVGS[tok]) {
+      return '\x3cspan class="chord" data-chord="' + esc(tok) + '"\x3e' + esc(tok) + '\x3c/span\x3e';
+    }
+    return esc(tok);
+  }).join(' ');
+}
 
 function render({ meta, sections }, transpose) {
   var out = ['<div class="song-header">'];
@@ -2484,6 +2515,13 @@ function render({ meta, sections }, transpose) {
     if (sec.type === 'tab') {
       out.push('<pre class="tab-block">');
       for (var l of sec.lines) if (l.type==='tab') out.push(esc(l.text));
+      out.push('</pre>');
+    } else if (sec.type === 'grid') {
+      out.push('<pre class="grid-block">');
+      for (var l of sec.lines) {
+        if (l.type !== 'grid-line') continue;
+        out.push(renderGridLine(l.text));
+      }
       out.push('</pre>');
     } else {
       for (var l of sec.lines) {
@@ -2877,33 +2915,56 @@ if(SONGS.length) loadSong(0);
     const chordHoverProvider = vscode.languages.registerHoverProvider('chordpro', {
         provideHover(document, position) {
             const line = document.lineAt(position).text;
+
+            // Helper: build hover for a chord name with given token range
+            function hoverForChord(chordName, start, end) {
+                const docDefines = parseDocumentDefines(document);
+                const saved = context.globalState.get(`chord_${chordName}`);
+                let frets = docDefines[chordName]
+                    ?? (saved ? [...saved.frets].reverse() : null)
+                    ?? CHORD_DB[chordName];
+                const usageRe = new RegExp('\\[' + escapeRegex(chordName) + '\\]', 'g');
+                const usageCount = (document.getText().match(usageRe) || []).length;
+                const md = new vscode.MarkdownString();
+                md.isTrusted = true;
+                md.supportHtml = true;
+                if (frets) {
+                    const svg = generateChordSvg(frets, chordName);
+                    const b64 = Buffer.from(svg).toString('base64');
+                    md.appendMarkdown(`**${chordName}**\n\n![${chordName}](data:image/svg+xml;base64,${b64})`);
+                } else {
+                    md.appendMarkdown(`**${chordName}**`);
+                }
+                md.appendMarkdown(`\n\n*Used ${usageCount}× in this file*`);
+                return new vscode.Hover(md, new vscode.Range(position.line, start, position.line, end));
+            }
+
+            // Standard [chord] tokens
             const re = /\[([A-G][b#]?[^\]]*)\]/g;
             let m;
             while ((m = re.exec(line)) !== null) {
                 const start = m.index, end = m.index + m[0].length;
                 if (position.character >= start && position.character <= end) {
-                    const chordName = m[1];
-                    // Priority: {define:} in document > Chord Builder globalState > CHORD_DB
-                    // Chord Builder stores frets as [highE, B, G, D, A, lowE] — reverse to match CHORD_DB order
-                    const docDefines = parseDocumentDefines(document);
-                    const saved = context.globalState.get(`chord_${chordName}`);
-                    let frets = docDefines[chordName]
-                        ?? (saved ? [...saved.frets].reverse() : null)
-                        ?? CHORD_DB[chordName];
-                    const usageRe = new RegExp('\\[' + escapeRegex(chordName) + '\\]', 'g');
-                    const usageCount = (document.getText().match(usageRe) || []).length;
-                    const md = new vscode.MarkdownString();
-                    md.isTrusted = true;
-                    md.supportHtml = true;
-                    if (frets) {
-                        const svg = generateChordSvg(frets, chordName);
-                        const b64 = Buffer.from(svg).toString('base64');
-                        md.appendMarkdown(`**${chordName}**\n\n![${chordName}](data:image/svg+xml;base64,${b64})`);
-                    } else {
-                        md.appendMarkdown(`**${chordName}**`);
+                    return hoverForChord(m[1], start, end);
+                }
+            }
+
+            // Grid chord tokens: bare chord names on lines inside {start_of_grid} blocks
+            const lineNo = position.line;
+            const docText = document.getText();
+            const docLines = docText.split('\n');
+            let inGrid = false;
+            for (let i = 0; i < lineNo; i++) {
+                if (/\{start_of_grid\b/i.test(docLines[i])) inGrid = true;
+                else if (/\{end_of_grid\b/i.test(docLines[i])) inGrid = false;
+            }
+            if (inGrid && !/^\s*\{/.test(line)) {
+                const gridRe = /(?<![^\s|])([A-G][b#]?\S*)/g;
+                while ((m = gridRe.exec(line)) !== null) {
+                    const start = m.index, end = m.index + m[1].length;
+                    if (position.character >= start && position.character <= end) {
+                        return hoverForChord(m[1], start, end);
                     }
-                    md.appendMarkdown(`\n\n*Used ${usageCount}× in this file*`);
-                    return new vscode.Hover(md, new vscode.Range(position.line, start, position.line, end));
                 }
             }
         }
@@ -3301,7 +3362,8 @@ if(SONGS.length) loadSong(0);
         createChordProConfig,
         registerChordProConfig,
         editChordProConfig,
-        setUserConfigsFolder
+        setUserConfigsFolder,
+        registerGridEditor(context)
     );
 }
 
@@ -3570,6 +3632,310 @@ render();
 </body>
 </html>`;
 }
+
+
+// ─────────────────────────────────────────────
+// Grid Editor
+// ─────────────────────────────────────────────
+function registerGridEditor(context) {
+    return vscode.commands.registerCommand('extension.openGridEditor', () => {
+        const targetEditor = vscode.window.activeTextEditor;
+        const songChords = [];
+        if (targetEditor) {
+            const text = targetEditor.document.getText();
+            const seen = new Set();
+            const re = /\[([A-G][^\[\]]*)\]/g;
+            let m;
+            while ((m = re.exec(text)) !== null) {
+                const ch = m[1].trim();
+                if (ch && !seen.has(ch)) { seen.add(ch); songChords.push(ch); }
+            }
+        }
+        const panel = vscode.window.createWebviewPanel(
+            'chordproGridEditor',
+            'Grid Editor',
+            vscode.ViewColumn.Beside,
+            { enableScripts: true, retainContextWhenHidden: true }
+        );
+        panel.webview.html = getGridEditorContent(songChords);
+        panel.webview.onDidReceiveMessage(msg => {
+            if (msg.command === 'insertGrid') {
+                const editor = targetEditor || vscode.window.activeTextEditor;
+                if (!editor) { vscode.window.showErrorMessage('No active editor'); return; }
+                const text = '{start_of_grid}\n' + msg.grid + '\n{end_of_grid}';
+                editor.insertSnippet(new vscode.SnippetString(text));
+            }
+        });
+    });
+}
+
+function getGridEditorContent(songChords) {
+    const chordsJson = JSON.stringify(songChords);
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #111118; color: #d4c5a0; font-family: sans-serif;
+  padding: 12px; display: flex; flex-direction: column; height: 100vh; gap: 10px;
+}
+#toolbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; flex-shrink: 0; }
+.btn {
+  padding: 4px 14px; background: #2a2a3a; border: 1px solid #4a4a6a;
+  color: #d4c5a0; border-radius: 3px; cursor: pointer; font-size: 12px;
+}
+.btn:hover { background: #3a3a50; }
+.btn-insert { background: #2a5a28; border-color: #4a8a38; color: #b8e890; }
+.btn-insert:hover { background: #3a6a38; }
+.tsep { color: #444; font-size: 14px; }
+label { font-size: 12px; color: #999; }
+select {
+  background: #2a2a3a; border: 1px solid #4a4a6a; color: #d4c5a0;
+  border-radius: 3px; padding: 3px 6px; font-size: 12px; cursor: pointer;
+}
+#grid-wrap { overflow-x: auto; flex-shrink: 0; }
+table { border-collapse: collapse; }
+td { padding: 1px 1px; vertical-align: middle; }
+.row-marker, .row-end {
+  font-family: monospace; font-size: 15px; font-weight: bold; color: #777;
+  white-space: nowrap; padding: 0 5px;
+}
+.bar-sep { width: 6px; }
+.bar-sep-inner { width: 2px; height: 28px; background: #555; margin: 0 auto; }
+.beat-gap { width: 3px; }
+.beat-input {
+  width: 54px; background: #1a1a28; border: 1px solid #2e2e44;
+  color: #e8e8b0; border-radius: 2px; padding: 4px 4px;
+  font-family: monospace; font-size: 13px; text-align: center; outline: none;
+}
+.beat-input.secondary {
+  background: #141420; border-color: #22223a; color: #888870; width: 44px;
+}
+.beat-input::placeholder { color: #333350; font-size: 11px; }
+.beat-input.secondary::placeholder { color: #252535; }
+.beat-input:focus { border-color: #4488ee; background: #1c2238; color: #fff; }
+.beat-input.secondary:focus { border-color: #2255aa; background: #161e2e; color: #ccddff; }
+#palette-section { flex-shrink: 0; }
+#palette-label { font-size: 11px; color: #555; margin-bottom: 5px; }
+#chord-buttons { display: flex; flex-wrap: wrap; gap: 4px; }
+.chord-btn {
+  padding: 3px 11px; background: #222232; border: 1px solid #3a3a5a;
+  color: #b8b0d0; border-radius: 3px; cursor: pointer;
+  font-size: 12px; font-family: monospace;
+}
+.chord-btn:hover { background: #2e2e50; border-color: #6060a0; color: #e0d8ff; }
+#preview-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
+#preview-label { font-size: 11px; color: #555; }
+#preview {
+  font-family: 'Courier New', monospace; font-size: 13px;
+  background: #1a1a28; padding: 10px 14px; border-radius: 4px;
+  border: 1px solid #2a2a45; color: #99aacc; white-space: pre;
+  overflow: auto; flex: 1;
+}
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <button class="btn" id="btn-add-line">+ Line</button>
+  <button class="btn" id="btn-add-bar">+ Bar</button>
+  <button class="btn" id="btn-del-line">&#8722; Last line</button>
+  <button class="btn" id="btn-del-bar">&#8722; Last bar</button>
+  <button class="btn" id="btn-clear">Clear</button>
+  <span class="tsep">|</span>
+  <label>Time&nbsp;<select id="beats-sel">
+    <option value="4" selected>4/4</option>
+    <option value="3">3/4</option>
+    <option value="2">2/4</option>
+  </select></label>
+  <span class="tsep">|</span>
+  <button class="btn btn-insert" id="btn-insert">Insert grid</button>
+</div>
+<div id="grid-wrap"><table id="grid"><tbody></tbody></table></div>
+<div id="palette-section">
+  <div id="palette-label">Song chords &#8212; click to fill selected cell and advance</div>
+  <div id="chord-buttons"></div>
+</div>
+<div id="preview-wrap">
+  <div id="preview-label">Preview</div>
+  <div id="preview"></div>
+</div>
+<script>
+var vscode = acquireVsCodeApi();
+var SONG_CHORDS = ${chordsJson};
+
+// rows[ri][bi][ki] = chord string; empty string = dot in output
+var beats = 4;
+var numBars = 4;
+var rows = [];
+var lastFocused = null; // { r, b, k }
+
+function makeBar()  { return new Array(beats).fill(''); }
+function makeLine() { var l = []; for (var i = 0; i < numBars; i++) l.push(makeBar()); return l; }
+
+rows.push(makeLine());
+rows.push(makeLine());
+
+function generateGrid() {
+  var colW = [];
+  for (var bi = 0; bi < numBars; bi++) {
+    colW[bi] = [];
+    for (var ki = 0; ki < beats; ki++) {
+      var mx = 1;
+      rows.forEach(function(row) { var v = row[bi][ki] || '.'; if (v.length > mx) mx = v.length; });
+      colW[bi][ki] = mx;
+    }
+  }
+  return rows.map(function(row, ri) {
+    var isFirst = ri === 0, isLast = ri === rows.length - 1;
+    var parts = [];
+    for (var bi = 0; bi < numBars; bi++) {
+      var bp = [];
+      for (var ki = 0; ki < beats; ki++) {
+        bp.push((row[bi][ki] || '.').padEnd(colW[bi][ki]));
+      }
+      parts.push(bp.join(' '));
+    }
+    return (isFirst ? '|| ' : '|  ') + parts.join(' | ').trimEnd() + (isLast ? ' ||' : ' |');
+  }).join('\\n');
+}
+
+function escAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+function render() {
+  var html = '';
+  rows.forEach(function(row, ri) {
+    var isFirst = ri === 0, isLast = ri === rows.length - 1;
+    html += '<tr>';
+    html += '<td class="row-marker">' + (isFirst ? '||' : '|') + '</td>';
+    for (var bi = 0; bi < numBars; bi++) {
+      if (bi > 0) html += '<td class="bar-sep"><div class="bar-sep-inner"></div></td>';
+      for (var ki = 0; ki < beats; ki++) {
+        if (ki > 0) html += '<td class="beat-gap"></td>';
+        var v = row[bi][ki];
+        var cls = 'beat-input' + (ki > 0 ? ' secondary' : '');
+        var ph  = ki === 0 ? 'chord' : '\u00b7';
+        html += '<td><input class="' + cls + '" data-r="' + ri + '" data-b="' + bi + '" data-k="' + ki
+              + '" value="' + escAttr(v) + '" placeholder="' + ph + '"></td>';
+      }
+    }
+    html += '<td class="row-end">' + (isLast ? '||' : '|') + '</td>';
+    html += '</tr>';
+  });
+  document.querySelector('#grid tbody').innerHTML = html;
+  document.querySelectorAll('.beat-input').forEach(function(inp) {
+    inp.addEventListener('input', function() {
+      rows[+inp.dataset.r][+inp.dataset.b][+inp.dataset.k] = inp.value;
+      updatePreview();
+    });
+    inp.addEventListener('focus', function() {
+      lastFocused = { r: +inp.dataset.r, b: +inp.dataset.b, k: +inp.dataset.k };
+    });
+    inp.addEventListener('keydown', navHandler);
+  });
+  updatePreview();
+}
+
+function navHandler(e) {
+  var inp = e.target;
+  var r = +inp.dataset.r, b = +inp.dataset.b, k = +inp.dataset.k;
+  if (e.key === 'Tab' && e.shiftKey) {
+    e.preventDefault(); advance(r, b, k, -1);
+  } else if (e.key === 'Tab' || e.key === 'Enter') {
+    e.preventDefault(); advance(r, b, k, 1);
+  } else if (e.key === 'ArrowRight' && inp.selectionStart === inp.value.length) {
+    e.preventDefault(); advance(r, b, k, 1);
+  } else if (e.key === 'ArrowLeft' && inp.selectionStart === 0) {
+    e.preventDefault(); advance(r, b, k, -1);
+  } else if (e.key === 'ArrowDown' && r + 1 < rows.length) {
+    e.preventDefault(); focusCell(r + 1, b, k);
+  } else if (e.key === 'ArrowUp' && r > 0) {
+    e.preventDefault(); focusCell(r - 1, b, k);
+  }
+}
+
+function advance(r, b, k, dir) {
+  k += dir;
+  if (k >= beats)  { k = 0; b++; }
+  if (k < 0)       { k = beats - 1; b--; }
+  if (b >= numBars){ b = 0; r++; }
+  if (b < 0)       { b = numBars - 1; r--; }
+  r = Math.max(0, Math.min(rows.length - 1, r));
+  b = Math.max(0, Math.min(numBars - 1, b));
+  focusCell(r, b, k);
+}
+
+function focusCell(r, b, k) {
+  var inp = document.querySelector('.beat-input[data-r="'+r+'"][data-b="'+b+'"][data-k="'+k+'"]');
+  if (inp) { lastFocused = { r: r, b: b, k: k }; inp.focus(); inp.select(); }
+}
+
+function updatePreview() {
+  document.getElementById('preview').textContent =
+    '{start_of_grid}\\n' + generateGrid() + '\\n{end_of_grid}';
+}
+
+document.getElementById('btn-add-line').addEventListener('click', function() {
+  rows.push(makeLine()); var pf = lastFocused; render();
+  if (pf) focusCell(pf.r, pf.b, pf.k);
+});
+document.getElementById('btn-del-line').addEventListener('click', function() {
+  if (rows.length > 1) { rows.pop(); render(); }
+});
+document.getElementById('btn-add-bar').addEventListener('click', function() {
+  rows.forEach(function(row) { row.push(makeBar()); }); numBars++;
+  var pf = lastFocused; render();
+  if (pf) focusCell(pf.r, pf.b, pf.k);
+});
+document.getElementById('btn-del-bar').addEventListener('click', function() {
+  if (numBars > 1) { rows.forEach(function(row) { row.pop(); }); numBars--; render(); }
+});
+document.getElementById('btn-clear').addEventListener('click', function() {
+  rows.forEach(function(row) { row.forEach(function(bar) { for (var k=0;k<bar.length;k++) bar[k]=''; }); });
+  render();
+});
+document.getElementById('beats-sel').addEventListener('change', function() {
+  var nb = +this.value;
+  rows.forEach(function(row) { row.forEach(function(bar) {
+    while (bar.length < nb) bar.push('');
+    bar.length = nb;
+  }); });
+  beats = nb; render();
+});
+document.getElementById('btn-insert').addEventListener('click', function() {
+  vscode.postMessage({ command: 'insertGrid', grid: generateGrid() });
+});
+
+var paletteDiv = document.getElementById('chord-buttons');
+if (SONG_CHORDS.length) {
+  SONG_CHORDS.forEach(function(ch) {
+    var btn = document.createElement('button');
+    btn.className = 'chord-btn';
+    btn.textContent = ch;
+    btn.addEventListener('mousedown', function(e) { e.preventDefault(); });
+    btn.addEventListener('click', function() {
+      if (!lastFocused) return;
+      var r = lastFocused.r, b = lastFocused.b, k = lastFocused.k;
+      rows[r][b][k] = ch;
+      var inp = document.querySelector('.beat-input[data-r="'+r+'"][data-b="'+b+'"][data-k="'+k+'"]');
+      if (inp) inp.value = ch;
+      updatePreview();
+      advance(r, b, k, 1);
+    });
+    paletteDiv.appendChild(btn);
+  });
+} else {
+  paletteDiv.innerHTML = '<span style="color:#444;font-size:11px">No chords found in document</span>';
+}
+
+render();
+</script>
+</body>
+</html>`;
+}
+
 
 
 function deactivate() {}

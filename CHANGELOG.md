@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.0
+- **Grid Editor** (`Ctrl+Alt+G`) — visual editor for `{start_of_grid}` blocks: multi-beat cells per bar, song chord palette, Tab/Shift+Tab navigation, live preview
+- **Chord hover in grids** — chord names inside `{start_of_grid}` blocks are syntax-highlighted green in the source file and show SVG diagram tooltips on hover, both in the source and in the HTML preview
+- **`{define:}` chords** recognized in grid hover diagrams
+
 ## 1.11.0
 - **User Config Library** — personal `.json` config files stored in a configurable folder (Dropbox-friendly); manage via new `ChordPro: Create / Import / Edit Config` and `ChordPro: Set User Configs Folder` commands
 - **Bundled config presets** — extension ships with a *two columns* preset config ready to use

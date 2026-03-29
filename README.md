@@ -93,6 +93,7 @@ PDF rendering requires the [ChordPro CLI](https://www.chordpro.org/chordpro/chor
 | ChordPro: Insert Chord by Name | `Ctrl+I` | Insert a saved chord by typing its name |
 | ChordPro: Insert Chord from List | `Ctrl+L` | Pick a saved chord from a quick-pick list |
 | ChordPro: Open Tab Editor | `Ctrl+Alt+T` | Visual tab editor — click cells, type fret numbers |
+| ChordPro: Open Grid Editor | `Ctrl+Alt+G` | Visual chord grid editor — build `{start_of_grid}` blocks with a click-to-fill UI, with hover diagrams |
 | ChordPro: Transpose Chords | — | Shift all chords (or a selection) by any number of semitones |
 | ChordPro: Capo Helper (Concert Pitch) | — | Show the chords other instruments hear given the current `{capo:}` |
 | ChordPro: Detect Key | — | Analyse all chords and suggest the key; optionally insert `{key:}` |
@@ -183,6 +184,30 @@ Open with `Ctrl+Alt+T`.
 - **| Bar** inserts a bar line; **Delete last** removes the rightmost column; **Clear** empties all values
 - A live tab preview is shown below the grid
 - **Insert tab** wraps the result in `{start_of_tab}` / `{end_of_tab}` and inserts it at the cursor position in the source file
+
+### Grid Editor
+
+Open with `Ctrl+Alt+G`.
+
+Build `{start_of_grid}` chord progression grids visually:
+
+- Each row is a line of the grid; each bar has one input per beat
+- Beat 1 (primary chord) is larger; beats 2–4 are smaller — visually distinct
+- Click a cell (or use `Tab` / `Shift+Tab` / arrow keys) to select it, then type the chord name
+- **Song chords palette** — all `[chord]` tokens found in the open song are shown as buttons at the bottom; click any to fill the selected cell and auto-advance to the next beat
+- **+ Line** / **− Last line** add or remove rows; **+ Bar** / **− Last bar** add or remove columns across all rows
+- **Time** selector sets the time signature (4/4, 3/4, 2/4)
+- First row starts with `||`, last row ends with `||`; all others use single `|`; empty beats render as `.`
+- Live preview updates as you type
+- **Insert grid** wraps the result in `{start_of_grid}` / `{end_of_grid}` and inserts it at the cursor
+
+### Chord hover in grids
+
+Chord names inside `{start_of_grid}` blocks are fully interactive — both in the source file and in the HTML preview:
+
+- **Source file** — chord names are syntax-highlighted in green (same as `[chord]` tokens); hover for the SVG diagram popup
+- **HTML preview** — chord names are bold and colored; hover for the diagram tooltip
+- Custom chords defined via `{define:}` in the file are recognized with their fingering diagram
 
 ### Transposing
 

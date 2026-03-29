@@ -4,6 +4,7 @@
   "scopeName": "source.chordpro",
   "patterns": [
     { "include": "#comment" },
+    { "include": "#grid-block" },
     { "include": "#section-directive" },
     { "include": "#define-directive" },
     { "include": "#metadata-directive" },
@@ -12,6 +13,28 @@
     { "include": "#chord" }
   ],
   "repository": {
+
+    "grid-block": {
+      "begin": "(\\{)(start_of_grid|sog)([^}]*)(\\})",
+      "end": "(\\{)(end_of_grid|eog)(\\})",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.directive.chordpro" },
+        "2": { "name": "keyword.control.section.chordpro" },
+        "3": { "name": "string.unquoted.section.label.chordpro" },
+        "4": { "name": "punctuation.definition.directive.chordpro" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.directive.chordpro" },
+        "2": { "name": "keyword.control.section.chordpro" },
+        "3": { "name": "punctuation.definition.directive.chordpro" }
+      },
+      "patterns": [
+        {
+          "match": "(?<=[|\\s])([A-G][b#]?\\S*)(?=[|\\s])",
+          "name": "entity.name.tag.chordpro"
+        }
+      ]
+    },
 
     "comment": {
       "match": "^\\s*#.*$",
@@ -28,7 +51,7 @@
     },
 
     "section-directive": {
-      "match": "(\\{)(start_of_chorus|end_of_chorus|start_of_verse|end_of_verse|start_of_bridge|end_of_bridge|start_of_tab|end_of_tab|start_of_grid|end_of_grid|start_of_textblock|end_of_textblock|start_of_abc|end_of_abc|start_of_ly|end_of_ly|start_of_svg|end_of_svg|soc|eoc|sov|eov|sob|eob|sot|eot|sog|eog|chorus)([^}]*)(\\})",
+      "match": "(\\{)(start_of_chorus|end_of_chorus|start_of_verse|end_of_verse|start_of_bridge|end_of_bridge|start_of_tab|end_of_tab|start_of_textblock|end_of_textblock|start_of_abc|end_of_abc|start_of_ly|end_of_ly|start_of_svg|end_of_svg|soc|eoc|sov|eov|sob|eob|sot|eot|chorus)([^}]*)(\\})",
       "captures": {
         "1": { "name": "punctuation.definition.directive.chordpro" },
         "2": { "name": "keyword.control.section.chordpro" },
