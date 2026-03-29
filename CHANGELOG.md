@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.11.0
+- **User Config Library** — personal `.json` config files stored in a configurable folder (Dropbox-friendly); manage via new `ChordPro: Create / Import / Edit Config` and `ChordPro: Set User Configs Folder` commands
+- **Bundled config presets** — extension ships with a *two columns* preset config ready to use
+- **All commands prefixed `ChordPro:`** — every command in the palette now starts with `ChordPro:` for easy discovery
+
 ## 1.10.0
 - **`{chord: Name}` directive** — name-only chord directives (without fret data) now render inline fretboard diagrams in the HTML preview and setlist
 - **Safe inline HTML** — `<b>`, `<i>`, `<em>`, `<strong>`, `<u>`, `<s>` tags in lyric and comment lines are now rendered as formatted text instead of escaped source

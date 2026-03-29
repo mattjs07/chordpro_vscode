@@ -62,10 +62,10 @@ PDF rendering requires the [ChordPro CLI](https://www.chordpro.org/chordpro/chor
 
 | Command | Shortcut | Description |
 |---|---|---|
-| Auto-scroll Preview | `Ctrl+Alt+S` | Render the song as HTML and open the performance view |
-| Open Chord Analyzer | `Ctrl+Alt+A` | Open Oolimo in a side panel |
-| Preview ChordPro PDF | `Ctrl+Shift+V` | Render and open the PDF beside the editor |
-| Render ChordPro PDF | `Ctrl+Shift+B` | Compile the active `.cho` file to PDF |
+| ChordPro: Auto-scroll Preview | `Ctrl+Alt+S` | Render the song as HTML and open the performance view |
+| ChordPro: Open Chord Analyzer | `Ctrl+Alt+A` | Open Oolimo in a side panel |
+| ChordPro: Preview PDF | `Ctrl+Shift+V` | Render and open the PDF beside the editor |
+| ChordPro: Render PDF | `Ctrl+Shift+B` | Compile the active `.cho` file to PDF |
 
 ### Auto-scroll controls (inside the preview)
 
@@ -89,21 +89,21 @@ PDF rendering requires the [ChordPro CLI](https://www.chordpro.org/chordpro/chor
 
 | Command | Shortcut | Description |
 |---|---|---|
-| Open Chord Builder | `Ctrl+Alt+D` | Interactive fretboard panel to define custom chords |
-| Insert Chord by Name | `Ctrl+I` | Insert a saved chord by typing its name |
-| Insert Chord from List | `Ctrl+L` | Pick a saved chord from a quick-pick list |
-| Open Tab Editor | `Ctrl+Alt+T` | Visual tab editor — click cells, type fret numbers |
-| Transpose Chords | — | Shift all chords (or a selection) by any number of semitones |
-| Show Concert Pitch Chords | — | Show the chords other instruments hear given the current `{capo:}` |
-| Detect Key | — | Analyse all chords and suggest the key; optionally insert `{key:}` |
+| ChordPro: Open Chord Builder | `Ctrl+Alt+D` | Interactive fretboard panel to define custom chords |
+| ChordPro: Insert Chord by Name | `Ctrl+I` | Insert a saved chord by typing its name |
+| ChordPro: Insert Chord from List | `Ctrl+L` | Pick a saved chord from a quick-pick list |
+| ChordPro: Open Tab Editor | `Ctrl+Alt+T` | Visual tab editor — click cells, type fret numbers |
+| ChordPro: Transpose Chords | — | Shift all chords (or a selection) by any number of semitones |
+| ChordPro: Capo Helper (Concert Pitch) | — | Show the chords other instruments hear given the current `{capo:}` |
+| ChordPro: Detect Key | — | Analyse all chords and suggest the key; optionally insert `{key:}` |
 
 ### Song Library & Setlist
 
 | Command | Description |
 |---|---|
-| Set Library Folder (`📂` button) | Choose the root folder containing your `.cho` files (subfolders are scanned recursively) |
-| Refresh Library (`⟳` button) | Re-scan the library folder |
-| Play as Setlist (`▶` button) | Open selected songs (or all songs) in the Setlist Preview |
+| ChordPro: Set Library Folder (`📂` button) | Choose the root folder containing your `.cho` files (subfolders are scanned recursively) |
+| ChordPro: Refresh Library (`⟳` button) | Re-scan the library folder |
+| ChordPro: Play as Setlist (`▶` button) | Open selected songs (or all songs) in the Setlist Preview |
 | Click a song | Open the `.cho` file in the editor |
 | Right-click a song → Preview | Open the song in the Auto-scroll Preview |
 
@@ -119,9 +119,13 @@ PDF rendering requires the [ChordPro CLI](https://www.chordpro.org/chordpro/chor
 
 | Command | Description |
 |---|---|
-| Open ChordPro Minimal Template | Blank template to start a new song |
-| Open ChordPro Example Template | Example file (Yesterday by The Beatles) |
-| Configure ChordPro Rendering | Guided UI for config, options, suffix, output (also via ⚙ CodeLens above line 1) |
+| ChordPro: New Minimal Template | Blank template to start a new song |
+| ChordPro: New Example Template | Example file (Yesterday by The Beatles) |
+| ChordPro: Configure Rendering | Guided UI for config, options, suffix, output (also via ⚙ CodeLens above line 1) |
+| ChordPro: Create Config | Create a new named `.json` config file in your user configs folder |
+| ChordPro: Import Config to User Library | Copy an existing `.json` file into your user configs folder |
+| ChordPro: Edit Config | Open a user config file for editing |
+| ChordPro: Set User Configs Folder | Choose the folder where your personal config files are stored (defaults to VS Code global storage) |
 
 ---
 
@@ -220,6 +224,25 @@ Add these in the **first 25 lines** of your `.cho` file to control how the PDF i
 - **Auto-completion** — type `# {` in the first 25 lines for a dropdown of parameters; `config` offers a preset picker
 - **Hover tooltip** — hover over a `# {key = ...}` line to see a description, valid values, and common CLI flags
 - **⚙ CodeLens** — click the **⚙ Configure rendering** button above line 1 for a guided step-by-step UI
+
+### User Config Library
+
+The `config` picker in **⚙ Configure rendering** shows three tiers:
+
+- **My configs** — your personal `.json` files, stored in a folder of your choice
+- **Extension presets** — configs bundled with the extension (e.g. *two columns*)
+- **ChordPro built-in presets** — `modern1`, `dark`, `nashville`, etc.
+
+Manage your personal configs via the `ChordPro: …` commands in the palette:
+
+| Command | What it does |
+|---|---|
+| **Create Config** | Prompts for a name, creates a new `.json` and opens it for editing |
+| **Import Config to User Library** | File picker — copies any existing `.json` into your user configs folder |
+| **Edit Config** | Pick a saved config from a list and open it |
+| **Set User Configs Folder** | Folder picker — point to any location (Dropbox, network drive, etc.) |
+
+The folder defaults to VS Code's global storage and is created automatically on first use.
 
 ### Chord Analyzer (Oolimo)
 

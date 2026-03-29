@@ -1,0 +1,64 @@
+{
+  "settings": {
+    "lyrics-only": false,
+    "columns": 2
+  },
+  "pdf": {
+    "theme": {
+      "foreground"        : "black",
+      "foreground-light"  : "grey90",
+      "foreground-medium" : "grey70",
+      "background"        : "none"
+      // Dark theme:
+      // "foreground"       : "white",
+      // "foreground-light" : "#555555",
+      // "background"       : "black"
+    },
+    "columnspace" : 40,
+    // "margintop"    : 80,
+    // "marginbottom" : 40,
+    // "marginleft"   : 40,
+    // "marginright"  : 40,
+    // "headspace"    : 60,
+    // "footspace"    : 20,
+    "spacing" : {
+      "title"         : 1.2,
+      "lyrics"        : 1.4,
+      "chords"        : 1.2,
+      "diagramchords" : 1.2,
+      "grid"          : 1.2,
+      "tab"           : 1,
+      "toc"           : 1.4,
+      "empty"         : 1
+    },
+    "diagrams" : {
+      "align"    :  "left",   // or right, center, spread
+      "width"    :  6,        // of a cell
+      "height"   :  6,        // of a cell
+      "vcells"   :  4,        // vertically
+      "linewidth" : 0.1,      // of a cell width
+      "nutwidth" :  5,        // linewidth
+      "hspace"   :  3.95,     // horizontal space between, fraction of width
+      "vspace"   :  3,        // vertical space between, fraction of height
+      "dotsize"  :  0.8,      // of a dot
+      "barwidth" :  0.8,      // of a dot
+      "fingers"  :  true,     // show fingering if available (or "below")
+      "show"     :  "bottom"  // or top, right, below, false
+    },
+    "chorus" : {
+      "indent" : 7,
+      "bar": {
+        "offset" : 10,
+        "width"  : 2,
+        "color"  : "grey"
+      },
+      "tag" : "Chorus",
+      "recall" : {
+        "choruslike" : false,
+        "tag"        : "Chorus",
+        "type"       : "comment",
+        "quote"      : false
+      }
+    }
+  }
+}

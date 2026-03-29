@@ -3,7 +3,7 @@
   "displayName": "ChordPro VSCode",
   "description": "Edit, render, and build ChordPro songs in VSCode — includes PDF rendering, templates, and an interactive chord builder with fretboard.",
   "publisher": "mattjs07",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "icon": "images/icon.png",
   "categories": [
     "Other"
@@ -77,87 +77,103 @@
     "commands": [
       {
         "command": "extension.renderChordPro",
-        "title": "Render ChordPro PDF"
+        "title": "ChordPro: Render PDF"
       },
       {
         "command": "extension.previewChordPro",
-        "title": "Preview ChordPro PDF"
+        "title": "ChordPro: Preview PDF"
       },
       {
         "command": "extension.openChordProMinimalTemplate",
-        "title": "Open ChordPro Minimal Template"
+        "title": "ChordPro: New Minimal Template"
       },
       {
         "command": "extension.openChordProExampleTemplate",
-        "title": "Open ChordPro Example Template"
+        "title": "ChordPro: New Example Template"
       },
       {
         "command": "extension.openChordProTemplate",
-        "title": "Open ChordPro Template"
+        "title": "ChordPro: New Template"
       },
       {
         "command": "chordproFretboard.openBuilder",
-        "title": "Open Chord Builder"
+        "title": "ChordPro: Open Chord Builder"
       },
       {
         "command": "chordproFretboard.insertChord",
-        "title": "Insert Chord by Name"
+        "title": "ChordPro: Insert Chord by Name"
       },
       {
         "command": "chordproFretboard.insertChordFromList",
-        "title": "Insert Chord from List"
+        "title": "ChordPro: Insert Chord from List"
       },
       {
         "command": "extension.configureRendering",
-        "title": "Configure ChordPro Rendering"
+        "title": "ChordPro: Configure Rendering"
       },
       {
         "command": "extension.openChordAnalyzer",
-        "title": "Open Chord Analyzer (Oolimo)"
+        "title": "ChordPro: Open Chord Analyzer (Oolimo)"
       },
       {
         "command": "extension.autoScrollPreview",
-        "title": "Auto-scroll Preview"
+        "title": "ChordPro: Auto-scroll Preview"
       },
       {
         "command": "extension.openTabEditor",
-        "title": "Open Tab Editor"
+        "title": "ChordPro: Open Tab Editor"
       },
       {
         "command": "extension.transposeChords",
-        "title": "Transpose Chords"
+        "title": "ChordPro: Transpose Chords"
       },
       {
         "command": "extension.capoHelper",
-        "title": "Show Concert Pitch Chords (Capo Helper)"
+        "title": "ChordPro: Capo Helper (Concert Pitch)"
       },
       {
         "command": "extension.detectKey",
-        "title": "Detect Key"
+        "title": "ChordPro: Detect Key"
       },
       {
         "command": "chordpro.setLibraryFolder",
-        "title": "Set Library Folder",
+        "title": "ChordPro: Set Library Folder",
         "icon": "$(folder-opened)"
       },
       {
         "command": "chordpro.refreshLibrary",
-        "title": "Refresh Library",
+        "title": "ChordPro: Refresh Library",
         "icon": "$(refresh)"
       },
       {
         "command": "chordpro.openSetlistPreview",
-        "title": "Play as Setlist",
+        "title": "ChordPro: Play as Setlist",
         "icon": "$(play)"
       },
       {
         "command": "chordpro.previewSongFromLibrary",
-        "title": "Preview Song",
+        "title": "ChordPro: Preview Song",
         "icon": "$(play)"
       },
       {
         "command": "chordpro.openSong",
-        "title": "Open Song"
+        "title": "ChordPro: Open Song"
+      },
+      {
+        "command": "extension.createChordProConfig",
+        "title": "ChordPro: Create Config"
+      },
+      {
+        "command": "extension.registerChordProConfig",
+        "title": "ChordPro: Import Config to User Library"
+      },
+      {
+        "command": "extension.editChordProConfig",
+        "title": "ChordPro: Edit Config"
+      },
+      {
+        "command": "extension.setUserConfigsFolder",
+        "title": "ChordPro: Set User Configs Folder"
       }
     ],
     "menus": {
@@ -235,6 +251,11 @@
           "type": "boolean",
           "default": false,
           "description": "Automatically render ChordPro PDF on file save."
+        },
+        "chordpro.userConfigsFolder": {
+          "type": "string",
+          "default": "",
+          "description": "Folder for your personal ChordPro config JSON files. Leave empty to use the default VS Code storage location. Set to any folder (e.g. a Dropbox path) to keep configs portable."
         }
       }
     }

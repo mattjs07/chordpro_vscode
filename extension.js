@@ -1023,6 +1023,32 @@ class SongLibraryProvider {
 }
 
 // ─────────────────────────────────────────────
+// User Config helpers
+// ─────────────────────────────────────────────
+
+function getUserConfigsDir(context) {
+    const custom = vscode.workspace.getConfiguration('chordpro').get('userConfigsFolder', '').trim();
+    const dir = custom || path.join(context.globalStorageUri.fsPath, 'user_configs');
+    if (!fs.existsSync(dir)) { fs.mkdirSync(dir, { recursive: true }); }
+    return dir;
+}
+
+function listUserConfigs(context) {
+    const dir = getUserConfigsDir(context);
+    return fs.readdirSync(dir)
+        .filter(f => f.toLowerCase().endsWith('.json'))
+        .map(f => ({ name: path.basename(f, '.json'), fullPath: path.join(dir, f) }));
+}
+
+function listBundledConfigs(context) {
+    const dir = path.join(context.extensionPath, 'bundled_configs');
+    if (!fs.existsSync(dir)) { return []; }
+    return fs.readdirSync(dir)
+        .filter(f => f.toLowerCase().endsWith('.json'))
+        .map(f => ({ name: path.basename(f, '.json').replace(/_/g, ' '), fullPath: path.join(dir, f) }));
+}
+
+// ─────────────────────────────────────────────
 
 function activate(context) {
     // Register the renderChordPro command
@@ -1219,6 +1245,65 @@ function activate(context) {
         }
     });
 
+    // ── User config file management ──────────────────────────────────────────
+
+    const createChordProConfig = vscode.commands.registerCommand('extension.createChordProConfig', async () => {
+        const name = await vscode.window.showInputBox({ prompt: 'Config file name (without .json)', placeHolder: 'my_config' });
+        if (!name) { return; }
+        const dir = getUserConfigsDir(context);
+        const filePath = path.join(dir, name.trim() + '.json');
+        if (fs.existsSync(filePath)) {
+            vscode.window.showWarningMessage(`Config "${name}" already exists. Opening it.`);
+        } else {
+            fs.writeFileSync(filePath, JSON.stringify({ settings: {} }, null, 2), 'utf8');
+        }
+        vscode.window.showTextDocument(vscode.Uri.file(filePath));
+    });
+
+    const registerChordProConfig = vscode.commands.registerCommand('extension.registerChordProConfig', async () => {
+        const uris = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            filters: { 'JSON config': ['json'] },
+            openLabel: 'Import config',
+        });
+        if (!uris || !uris.length) { return; }
+        const src = uris[0].fsPath;
+        const defaultName = path.basename(src, '.json');
+        const name = await vscode.window.showInputBox({ prompt: 'Save as (name without .json)', value: defaultName });
+        if (!name) { return; }
+        const dir = getUserConfigsDir(context);
+        const dest = path.join(dir, name.trim() + '.json');
+        fs.copyFileSync(src, dest);
+        vscode.window.showInformationMessage(`Config "${name}" saved to user configs.`);
+    });
+
+    const editChordProConfig = vscode.commands.registerCommand('extension.editChordProConfig', async () => {
+        const configs = listUserConfigs(context);
+        if (!configs.length) {
+            vscode.window.showInformationMessage('No user configs yet. Use "Create ChordPro Config" to add one.');
+            return;
+        }
+        const items = configs.map(c => ({ label: c.name, description: c.fullPath, fullPath: c.fullPath }));
+        const choice = await vscode.window.showQuickPick(items, { placeHolder: 'Select a config to edit' });
+        if (!choice) { return; }
+        vscode.window.showTextDocument(vscode.Uri.file(choice.fullPath));
+    });
+
+    const setUserConfigsFolder = vscode.commands.registerCommand('extension.setUserConfigsFolder', async () => {
+        const current = vscode.workspace.getConfiguration('chordpro').get('userConfigsFolder', '').trim();
+        const uris = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            defaultUri: current ? vscode.Uri.file(current) : undefined,
+            openLabel: 'Select user configs folder',
+        });
+        if (!uris || !uris.length) { return; }
+        const chosen = uris[0].fsPath;
+        await vscode.workspace.getConfiguration('chordpro').update('userConfigsFolder', chosen, vscode.ConfigurationTarget.Global);
+        vscode.window.showInformationMessage(`User configs folder set to: ${chosen}`);
+    });
+
     // Configure rendering command — QuickPick UI to insert/update # {key = value} lines
     const configureRendering = vscode.commands.registerCommand('extension.configureRendering', async (document) => {
         const doc = document ?? vscode.window.activeTextEditor?.document;
@@ -1237,14 +1322,31 @@ function activate(context) {
         let value;
 
         if (key === 'config') {
+            const userConfigs = listUserConfigs(context);
+            const bundledConfigs = listBundledConfigs(context);
+            const userItems = userConfigs.map(c => ({
+                label: '$(account) ' + c.name,
+                description: 'user',
+                userPath: c.fullPath,
+            }));
+            const bundledItems = bundledConfigs.map(c => ({
+                label: '$(package) ' + c.name,
+                description: 'bundled',
+                userPath: c.fullPath,
+            }));
             const presetItems = [
+                ...(userItems.length    ? [{ label: 'My configs',      kind: vscode.QuickPickItemKind.Separator }, ...userItems]    : []),
+                ...(bundledItems.length ? [{ label: 'Extension presets', kind: vscode.QuickPickItemKind.Separator }, ...bundledItems] : []),
+                { label: 'ChordPro built-in presets', kind: vscode.QuickPickItemKind.Separator },
                 ...info.presets.map(p => ({ label: p })),
                 { label: '$(edit) Enter custom path...', custom: true },
             ];
-            const choice = await vscode.window.showQuickPick(presetItems, { placeHolder: 'Select a preset or enter a custom JSON path' });
+            const choice = await vscode.window.showQuickPick(presetItems, { placeHolder: 'Select a config or enter a custom JSON path' });
             if (!choice) { return; }
             if (choice.custom) {
                 value = await vscode.window.showInputBox({ prompt: 'Path to config JSON file', placeHolder: info.placeholder });
+            } else if (choice.userPath) {
+                value = choice.userPath;
             } else {
                 value = choice.label;
             }
@@ -3195,7 +3297,11 @@ if(SONGS.length) loadSong(0);
         refreshLibrary,
         openLibrarySong,
         previewLibrarySong,
-        openSetlistPreview
+        openSetlistPreview,
+        createChordProConfig,
+        registerChordProConfig,
+        editChordProConfig,
+        setUserConfigsFolder
     );
 }
 
