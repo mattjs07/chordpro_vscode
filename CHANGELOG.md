@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.13.1
+- Add `language-configuration.json` so `Ctrl+/` toggles `#` line comments in `.cho` files
+
 ## 1.13.0
 - README: Grid Editor gif added to showcase; highlights table reordered
 
