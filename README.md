@@ -17,14 +17,14 @@ ChordPro VSCode turns VSCode into a full-featured songwriting and performance en
 | | |
 |---|---|
 | 🎸 **Chord diagrams everywhere** | Hover over any `[chord]` in the source *or* in the live preview to see an SVG fretboard diagram |
-| 📜 **Auto-scroll performance view** | Full-screen HTML view with auto-scroll, tap tempo, metronome, section jump, live transpose, and more |
-| 🎵 **Song Library & Setlist** | Browse your entire song folder, select a few songs, and launch a live setlist with one click |
-| 🥁 **Metronome** | Web Audio click track that locks to `{tempo:}` or tap tempo — no external app needed |
 | 🎛 **Visual Chord Builder** | Click strings and frets on an interactive fretboard; the chord name is detected automatically |
 | 🎼 **Visual Tab Editor** | Build guitar tablature by clicking a grid — no dashes to type |
 | 🎹 **Visual Grid Editor** | Build `{start_of_grid}` chord progression blocks visually — multi-beat cells, song chord palette, hover diagrams |
+| 📜 **Auto-scroll performance view** | Full-screen HTML view with auto-scroll, tap tempo, metronome, section jump, live transpose, and more |
+| 🎵 **Song Library & Setlist** | Browse your entire song folder, select a few songs, and launch a live setlist with one click |
 | 🔄 **Transpose** | Shift chords by any interval in the source, or preview in a different key without touching the file |
 | 🔍 **Chord Analyzer** | Open Oolimo's chord analyzer in a side panel, without leaving VSCode |
+| 🥁 **Metronome** | Web Audio click track that locks to `{tempo:}` or tap tempo — no external app needed |
 
 ---
 
