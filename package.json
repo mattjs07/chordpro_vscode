@@ -3,7 +3,7 @@
   "displayName": "ChordPro VSCode",
   "description": "Edit, render, and build ChordPro songs in VSCode — includes PDF rendering, templates, and an interactive chord builder with fretboard.",
   "publisher": "mattjs07",
-  "version": "1.13.1",
+  "version": "1.14.0",
   "icon": "images/icon.png",
   "categories": [
     "Other"
@@ -101,12 +101,16 @@
         "title": "ChordPro: Open Chord Builder"
       },
       {
-        "command": "chordproFretboard.insertChord",
-        "title": "ChordPro: Insert Chord by Name"
+        "command": "chordpro.insertTitle",
+        "title": "ChordPro: Insert Title"
       },
       {
-        "command": "chordproFretboard.insertChordFromList",
-        "title": "ChordPro: Insert Chord from List"
+        "command": "chordproFretboard.insertChordInline",
+        "title": "ChordPro: Insert Chord Inline"
+      },
+      {
+        "command": "chordproFretboard.insertChordDiagram",
+        "title": "ChordPro: Insert Chord Diagram"
       },
       {
         "command": "extension.configureRendering",
@@ -118,7 +122,7 @@
       },
       {
         "command": "extension.autoScrollPreview",
-        "title": "ChordPro: Auto-scroll Preview"
+        "title": "ChordPro: Performance View"
       },
       {
         "command": "extension.openTabEditor",
@@ -205,6 +209,12 @@
           "when": "viewItem == song",
           "group": "inline"
         }
+      ],
+      "commandPalette": [
+        {
+          "command": "chordpro.previewSongFromLibrary",
+          "when": "false"
+        }
       ]
     },
     "keybindings": [
@@ -219,13 +229,13 @@
         "when": "editorLangId == 'chordpro'"
       },
       {
-        "command": "chordproFretboard.insertChord",
+        "command": "chordproFretboard.insertChordInline",
         "key": "ctrl+i",
         "when": "editorTextFocus && editorLangId == 'chordpro'"
       },
       {
-        "command": "chordproFretboard.insertChordFromList",
-        "key": "ctrl+l",
+        "command": "chordproFretboard.insertChordDiagram",
+        "key": "ctrl+shift+d",
         "when": "editorTextFocus && editorLangId == 'chordpro'"
       },
       {
@@ -240,7 +250,7 @@
       },
       {
         "command": "extension.autoScrollPreview",
-        "key": "ctrl+alt+s",
+        "key": "ctrl+alt+p",
         "when": "editorLangId == 'chordpro'"
       },
       {
@@ -279,8 +289,9 @@
     "onCommand:extension.openChordProExampleTemplate",
     "onCommand:extension.openChordProTemplate",
     "onCommand:chordproFretboard.openBuilder",
-    "onCommand:chordproFretboard.insertChord",
-    "onCommand:chordproFretboard.insertChordFromList",
+    "onCommand:chordpro.insertTitle",
+    "onCommand:chordproFretboard.insertChordInline",
+    "onCommand:chordproFretboard.insertChordDiagram",
     "onCommand:extension.openChordAnalyzer",
     "onCommand:extension.autoScrollPreview",
     "onCommand:extension.openTabEditor",

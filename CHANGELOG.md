@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.14.0
+- Renamed "Auto-scroll Preview" to "Performance View" (`Ctrl+Alt+P`)
+- Added `ChordPro: Insert Title` command — inserts `{title: }` at the cursor
+- Added `ChordPro: Insert Chord Diagram` (`Ctrl+Shift+D`) — same picker as Insert Chord Inline but inserts `{chord: CHORD}`
+- Renamed "Insert Chord from List" to `ChordPro: Insert Chord Inline` (`Ctrl+I`); removed redundant "Insert Chord by Name"
+- Grid Editor now includes chords from `{define:}` blocks in the song palette
+- Hidden "Preview Song" from the command palette (library context menu only)
+
 ## 1.13.1
 - Add `language-configuration.json` so `Ctrl+/` toggles `#` line comments in `.cho` files
 

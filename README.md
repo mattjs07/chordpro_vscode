@@ -20,7 +20,7 @@ ChordPro VSCode turns VSCode into a full-featured songwriting and performance en
 | 🎛 **Visual Chord Builder** | Click strings and frets on an interactive fretboard; the chord name is detected automatically |
 | 🎼 **Visual Tab Editor** | Build guitar tablature by clicking a grid — no dashes to type |
 | 🎹 **Visual Grid Editor** | Build `{start_of_grid}` chord progression blocks visually — multi-beat cells, song chord palette, hover diagrams |
-| 📜 **Auto-scroll performance view** | Full-screen HTML view with auto-scroll, tap tempo, metronome, section jump, live transpose, and more |
+| 📜 **Performance View** | Full-screen HTML view with auto-scroll, tap tempo, metronome, section jump, live transpose, and more |
 | 🎵 **Song Library & Setlist** | Browse your entire song folder, select a few songs, and launch a live setlist with one click |
 | 🔄 **Transpose** | Shift chords by any interval in the source, or preview in a different key without touching the file |
 | 🔍 **Chord Analyzer** | Open Oolimo's chord analyzer in a side panel, without leaving VSCode |
@@ -30,8 +30,8 @@ ChordPro VSCode turns VSCode into a full-featured songwriting and performance en
 
 ## GIF Showcase
 
-### Auto-scroll Performance View
-![Auto-scroll preview](images/gif_autoscroll.gif)
+### Performance View
+![Performance View](images/gif_autoscroll.gif)
 
 ### Chord Diagram Hover — source file & HTML preview
 ![Chord hover](images/gif_hover.gif)
@@ -53,7 +53,7 @@ ChordPro VSCode turns VSCode into a full-featured songwriting and performance en
 ## Quick Start
 
 1. Install the extension and open (or create) a `.cho` file — syntax highlighting activates automatically
-2. Press `Ctrl+Alt+S` to open the **Auto-scroll Preview** (no CLI needed), or `Ctrl+Shift+V` for the **PDF preview**
+2. Press `Ctrl+Alt+P` to open the **Performance View** (no CLI needed), or `Ctrl+Shift+V` for the **PDF preview**
 3. Press **Space** to start scrolling — use the control bar to adjust speed, transpose, or jump to a section
 
 PDF rendering requires the [ChordPro CLI](https://www.chordpro.org/chordpro/chordpro-installation/) installed and on your PATH. For the ChordPro format itself, see the [official documentation](https://www.chordpro.org/chordpro/home/).
@@ -66,7 +66,7 @@ PDF rendering requires the [ChordPro CLI](https://www.chordpro.org/chordpro/chor
 
 | Command | Shortcut | Description |
 |---|---|---|
-| ChordPro: Auto-scroll Preview | `Ctrl+Alt+S` | Render the song as HTML and open the performance view |
+| ChordPro: Performance View | `Ctrl+Alt+P` | Render the song as HTML and open the performance view |
 | ChordPro: Open Chord Analyzer | `Ctrl+Alt+A` | Open Oolimo in a side panel |
 | ChordPro: Preview PDF | `Ctrl+Shift+V` | Render and open the PDF beside the editor |
 | ChordPro: Render PDF | `Ctrl+Shift+B` | Compile the active `.cho` file to PDF |
@@ -94,8 +94,9 @@ PDF rendering requires the [ChordPro CLI](https://www.chordpro.org/chordpro/chor
 | Command | Shortcut | Description |
 |---|---|---|
 | ChordPro: Open Chord Builder | `Ctrl+Alt+D` | Interactive fretboard panel to define custom chords |
-| ChordPro: Insert Chord by Name | `Ctrl+I` | Insert a saved chord by typing its name |
-| ChordPro: Insert Chord from List | `Ctrl+L` | Pick a saved chord from a quick-pick list |
+| ChordPro: Insert Title | — | Insert a `{title: }` directive at the cursor |
+| ChordPro: Insert Chord Inline | `Ctrl+I` | Pick a chord from the song's defined/saved chords and insert `[CHORD]` |
+| ChordPro: Insert Chord Diagram | `Ctrl+Shift+D` | Same picker, inserts `{chord: CHORD}` |
 | ChordPro: Open Tab Editor | `Ctrl+Alt+T` | Visual tab editor — click cells, type fret numbers |
 | ChordPro: Open Grid Editor | `Ctrl+Alt+G` | Visual chord grid editor — build `{start_of_grid}` blocks with a click-to-fill UI, with hover diagrams |
 | ChordPro: Transpose Chords | — | Shift all chords (or a selection) by any number of semitones |
@@ -110,7 +111,7 @@ PDF rendering requires the [ChordPro CLI](https://www.chordpro.org/chordpro/chor
 | ChordPro: Refresh Library (`⟳` button) | Re-scan the library folder |
 | ChordPro: Play as Setlist (`▶` button) | Open selected songs (or all songs) in the Setlist Preview |
 | Click a song | Open the `.cho` file in the editor |
-| Right-click a song → Preview | Open the song in the Auto-scroll Preview |
+| Right-click a song → Preview | Open the song in the Performance View |
 
 **Setlist navigation:**
 
@@ -138,16 +139,16 @@ PDF rendering requires the [ChordPro CLI](https://www.chordpro.org/chordpro/chor
 
 ### Chord Diagram Hover
 
-Hover over any `[chord]` token — in your `.cho` source file *or* in the Auto-scroll HTML preview — to see an SVG fretboard diagram popup.
+Hover over any `[chord]` token — in your `.cho` source file *or* in the Performance View — to see an SVG fretboard diagram popup.
 
 - Built-in library of ~100 chords (all roots × major, minor, 7th, maj7, sus, dim, aug, 6, 9, 11, 13, m7b5, mmaj7, 69, and more)
 - `{define:}` blocks in the file take priority over the built-in library
 - Chords saved via the Chord Builder also override the built-in defaults
 - The hover tooltip also shows how many times the chord appears in the song
 
-### Auto-scroll Performance View
+### Performance View
 
-Press `Ctrl+Alt+S` to render the song as HTML and open it in a clean, distraction-free performance view. No ChordPro CLI needed.
+Press `Ctrl+Alt+P` to render the song as HTML and open it in a clean, distraction-free performance view. No ChordPro CLI needed.
 
 - **Tempo-based speed** — add `{tempo: 120}` to your file; scroll speed is calculated automatically so the song passes at the right pace. A `♩` button snaps back to tempo speed at any time.
 - **Tap tempo** — tap `T` repeatedly to set BPM from your rhythm; averaged over the last 8 taps.
@@ -215,7 +216,7 @@ Chord names inside `{start_of_grid}` blocks are fully interactive — both in th
 
 ### Transposing
 
-**Live transpose (preview only):** use the `♭` / `♯` buttons in the Auto-scroll or Setlist preview to shift chord display without modifying the source.
+**Live transpose (preview only):** use the `♭` / `♯` buttons in the Performance View or Setlist preview to shift chord display without modifying the source.
 
 **Permanent transpose (source file):** command palette → **Transpose Chords** — pick a musical interval or enter a custom number of semitones. Updates all `[chord]` tokens and `{key:}` directives. Undoable with `Ctrl+Z`.
 
@@ -283,7 +284,7 @@ Press `Ctrl+Alt+A` to open [Oolimo](https://www.oolimo.com/en/guitar-chords/anal
 
 PDF rendering requires the [ChordPro CLI](https://www.chordpro.org/chordpro/chordpro-installation/) installed and on your system PATH.
 
-The **Auto-scroll Preview**, **Song Library**, **Setlist**, **Chord Builder**, **Tab Editor**, and **Chord Analyzer** work without the CLI.
+The **Performance View**, **Song Library**, **Setlist**, **Chord Builder**, **Tab Editor**, and **Chord Analyzer** work without the CLI.
 
 ---
 

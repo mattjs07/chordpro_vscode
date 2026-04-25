@@ -1098,36 +1098,37 @@ function activate(context) {
         vscode.commands.executeCommand('chordproFretboard.chordBuilderView.focus');
     });
 
-    const insertChord = vscode.commands.registerCommand('chordproFretboard.insertChord', async () => {
-        const editor = vscode.window.activeTextEditor;
-        const docDefineNames = editor ? Object.keys(parseDocumentDefines(editor.document)) : [];
-        const savedNames = context.globalState.keys()
-            .filter(k => k.startsWith('chord_'))
-            .map(k => k.slice('chord_'.length));
-        const allNames = [...new Set([...docDefineNames, ...savedNames])];
-
-        const chordName = await vscode.window.showInputBox({
-            prompt: 'Enter chord name',
-            placeHolder: allNames.length ? allNames.join(', ') : undefined
-        });
-        if (!chordName) { return; }
-        if (editor) { editor.insertSnippet(new vscode.SnippetString(`[${chordName}]`)); }
-    });
-
-    const insertChordFromList = vscode.commands.registerCommand('chordproFretboard.insertChordFromList', async () => {
-        const editor = vscode.window.activeTextEditor;
+    async function pickChord(context, editor) {
         const docDefineNames = editor ? Object.keys(parseDocumentDefines(editor.document)) : [];
         const savedKeys = context.globalState.keys().filter(k => k.startsWith('chord_'));
         const savedNames = savedKeys.map(k => k.slice('chord_'.length));
         const allNames = [...new Set([...docDefineNames, ...savedNames])];
-        if (!allNames.length) { vscode.window.showInformationMessage('No chords defined yet'); return; }
+        if (!allNames.length) { vscode.window.showInformationMessage('No chords defined yet'); return null; }
         const items = allNames.map(name => ({
             label: name,
             description: docDefineNames.includes(name) ? 'defined in file' : 'saved chord'
         }));
-        const selection = await vscode.window.showQuickPick(items, { placeHolder: 'Select a chord' });
-        if (!selection) { return; }
-        if (editor) { editor.insertSnippet(new vscode.SnippetString(`[${selection.label}]`)); }
+        const selection = await vscode.window.showQuickPick(items, { placeHolder: 'Select or type a chord name' });
+        return selection ? selection.label : null;
+    }
+
+    const insertTitle = vscode.commands.registerCommand('chordpro.insertTitle', () => {
+        const editor = vscode.window.activeTextEditor;
+        if (editor) { editor.insertSnippet(new vscode.SnippetString('{title: $1}')); }
+    });
+
+    const insertChordInline = vscode.commands.registerCommand('chordproFretboard.insertChordInline', async () => {
+        const editor = vscode.window.activeTextEditor;
+        const chord = await pickChord(context, editor);
+        if (!chord) { return; }
+        if (editor) { editor.insertSnippet(new vscode.SnippetString(`[${chord}]`)); }
+    });
+
+    const insertChordDiagram = vscode.commands.registerCommand('chordproFretboard.insertChordDiagram', async () => {
+        const editor = vscode.window.activeTextEditor;
+        const chord = await pickChord(context, editor);
+        if (!chord) { return; }
+        if (editor) { editor.insertSnippet(new vscode.SnippetString(`{chord: ${chord}}`)); }
     });
 
     // Auto-completion provider for { (directives) and [ (chords)
@@ -3336,8 +3337,9 @@ if(SONGS.length) loadSong(0);
         onSaveDisposable,
         chordBuilderView,
         openBuilder,
-        insertChord,
-        insertChordFromList,
+        insertTitle,
+        insertChordInline,
+        insertChordDiagram,
         openChordAnalyzer,
         autoScrollPreview,
         registerTabEditor(context),
@@ -3644,12 +3646,12 @@ function registerGridEditor(context) {
         if (targetEditor) {
             const text = targetEditor.document.getText();
             const seen = new Set();
-            const re = /\[([A-G][^\[\]]*)\]/g;
+            const addChord = ch => { ch = ch.trim(); if (ch && !seen.has(ch)) { seen.add(ch); songChords.push(ch); } };
             let m;
-            while ((m = re.exec(text)) !== null) {
-                const ch = m[1].trim();
-                if (ch && !seen.has(ch)) { seen.add(ch); songChords.push(ch); }
-            }
+            const reDefine = /\{define:\s*([A-G][^\s}]*)/gi;
+            while ((m = reDefine.exec(text)) !== null) addChord(m[1]);
+            const reInline = /\[([A-G][^\[\]]*)\]/g;
+            while ((m = reInline.exec(text)) !== null) addChord(m[1]);
         }
         const panel = vscode.window.createWebviewPanel(
             'chordproGridEditor',
