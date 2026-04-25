@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.2
+- Chord Builder: reworked layout — name field + Insert/Reset controls above fretboard, aligned to fretboard width
+- Chord Builder: two insert buttons ("At cursor" / "With defines") with smart placement logic; reset replaced by ↺ icon
+
 ## 1.14.1
 - Insert Chord Inline/Diagram: list now includes inline `[CHORD]` tokens from the file, not just defined/saved chords
 - Insert Chord Inline/Diagram: fuzzy filtering — typing `A7` matches `Am7b5`; always shows a "new chord" item for the typed value

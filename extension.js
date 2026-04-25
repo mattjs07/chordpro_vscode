@@ -661,17 +661,29 @@ class ChordBuilderViewProvider {
         webviewView.webview.html = getWebviewContent();
 
         webviewView.webview.onDidReceiveMessage(message => {
-            if (message.command === 'saveChord') {
+            if (message.command === 'saveChord' || message.command === 'saveChordWithDefines') {
                 const chord = message.chord;
                 this.context.globalState.update(`chord_${chord.name}`, chord);
-
                 const define = toChordProDefine(chord);
                 const editor = vscode.window.activeTextEditor;
-                if (editor) {
-                    editor.insertSnippet(new vscode.SnippetString(define + '\n'));
-                } else {
+                if (!editor) {
                     vscode.env.clipboard.writeText(define);
                     vscode.window.showInformationMessage('No active editor — definition copied to clipboard');
+                } else if (message.command === 'saveChordWithDefines') {
+                    const lines = editor.document.getText().split('\n');
+                    const metaRe = /^\{(title|subtitle|artist|composer|lyricist|copyright|album|year|key|time|tempo|capo|duration|sorttitle|sortartist|tag|meta)[\s:}]/i;
+                    let insertLine = 0;
+                    for (let i = 0; i < lines.length; i++) {
+                        if (/^\{define:/i.test(lines[i].trim())) { insertLine = i + 1; }
+                    }
+                    if (insertLine === 0) {
+                        for (let i = 0; i < lines.length; i++) {
+                            if (metaRe.test(lines[i].trim())) { insertLine = i + 1; }
+                        }
+                    }
+                    editor.edit(eb => eb.insert(new vscode.Position(insertLine, 0), define + '\n'));
+                } else {
+                    editor.insertSnippet(new vscode.SnippetString(define + '\n'));
                 }
             }
 
@@ -692,10 +704,13 @@ function getWebviewContent() {
 <style>
 * { box-sizing: border-box; }
 body { margin: 0; padding: 6px; background: #1a1a0a; color: #d4c5a0; font-family: sans-serif; overflow: hidden; }
-#top { display: flex; gap: 6px; margin-bottom: 8px; align-items: center; }
-#chordName { flex: 1; padding: 3px 6px; font-size: 13px; background: #2a2a1a; border: 1px solid #5a4a28; color: #d4c5a0; border-radius: 3px; outline: none; }
-#saveBtn  { padding: 3px 12px; font-size: 13px; cursor: pointer; background: #3a5a28; border: 1px solid #5a8a38; color: #d4e8b0; border-radius: 3px; }
-#resetBtn { padding: 3px 8px;  font-size: 13px; cursor: pointer; background: #2a1a1a; border: 1px solid #6a3030; color: #c08080; border-radius: 3px; }
+#wrapper { display: inline-block; }
+#top { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; width: 100%; }
+#chordName { flex: 1; min-width: 0; padding: 3px 6px; font-size: 13px; background: #2a2a1a; border: 1px solid #5a4a28; color: #d4c5a0; border-radius: 3px; outline: none; }
+.insert-label { font-size: 11px; color: #7a6a48; white-space: nowrap; }
+#saveBtn       { padding: 3px 8px; font-size: 12px; cursor: pointer; background: #3a5a28; border: 1px solid #5a8a38; color: #d4e8b0; border-radius: 3px; white-space: nowrap; }
+#saveDefineBtn { padding: 3px 8px; font-size: 12px; cursor: pointer; background: #2a3a5a; border: 1px solid #3a5a8a; color: #b0c8e8; border-radius: 3px; white-space: nowrap; }
+#resetBtn      { margin-left: 8px; padding: 3px 7px; font-size: 15px; line-height: 1; cursor: pointer; background: transparent; border: 1px solid #6a2828; color: #c04040; border-radius: 3px; }
 #fretboard { display: inline-flex; flex-direction: column; position: relative; background: #1c1a0c; }
 .string-row { display: flex; align-items: center; height: 26px; position: relative; }
 .string-line { position: absolute; right: 0; top: 50%; transform: translateY(-50%); pointer-events: none; z-index: 2; }
@@ -718,14 +733,18 @@ body { margin: 0; padding: 6px; background: #1a1a0a; color: #d4c5a0; font-family
 </style>
 </head>
 <body>
-<div id="top">
-  <input id="chordName" placeholder="Chord Name" />
-  <button id="saveBtn">Insert definition</button>
-  <button id="resetBtn">Reset</button>
+<div id="wrapper">
+  <div id="top">
+    <input id="chordName" placeholder="Chord name" />
+    <span class="insert-label">Insert:</span>
+    <button id="saveBtn" title="Insert {define:} at cursor position">At cursor</button>
+    <button id="saveDefineBtn" title="Insert {define:} grouped with other defines, or after metadata">With defines</button>
+    <button id="resetBtn" title="Reset fretboard">↺</button>
+  </div>
+  <div id="fretboard"></div>
+  <div id="fret-numbers"></div>
+  <div id="suggestions"><span>play some strings...</span></div>
 </div>
-<div id="fretboard"></div>
-<div id="fret-numbers"></div>
-<div id="suggestions"><span>play some strings...</span></div>
 <script>
 const vscode = acquireVsCodeApi();
 const NUM_STRINGS = 6, NUM_FRETS = 15, ROW_H = 26, FRET_W = 40, INDICATOR_W = 28;
@@ -820,13 +839,14 @@ window.addEventListener('message', e => {
     });
 });
 
-function doInsert() {
+function doInsert(cmd) {
     const name = document.getElementById('chordName').value.trim();
     if (!name) { alert('Enter chord name'); return; }
-    vscode.postMessage({ command: 'saveChord', chord: { name, frets: [...fretsArray] } });
+    vscode.postMessage({ command: cmd, chord: { name, frets: [...fretsArray] } });
 }
-document.getElementById('saveBtn').addEventListener('click', doInsert);
-document.getElementById('chordName').addEventListener('keydown', e => { if (e.key === 'Enter') { doInsert(); } });
+document.getElementById('saveBtn').addEventListener('click', () => doInsert('saveChord'));
+document.getElementById('saveDefineBtn').addEventListener('click', () => doInsert('saveChordWithDefines'));
+document.getElementById('chordName').addEventListener('keydown', e => { if (e.key === 'Enter') { doInsert('saveChord'); } });
 document.getElementById('resetBtn').addEventListener('click', () => {
     fretsArray = Array(NUM_STRINGS).fill(-1);
     document.getElementById('chordName').value = '';
