@@ -565,6 +565,17 @@ const ALIAS_OVERRIDE = {
     'add2': 'add9',
 };
 
+const ENHARMONIC = {
+    'Bb': 'A#', 'Eb': 'D#', 'Ab': 'G#', 'Db': 'C#', 'Gb': 'F#',
+    'A#': 'Bb', 'D#': 'Eb', 'G#': 'Ab', 'C#': 'Db', 'F#': 'Gb'
+};
+function enharmonicName(name) {
+    const m = name.match(/^([A-G][b#]?)(.*)/);
+    if (!m) { return null; }
+    const alt = ENHARMONIC[m[1]];
+    return alt ? alt + m[2] : null;
+}
+
 function prettyName(raw) {
     const c = Chord.get(raw);
     if (!c.tonic) { return ''; }
@@ -612,7 +623,20 @@ function detectChord(frets) {
             return a.length - b.length;
         })
         .filter((v, i, arr) => arr.indexOf(v) === i)
-        .slice(0, 6);
+        .flatMap(name => { const e = enharmonicName(name); return e ? [name, e] : [name]; })
+        .slice(0, 10)
+        .reduce((groups, name, i, arr) => {
+            if (i > 0 && groups.length && groups[groups.length - 1].length === 1) {
+                const prev = groups[groups.length - 1][0];
+                const mP = prev.match(/^([A-G][b#]?)(.*)/), mN = name.match(/^([A-G][b#]?)(.*)/);
+                if (mP && mN && mP[2] === mN[2] && ENHARMONIC[mP[1]] === mN[1]) {
+                    groups[groups.length - 1].push(name);
+                    return groups;
+                }
+            }
+            groups.push([name]);
+            return groups;
+        }, []);
 }
 
 function toChordProDefine(chord) {
@@ -652,8 +676,8 @@ class ChordBuilderViewProvider {
             }
 
             if (message.command === 'detectChord') {
-                const suggestions = detectChord(message.frets);
-                webviewView.webview.postMessage({ command: 'chordSuggestions', suggestions });
+                const groups = detectChord(message.frets);
+                webviewView.webview.postMessage({ command: 'chordSuggestions', groups });
             }
         });
     }
@@ -773,13 +797,26 @@ window.addEventListener('message', e => {
     if (msg.command !== 'chordSuggestions') { return; }
     const div = document.getElementById('suggestions');
     div.innerHTML = '';
-    if (!msg.suggestions.length) { div.innerHTML = '<span>no chord found</span>'; return; }
-    msg.suggestions.forEach(name => {
-        const btn = document.createElement('div');
-        btn.className = 'suggestion';
-        btn.innerText = name;
-        btn.addEventListener('click', () => { document.getElementById('chordName').value = name; });
-        div.appendChild(btn);
+    if (!msg.groups.length) { div.innerHTML = '<span>no chord found</span>'; return; }
+    msg.groups.forEach(group => {
+        if (group.length > 1) {
+            const stack = document.createElement('div');
+            stack.style.cssText = 'display:flex;flex-direction:column;gap:2px;';
+            group.forEach(name => {
+                const btn = document.createElement('div');
+                btn.className = 'suggestion';
+                btn.innerText = name;
+                btn.addEventListener('click', () => { document.getElementById('chordName').value = name; });
+                stack.appendChild(btn);
+            });
+            div.appendChild(stack);
+        } else {
+            const btn = document.createElement('div');
+            btn.className = 'suggestion';
+            btn.innerText = group[0];
+            btn.addEventListener('click', () => { document.getElementById('chordName').value = group[0]; });
+            div.appendChild(btn);
+        }
     });
 });
 
@@ -1098,18 +1135,53 @@ function activate(context) {
         vscode.commands.executeCommand('chordproFretboard.chordBuilderView.focus');
     });
 
-    async function pickChord(context, editor) {
+    function pickChord(context, editor) {
         const docDefineNames = editor ? Object.keys(parseDocumentDefines(editor.document)) : [];
+        const inlineChords = [];
+        if (editor) {
+            const text = editor.document.getText();
+            const re = /\[([A-G][^\[\]]*)\]/g;
+            let m;
+            while ((m = re.exec(text)) !== null) {
+                const ch = m[1].trim();
+                if (ch && !docDefineNames.includes(ch)) { inlineChords.push(ch); }
+            }
+        }
         const savedKeys = context.globalState.keys().filter(k => k.startsWith('chord_'));
         const savedNames = savedKeys.map(k => k.slice('chord_'.length));
-        const allNames = [...new Set([...docDefineNames, ...savedNames])];
-        if (!allNames.length) { vscode.window.showInformationMessage('No chords defined yet'); return null; }
-        const items = allNames.map(name => ({
+        const allNames = [...new Set([...docDefineNames, ...inlineChords, ...savedNames])];
+        const baseItems = allNames.map(name => ({
             label: name,
-            description: docDefineNames.includes(name) ? 'defined in file' : 'saved chord'
+            description: docDefineNames.includes(name) ? 'defined in file'
+                : inlineChords.includes(name) ? 'used in file'
+                : 'saved chord'
         }));
-        const selection = await vscode.window.showQuickPick(items, { placeHolder: 'Select or type a chord name' });
-        return selection ? selection.label : null;
+        const fuzzy = (label, filter) => {
+            let fi = 0;
+            const f = filter.toLowerCase(), n = label.toLowerCase();
+            for (let i = 0; i < n.length && fi < f.length; i++) { if (n[i] === f[fi]) fi++; }
+            return fi === f.length;
+        };
+        return new Promise(resolve => {
+            const qp = vscode.window.createQuickPick();
+            qp.placeholder = 'Type a chord name or select from list';
+            qp.items = baseItems.map(i => ({ ...i, alwaysShow: true }));
+            qp.onDidChangeValue(val => {
+                const trimmed = val.trim();
+                const filtered = baseItems
+                    .filter(i => !trimmed || fuzzy(i.label, trimmed))
+                    .map(i => ({ ...i, alwaysShow: true }));
+                const newItem = trimmed ? [{ label: trimmed, description: 'new chord', alwaysShow: true }] : [];
+                qp.items = [...newItem, ...filtered];
+            });
+            qp.onDidAccept(() => {
+                const active = qp.activeItems[0];
+                qp.hide();
+                resolve(active ? active.label : null);
+            });
+            qp.onDidHide(() => resolve(null));
+            qp.show();
+        });
     }
 
     const insertTitle = vscode.commands.registerCommand('chordpro.insertTitle', () => {

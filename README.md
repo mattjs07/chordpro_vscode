@@ -93,7 +93,7 @@ PDF rendering requires the [ChordPro CLI](https://www.chordpro.org/chordpro/chor
 
 | Command | Shortcut | Description |
 |---|---|---|
-| ChordPro: Open Chord Builder | `Ctrl+Alt+D` | Interactive fretboard panel to define custom chords |
+| ChordPro: Open Chord Builder | `Ctrl+Alt+B` | Interactive fretboard panel to define custom chords |
 | ChordPro: Insert Title | — | Insert a `{title: }` directive at the cursor |
 | ChordPro: Insert Chord Inline | `Ctrl+I` | Pick a chord from the song's defined/saved chords and insert `[CHORD]` |
 | ChordPro: Insert Chord Diagram | `Ctrl+Shift+D` | Same picker, inserts `{chord: CHORD}` |
@@ -172,7 +172,7 @@ Open the **Song Library** panel in the activity bar (music note icon).
 
 ### Chord Builder
 
-Open with `Ctrl+Alt+D` or from the panel at the bottom.
+Open with `Ctrl+Alt+B` or from the panel at the bottom.
 
 - Click strings and frets to place fingers on the fretboard
 - The chord name is detected automatically from your finger positions
