@@ -263,6 +263,48 @@ const CHORD_DB = {
 
 // Parse {define: NAME base-fret N frets f1 f2 f3 f4 f5 f6} blocks from a document.
 // Returns { chordName: [lowE, A, D, G, B, highE] } with absolute fret numbers.
+const _trackedThisSession = new Set();
+function trackChordUsage(document, context, chordRefProvider, forceUpdate = false) {
+    if (document.languageId !== 'chordpro') return;
+    const key = document.uri.toString();
+    if (!forceUpdate && _trackedThisSession.has(key)) return;
+    _trackedThisSession.add(key);
+    const text = document.getText();
+    const defines = parseDocumentDefines(document); // {name: [lowE..highE]}
+    const names = new Set(Object.keys(defines));
+    const re = /\[([A-G][^\[\]]*)\]/g;
+    let m;
+    while ((m = re.exec(text)) !== null) { const n = m[1].trim(); if (n) names.add(n); }
+    if (!names.size) return;
+    const chordFiles = context.globalState.get('chordFiles') || {};
+    names.forEach(n => {
+        if (!chordFiles[n]) chordFiles[n] = [];
+        // Migrate legacy bare-string entries and update missing frets
+        chordFiles[n] = chordFiles[n].map(e => typeof e === 'string' ? { uri: e, frets: null } : e);
+        const existing = chordFiles[n].find(e => e.uri === key);
+        if (!existing) {
+            chordFiles[n].push({ uri: key, frets: defines[n] || null });
+        } else if (defines[n]) {
+            existing.frets = defines[n]; // backfill frets for old entries that had null
+        }
+    });
+    context.globalState.update('chordFiles', chordFiles);
+    // Chords with an explicit {define:} in the file should never stay hidden —
+    // the user clearly wants them visible, even if they were previously deleted.
+    const definedNames = Object.keys(defines);
+    if (definedNames.length) {
+        const hidden = context.globalState.get('hiddenChords') || [];
+        const newHidden = hidden.filter(n => !definedNames.includes(n));
+        if (newHidden.length !== hidden.length)
+            context.globalState.update('hiddenChords', newHidden);
+        const suppressed = context.globalState.get('suppressedVoicings') || [];
+        const newSuppressed = suppressed.filter(s => !definedNames.includes(s.name));
+        if (newSuppressed.length !== suppressed.length)
+            context.globalState.update('suppressedVoicings', newSuppressed);
+    }
+    if (chordRefProvider) chordRefProvider.nudge();
+}
+
 function parseDocumentDefines(document) {
     const defines = {};
     const text = document.getText();
@@ -648,39 +690,141 @@ function toChordProDefine(chord) {
         if (f === 0)  { return '0'; }
         return String(f - baseFret + 1);
     });
-    return `{define: ${chord.name} base-fret ${baseFret} frets ${values.join(' ')}}`;
+    let def = `{define: ${chord.name} base-fret ${baseFret} frets ${values.join(' ')}`;
+    if (chord.fingers && chord.fingers.some(fn => fn > 0)) {
+        const cpFingers = [...chord.fingers].reverse();
+        const fv = cpFingers.map((fn, i) => cpFrets[i] <= 0 ? '0' : String(fn));
+        def += ` fingers ${fv.join(' ')}`;
+    }
+    return def + '}';
 }
+
+// ── Saved voicings helpers ────────────────────────────────────────────────────
+// Storage: context.globalState key 'savedVoicings' → [{name, frets, fingers}, ...]
+// frets/fingers stored highE→lowE (same as before for chord_NAME keys).
+
+function _svKey(chord) { return toChordProDefine(chord); }
+
+function getSavedVoicings(context, name) {
+    const all = context.globalState.get('savedVoicings') || [];
+    return all.filter(v => v.name === name);
+}
+
+function getPrimaryVoicing(context, name) {
+    return getSavedVoicings(context, name)[0] || null;
+}
+
+function getAllSavedNames(context) {
+    const all = context.globalState.get('savedVoicings') || [];
+    return [...new Set(all.map(v => v.name))];
+}
+
+function addSavedVoicing(context, chord) {
+    const all = context.globalState.get('savedVoicings') || [];
+    const key = _svKey(chord);
+    if (all.some(v => _svKey(v) === key)) return false; // duplicate
+    context.globalState.update('savedVoicings', [...all, chord]);
+    return true;
+}
+
+function migrateSavedChords(context) {
+    const keys = context.globalState.keys().filter(k => k.startsWith('chord_'));
+    if (!keys.length) return;
+    const existing = context.globalState.get('savedVoicings') || [];
+    const existingKeys = new Set(existing.map(_svKey));
+    const incoming = [];
+    for (const k of keys) {
+        const chord = context.globalState.get(k);
+        if (chord && chord.frets && !existingKeys.has(_svKey(chord))) {
+            incoming.push(chord);
+            existingKeys.add(_svKey(chord));
+        }
+        context.globalState.update(k, undefined);
+    }
+    if (incoming.length) {
+        context.globalState.update('savedVoicings', [...existing, ...incoming]);
+    }
+}
+async function backfillChordFileFrets(context, chordRefProvider) {
+    const chordFiles = context.globalState.get('chordFiles') || {};
+    // Collect unique URIs that still have at least one null-frets entry
+    const urisToScan = new Set();
+    for (const entries of Object.values(chordFiles)) {
+        for (const e of entries) {
+            if (typeof e === 'object' && e.frets === null) urisToScan.add(e.uri);
+        }
+    }
+    if (!urisToScan.size) return;
+    let changed = false;
+    for (const uriStr of urisToScan) {
+        try {
+            const doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(uriStr));
+            if (doc.languageId !== 'chordpro') continue;
+            const defines = parseDocumentDefines(doc);
+            if (!Object.keys(defines).length) continue;
+            for (const [name, entries] of Object.entries(chordFiles)) {
+                const entry = entries.find(e => typeof e === 'object' && e.uri === uriStr && e.frets === null);
+                if (entry && defines[name]) { entry.frets = defines[name]; changed = true; }
+            }
+        } catch (_) { /* file may no longer exist */ }
+    }
+    if (changed) {
+        await context.globalState.update('chordFiles', chordFiles);
+        if (chordRefProvider) chordRefProvider.nudge();
+    }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 class ChordBuilderViewProvider {
     constructor(context) {
         this.context = context;
+        this._view = null;
+    }
+
+    // Load a chord into the builder (frets: lowE→highE absolute)
+    loadChord(name, frets, fingers) {
+        if (!this._view) return;
+        const hiToLo = [...frets].reverse(); // Builder uses highE→lowE
+        const fingersHiToLo = fingers ? [...fingers].reverse() : null;
+        this._view.webview.postMessage({ command: 'loadChord', name, frets: hiToLo, fingers: fingersHiToLo });
     }
 
     resolveWebviewView(webviewView) {
+        this._view = webviewView;
         webviewView.webview.options = { enableScripts: true };
         webviewView.webview.html = getWebviewContent();
 
-        webviewView.webview.onDidReceiveMessage(message => {
+        webviewView.webview.onDidReceiveMessage(async message => {
             if (message.command === 'saveChord' || message.command === 'saveChordWithDefines') {
                 const chord = message.chord;
-                this.context.globalState.update(`chord_${chord.name}`, chord);
+                addSavedVoicing(this.context, chord);
                 const define = toChordProDefine(chord);
                 const editor = vscode.window.activeTextEditor;
                 if (!editor) {
                     vscode.env.clipboard.writeText(define);
                     vscode.window.showInformationMessage('No active editor — definition copied to clipboard');
                 } else if (message.command === 'saveChordWithDefines') {
-                    const lines = editor.document.getText().split('\n');
-                    const metaRe = /^\{(title|subtitle|artist|composer|lyricist|copyright|album|year|key|time|tempo|capo|duration|sorttitle|sortartist|tag|meta)[\s:}]/i;
-                    let insertLine = 0;
-                    for (let i = 0; i < lines.length; i++) {
-                        if (/^\{define:/i.test(lines[i].trim())) { insertLine = i + 1; }
-                    }
-                    if (insertLine === 0) {
-                        for (let i = 0; i < lines.length; i++) {
-                            if (metaRe.test(lines[i].trim())) { insertLine = i + 1; }
+                    const existingDefines = parseDocumentDefines(editor.document);
+                    if (existingDefines[chord.name]) {
+                        const answer = await vscode.window.showInformationMessage(
+                            `"${chord.name}" is already defined in this file. Replace the existing definition?`,
+                            'Replace', 'Keep both'
+                        );
+                        if (answer === 'Replace') {
+                            const lines = editor.document.getText().split('\n');
+                            const matchRe = new RegExp(`^\\s*\\{(?:define|chord):?\\s+${escapeRegex(chord.name)}[\\s}]`, 'i');
+                            const lineIdx = lines.findIndex(l => matchRe.test(l));
+                            if (lineIdx >= 0) {
+                                await editor.edit(eb => eb.replace(
+                                    new vscode.Range(lineIdx, 0, lineIdx, lines[lineIdx].length),
+                                    define
+                                ));
+                                return;
+                            }
                         }
+                        if (!answer || answer === 'Keep both') return;
                     }
+                    const insertLine = findDefineInsertLine(editor.document);
                     editor.edit(eb => eb.insert(new vscode.Position(insertLine, 0), define + '\n'));
                 } else {
                     editor.insertSnippet(new vscode.SnippetString(define + '\n'));
@@ -730,20 +874,31 @@ body { margin: 0; padding: 6px; background: #1a1a0a; color: #d4c5a0; font-family
 #suggestions span { font-size: 11px; color: #8a8068; }
 .suggestion { padding: 2px 8px; font-size: 12px; cursor: pointer; background: #2a2a1a; border: 1px solid #5a4a28; color: #d4c5a0; border-radius: 3px; user-select: none; }
 .suggestion:hover { background: #3a3a2a; border-color: #8a7a50; }
+#outer-row { display: flex; gap: 14px; align-items: flex-start; }
+#right-col { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 0; align-self: flex-start; }
+#mini-diagram { user-select: none; }
+#fingeringToggle { padding: 2px 7px; font-size: 11px; cursor: pointer; background: transparent; border: 1px solid #4a3a22; color: #7a6a48; border-radius: 3px; white-space: nowrap; }
 </style>
 </head>
 <body>
-<div id="wrapper">
-  <div id="top">
-    <input id="chordName" placeholder="Chord name" />
-    <span class="insert-label">Insert:</span>
-    <button id="saveBtn" title="Insert {define:} at cursor position">At cursor</button>
-    <button id="saveDefineBtn" title="Insert {define:} grouped with other defines, or after metadata">With defines</button>
-    <button id="resetBtn" title="Reset fretboard">↺</button>
+<div id="outer-row">
+  <div id="wrapper">
+    <div id="top">
+      <input id="chordName" placeholder="Chord name" />
+      <span class="insert-label">Insert:</span>
+      <button id="saveBtn" title="Insert {define:} at cursor position">At cursor</button>
+      <button id="saveDefineBtn" title="Insert {define:} grouped with other defines, or after metadata">With defines</button>
+      <button id="resetBtn" title="Reset fretboard">↺</button>
+    </div>
+    <div id="fretboard"></div>
+    <div id="fret-numbers"></div>
+    <div id="suggestions"><span>play some strings...</span></div>
   </div>
-  <div id="fretboard"></div>
-  <div id="fret-numbers"></div>
-  <div id="suggestions"><span>play some strings...</span></div>
+  <div id="right-col">
+    <div id="mini-diagram"></div>
+    <button id="fingeringToggle">Fingering: OFF</button>
+    <div id="fingering-hint" style="display:none;font-size:9px;color:#6a5a38;text-align:center;line-height:1.5;max-width:90px;">Click a dot to cycle finger (1–4)</div>
+  </div>
 </div>
 <script>
 const vscode = acquireVsCodeApi();
@@ -751,6 +906,9 @@ const NUM_STRINGS = 6, NUM_FRETS = 15, ROW_H = 26, FRET_W = 40, INDICATOR_W = 28
 const STRING_THICKNESS = [1.0, 1.3, 1.7, 2.2, 2.8, 3.5];
 const STRING_COLOR = ['#786828','#887838','#988848','#a89858','#b8a86a','#c8b87a'];
 let fretsArray = Array(NUM_STRINGS).fill(-1);
+let fingersOverride = Array(NUM_STRINGS).fill(null);
+let fingeringActive = false;
+let isDragging = false, dragFret = 0;
 const fretboardDiv = document.getElementById('fretboard');
 const fretNumbersDiv = document.getElementById('fret-numbers');
 
@@ -760,7 +918,7 @@ for (let s = 0; s < NUM_STRINGS; s++) {
     const indicator = document.createElement('div');
     indicator.className = 'string-indicator muted';
     indicator.innerText = 'X';
-    indicator.addEventListener('click', () => { fretsArray[s] = (fretsArray[s] === 0) ? -1 : 0; updateDisplay(); });
+    indicator.addEventListener('click', () => { fretsArray[s] = (fretsArray[s] === 0) ? -1 : 0; fingersOverride[s] = null; updateDisplay(); });
     row.appendChild(indicator);
     for (let f = 1; f <= NUM_FRETS; f++) {
         const cell = document.createElement('div');
@@ -768,7 +926,21 @@ for (let s = 0; s < NUM_STRINGS; s++) {
         const dot = document.createElement('div');
         dot.className = 'finger-dot';
         cell.appendChild(dot);
-        cell.addEventListener('click', () => { fretsArray[s] = (fretsArray[s] === f) ? -1 : f; updateDisplay(); });
+        cell.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            const next = (fretsArray[s] === f) ? -1 : f;
+            fretsArray[s] = next;
+            fingersOverride[s] = null;
+            isDragging = (next === f);
+            dragFret = f;
+            updateDisplay();
+        });
+        cell.addEventListener('mouseenter', () => {
+            if (!isDragging || f !== dragFret) return;
+            fretsArray[s] = f;
+            fingersOverride[s] = null;
+            updateDisplay();
+        });
         row.appendChild(cell);
     }
     const sl = document.createElement('div');
@@ -779,6 +951,7 @@ for (let s = 0; s < NUM_STRINGS; s++) {
     row.appendChild(sl);
     fretboardDiv.appendChild(row);
 }
+window.addEventListener('mouseup', () => { isDragging = false; });
 
 const overlay = document.createElement('div');
 overlay.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:1;';
@@ -799,6 +972,65 @@ for (let f = 1; f <= NUM_FRETS; f++) {
     fretNumbersDiv.appendChild(n);
 }
 
+function updateMiniDiagram() {
+    const playedFrets = fretsArray.filter(f => f > 0);
+    const W = 138, ML = 22, MR = 9, MT = 26, MB = 12;
+    const SHOW = 4, NS = NUM_STRINGS;
+    const gW = W - ML - MR, gH = 140;
+    const ss = gW / (NS - 1), fs = gH / SHOW;
+    const sx = c => ML + c * ss;
+    const fy = r => MT + r * fs;
+    const cy = r => fy(r) + fs / 2;
+    const H = MT + gH + MB;
+    const baseFret = playedFrets.length ? Math.min(...playedFrets) : 1;
+    const strThick = [3.5, 2.8, 2.2, 1.7, 1.3, 1.0];
+    let svg = '';
+
+    if (baseFret === 1) {
+        svg += '<rect x="' + sx(0) + '" y="' + (MT-6) + '" width="' + gW + '" height="8" rx="3" fill="#c8b87a"/>';
+    } else {
+        svg += '<text x="' + (ML-3) + '" y="' + (cy(0)+5) + '" font-size="14" fill="#8a7a58" text-anchor="end">' + baseFret + 'fr</text>';
+    }
+    for (let r = (baseFret === 1 ? 1 : 0); r <= SHOW; r++) {
+        svg += '<line x1="' + sx(0) + '" y1="' + fy(r) + '" x2="' + sx(NS-1) + '" y2="' + fy(r) + '" stroke="#5a4a28" stroke-width="1.2"/>';
+    }
+    for (let c = 0; c < NS; c++) {
+        const pi = NS-1-c;
+        svg += '<line x1="' + sx(c) + '" y1="' + MT + '" x2="' + sx(c) + '" y2="' + fy(SHOW) + '" stroke="#786828" stroke-width="' + strThick[c] + '"/>';
+        const fv = fretsArray[pi];
+        if (fv === -1) { svg += '<text x="' + sx(c) + '" y="' + (MT-12) + '" font-size="16" fill="#c04040" text-anchor="middle">x</text>'; }
+        else if (fv === 0) { svg += '<circle cx="' + sx(c) + '" cy="' + (MT-15) + '" r="7" fill="none" stroke="#8a7a58" stroke-width="2"/>'; }
+    }
+
+    for (let c = 0; c < NS; c++) {
+        const pi = NS-1-c, fv = fretsArray[pi];
+        if (fv <= 0) continue;
+        const br = fv - baseFret;
+        if (br < 0 || br >= SHOW) continue;
+        const r = fs*0.32, fn = fingersOverride[pi] || 0;
+        if (fingeringActive) {
+            svg += '<circle class="fdot" data-pi="' + pi + '" cx="' + sx(c) + '" cy="' + cy(br) + '" r="' + r + '" fill="#e8c840" style="cursor:pointer"/>';
+            if (fn > 0) { svg += '<text x="' + sx(c) + '" y="' + (cy(br)+5) + '" font-size="12" fill="#1a1a0a" text-anchor="middle" pointer-events="none">' + fn + '</text>'; }
+        } else {
+            svg += '<circle cx="' + sx(c) + '" cy="' + cy(br) + '" r="' + r + '" fill="#e8c840"/>';
+        }
+    }
+
+    document.getElementById('mini-diagram').innerHTML =
+        '<svg width="' + W + '" height="' + H + '" xmlns="http://www.w3.org/2000/svg">' + svg + '</svg>';
+
+    if (fingeringActive) {
+        const cycle = cur => (cur === null || cur === 0) ? 1 : cur >= 4 ? null : cur + 1;
+        document.querySelectorAll('#mini-diagram .fdot').forEach(el => {
+            el.addEventListener('click', () => {
+                const pi = parseInt(el.getAttribute('data-pi'));
+                fingersOverride[pi] = cycle(fingersOverride[pi]);
+                updateMiniDiagram();
+            });
+        });
+    }
+}
+
 function updateDisplay() {
     const rows = fretboardDiv.children;
     for (let s = 0; s < NUM_STRINGS; s++) {
@@ -808,6 +1040,7 @@ function updateDisplay() {
         else                { indic.className = 'string-indicator played';  indic.innerText = ''; }
         for (let f = 1; f <= NUM_FRETS; f++) { row.children[f].classList.toggle('selected', val === f); }
     }
+    updateMiniDiagram();
     vscode.postMessage({ command: 'detectChord', frets: [...fretsArray] });
 }
 
@@ -842,16 +1075,45 @@ window.addEventListener('message', e => {
 function doInsert(cmd) {
     const name = document.getElementById('chordName').value.trim();
     if (!name) { alert('Enter chord name'); return; }
-    vscode.postMessage({ command: cmd, chord: { name, frets: [...fretsArray] } });
+    const hasFingers = fingeringActive && fingersOverride.some(f => f !== null && f > 0);
+    const fingers = hasFingers ? fingersOverride.map(f => f === null ? 0 : f) : null;
+    vscode.postMessage({ command: cmd, chord: { name, frets: [...fretsArray], fingers } });
 }
 document.getElementById('saveBtn').addEventListener('click', () => doInsert('saveChord'));
 document.getElementById('saveDefineBtn').addEventListener('click', () => doInsert('saveChordWithDefines'));
 document.getElementById('chordName').addEventListener('keydown', e => { if (e.key === 'Enter') { doInsert('saveChord'); } });
+document.getElementById('fingeringToggle').addEventListener('click', () => {
+    fingeringActive = !fingeringActive;
+    const btn = document.getElementById('fingeringToggle');
+    btn.textContent = fingeringActive ? 'Fingering: ON' : 'Fingering: OFF';
+    btn.style.borderColor = fingeringActive ? '#5a8a38' : '#4a3a22';
+    btn.style.color = fingeringActive ? '#d4e8b0' : '#7a6a48';
+    document.getElementById('fingering-hint').style.display = fingeringActive ? 'block' : 'none';
+    updateMiniDiagram();
+});
 document.getElementById('resetBtn').addEventListener('click', () => {
     fretsArray = Array(NUM_STRINGS).fill(-1);
+    fingersOverride = Array(NUM_STRINGS).fill(null);
     document.getElementById('chordName').value = '';
-    updateDisplay();
     document.getElementById('suggestions').innerHTML = '<span>play some strings...</span>';
+    updateDisplay();
+});
+
+window.addEventListener('message', e => {
+    const msg = e.data;
+    if (msg.command === 'loadChord') {
+        fretsArray = msg.frets.slice();
+        fingersOverride = msg.fingers ? msg.fingers.slice() : Array(NUM_STRINGS).fill(null);
+        fingeringActive = msg.fingers && msg.fingers.some(f => f > 0);
+        document.getElementById('chordName').value = msg.name || '';
+        const btn = document.getElementById('fingeringToggle');
+        btn.textContent = fingeringActive ? 'Fingering: ON' : 'Fingering: OFF';
+        btn.style.borderColor = fingeringActive ? '#5a8a38' : '#4a3a22';
+        btn.style.color = fingeringActive ? '#d4e8b0' : '#7a6a48';
+        document.getElementById('fingering-hint').style.display = fingeringActive ? 'block' : 'none';
+        updateDisplay();
+        vscode.postMessage({ command: 'detectChord', frets: fretsArray });
+    }
 });
 </script>
 </body>
@@ -998,6 +1260,477 @@ const RENDER_OPTIONS = {
         ],
     },
 };
+
+// ─────────────────────────────────────────────
+// Chord Reference Panel
+// ─────────────────────────────────────────────
+function findDefineInsertLine(document) {
+    const lines = document.getText().split('\n');
+    const metaRe = /^\{(title|subtitle|artist|composer|lyricist|copyright|album|year|key|time|tempo|capo|duration|sorttitle|sortartist|tag|meta)[\s:}]/i;
+    const defineRe = /^\{define:/i;
+    let headerEnd = -1;
+    for (let i = 0; i < lines.length; i++) {
+        const t = lines[i].trim();
+        if (!t || t.startsWith('#') || t.startsWith('{')) { headerEnd = i; }
+        else { break; }
+    }
+    let lastDefine = -1, lastMeta = -1;
+    for (let i = 0; i <= headerEnd; i++) {
+        const t = lines[i].trim();
+        if (defineRe.test(t)) { lastDefine = i; }
+        else if (metaRe.test(t)) { lastMeta = i; }
+    }
+    return lastDefine >= 0 ? lastDefine + 1 : lastMeta >= 0 ? lastMeta + 1 : 0;
+}
+
+class ChordReferenceViewProvider {
+    constructor(context) {
+        this._ctx = context;
+        this._view = undefined;
+        this._timer = null;
+    }
+
+    resolveWebviewView(view) {
+        this._view = view;
+        view.webview.options = { enableScripts: true };
+        view.webview.html = this._buildHtml();
+        view.webview.onDidReceiveMessage(async msg => {
+            // ── Delete voicing/chord ──────────────────────────────────────
+            if (msg.command === 'deleteVoicing') {
+                const { name, voicingFrets, voicingCount } = msg;
+                let scope = 'one';
+                if (voicingCount > 1) {
+                    const pick = await vscode.window.showQuickPick(
+                        [
+                            { label: `Delete this voicing`, description: `Keep the other ${voicingCount - 1} voicing(s) of ${name}`, value: 'one' },
+                            { label: `Delete all voicings of ${name}`, description: 'Remove from My Chords entirely', value: 'all' },
+                        ],
+                        { placeHolder: `What would you like to delete?` }
+                    );
+                    if (!pick) return;
+                    scope = pick.value;
+                }
+                if (scope === 'all') {
+                    // Hide the chord entirely
+                    const hidden = this._ctx.globalState.get('hiddenChords') || [];
+                    if (!hidden.includes(name)) {
+                        this._ctx.globalState.update('hiddenChords', [...hidden, name]);
+                    }
+                    // Also remove from savedVoicings
+                    const all = (this._ctx.globalState.get('savedVoicings') || []).filter(v => v.name !== name);
+                    this._ctx.globalState.update('savedVoicings', all);
+                } else {
+                    // Suppress just this voicing's fret pattern
+                    const fretsKey = JSON.stringify(voicingFrets);
+                    const suppressed = this._ctx.globalState.get('suppressedVoicings') || [];
+                    if (!suppressed.some(s => s.name === name && s.fretsKey === fretsKey)) {
+                        this._ctx.globalState.update('suppressedVoicings', [...suppressed, { name, fretsKey }]);
+                    }
+                    // Also remove from savedVoicings if it came from there
+                    const allV = this._ctx.globalState.get('savedVoicings') || [];
+                    const filtered = allV.filter(v => {
+                        if (v.name !== name) return true;
+                        return JSON.stringify([...v.frets].reverse()) !== fretsKey;
+                    });
+                    this._ctx.globalState.update('savedVoicings', filtered);
+                }
+                this.nudge();
+                return;
+            }
+
+            // ── Insert chord ──────────────────────────────────────────────
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) return;
+            // Snapshot cursor before any edit (edits shift the cursor and we need the original)
+            let cursorPos = editor.selection.active;
+            // Auto-insert {define:} using the voicing data sent from the webview (lowE→highE)
+            if (msg.voicingFrets) {
+                const existingDefines = parseDocumentDefines(editor.document);
+                if (!existingDefines[msg.name]) {
+                    const cpFrets = msg.voicingFrets;
+                    const frettedPositions = cpFrets.filter(f => f > 0);
+                    const baseFret = frettedPositions.length > 0 ? Math.min(...frettedPositions) : 1;
+                    const values = cpFrets.map(f => f === -1 ? 'x' : f === 0 ? '0' : String(f - baseFret + 1));
+                    let define = `{define: ${msg.name} base-fret ${baseFret} frets ${values.join(' ')}`;
+                    if (msg.voicingFingers && msg.voicingFingers.some(f => f > 0)) {
+                        const fv = msg.voicingFingers.map((fn, i) => cpFrets[i] <= 0 ? '0' : String(fn));
+                        define += ` fingers ${fv.join(' ')}`;
+                    }
+                    define += '}';
+                    const insertLine = findDefineInsertLine(editor.document);
+                    const ok = await editor.edit(eb => eb.insert(new vscode.Position(insertLine, 0), define + '\n'));
+                    if (ok && insertLine <= cursorPos.line) {
+                        cursorPos = cursorPos.translate(1, 0);
+                    }
+                }
+            }
+            const text = msg.diagram ? '{chord: ' + msg.name + '}' : '[' + msg.name + ']';
+            editor.edit(eb => eb.insert(cursorPos, text));
+        });
+        this._push();
+    }
+
+    nudge() {
+        clearTimeout(this._timer);
+        this._timer = setTimeout(() => this._push(), 300);
+    }
+
+    _push() {
+        if (!this._view) return;
+        const editor = vscode.window.activeTextEditor;
+        const fileChords = [];
+        if (editor && editor.document.languageId === 'chordpro') {
+            const defines = parseDocumentDefines(editor.document);
+            const seen = new Set(Object.keys(defines));
+            for (const [name, frets] of Object.entries(defines)) {
+                fileChords.push({ name, frets });
+            }
+            const re = /\[([A-G][^\[\]]*)\]/g;
+            const text = editor.document.getText();
+            let m;
+            while ((m = re.exec(text)) !== null) {
+                const name = m[1].trim();
+                if (!name || seen.has(name)) continue;
+                seen.add(name);
+                const saved = getPrimaryVoicing(this._ctx, name);
+                const frets = saved ? [...saved.frets].reverse() : (CHORD_DB[name] || null);
+                if (frets) fileChords.push({ name, frets });
+            }
+        }
+        const chordFiles = this._ctx.globalState.get('chordFiles') || {};
+        const hiddenChords = new Set(this._ctx.globalState.get('hiddenChords') || []);
+        const suppressedVoicings = this._ctx.globalState.get('suppressedVoicings') || [];
+        const isSuppressed = (name, frets) => suppressedVoicings.some(
+            s => s.name === name && s.fretsKey === JSON.stringify(frets)
+        );
+        const myChords = Object.entries(chordFiles)
+            .filter(([name]) => !hiddenChords.has(name))
+            .map(([name, entries]) => {
+                // Normalize: may be legacy strings or new {uri, frets} objects
+                const norm = entries.map(e => typeof e === 'string' ? { uri: e, frets: null } : e);
+                const count = norm.length;
+                // Collect unique voicings — file defines first, then Chord Builder, then CHORD_DB fallback
+                const seen = new Set();
+                const voicings = [];
+                const addVoicing = (frets, fingers) => {
+                    if (!frets) return;
+                    if (isSuppressed(name, frets)) return;
+                    const k = JSON.stringify(frets);
+                    if (seen.has(k)) return;
+                    seen.add(k);
+                    voicings.push({ frets, fingers: fingers || null });
+                };
+                // From file {define:} blocks (lowE→highE absolute)
+                for (const e of norm) { addVoicing(e.frets, null); }
+                // From Chord Builder saves (stored highE→lowE, flip to lowE→highE)
+                for (const v of getSavedVoicings(this._ctx, name)) {
+                    addVoicing([...v.frets].reverse(), v.fingers ? [...v.fingers].reverse() : null);
+                }
+                // CHORD_DB fallback if nothing else
+                if (!voicings.length && CHORD_DB[name]) { addVoicing(CHORD_DB[name], null); }
+                // File basenames for tooltip
+                const files = norm.map(e => {
+                    try { return require('path').basename(vscode.Uri.parse(e.uri).fsPath); }
+                    catch (_) { return e.uri.split('/').pop(); }
+                });
+                return { name, count, voicings, files };
+            })
+            .filter(({ voicings }) => voicings.length > 0)
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 30);
+        this._view.webview.postMessage({ type: 'update', fileChords, myChords });
+    }
+
+    _buildHtml() {
+        const library = JSON.stringify(
+            Object.entries(CHORD_DB).map(([name, frets]) => ({ name, frets }))
+        );
+        return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #1e1e0e; color: #c8b87a; font-family: sans-serif; font-size: 11px; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+#tabs { display: flex; border-bottom: 1px solid #3a2a10; flex-shrink: 0; }
+.tab { flex: 1; padding: 5px 2px; text-align: center; cursor: pointer; color: #7a6a48; border-bottom: 2px solid transparent; font-size: 10px; }
+.tab.active { color: #c8b87a; border-bottom-color: #c8a030; }
+#sw { padding: 4px; flex-shrink: 0; border-bottom: 1px solid #3a2a10; }
+#sw input { width: 100%; background: #2a2a14; border: 1px solid #3a2a10; color: #c8b87a; padding: 3px 6px; border-radius: 3px; font-size: 11px; outline: none; }
+#grid { flex: 1; overflow-y: auto; padding: 6px; display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; align-content: start; }
+.card { display: flex; flex-direction: column; align-items: center; cursor: pointer; padding: 3px; border-radius: 4px; border: 1px solid transparent; user-select: none; }
+.card:hover { border-color: #5a4a28; background: #2a2a14; }
+.card svg { display: block; }
+.cname { margin-top: 2px; font-size: 12px; font-weight: 600; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vnav { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 2px; }
+.varr { cursor: pointer; padding: 2px 5px; color: #c8a030; font-size: 13px; line-height: 1; border-radius: 3px; }
+.varr:hover { color: #e8c840; background: #2a2a14; }
+.vcnt { font-size: 10px; color: #8a7a58; min-width: 24px; text-align: center; }
+.card { position: relative; }
+.del { position: absolute; top: 2px; right: 2px; font-size: 9px; color: #5a4a28; cursor: pointer; line-height: 1; display: none; padding: 1px 2px; }
+.card:hover .del { display: block; }
+.del:hover { color: #c04040; }
+#empty { padding: 20px; text-align: center; color: #5a4a28; font-size: 11px; }
+#ctx-menu { position: fixed; background: #2a2a14; border: 1px solid #5a4a28; border-radius: 4px; padding: 3px 0; z-index: 999; display: none; min-width: 160px; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+.ctx-item { padding: 5px 12px; cursor: pointer; font-size: 11px; color: #c8b87a; white-space: nowrap; }
+.ctx-item:hover { background: #3a3a1e; color: #e8d890; }
+#sort-btn { background: none; border: none; color: #5a4a28; cursor: pointer; font-size: 9px; padding: 3px 4px; border-radius: 3px; white-space: nowrap; }
+#sort-btn:hover { color: #c8b87a; background: #2a2a14; }
+#sort-btn.active { color: #c8a030; }
+#sw { display: flex; align-items: center; gap: 3px; }
+#sw input { flex: 1; }
+#hint-bar { flex-shrink: 0; border-top: 1px solid #3a2a10; padding: 6px 8px; font-size: 11px; color: #b8a870; line-height: 1.8; }
+#hint-bar kbd { background: #2a2a14; border: 1px solid #4a3a18; border-radius: 2px; padding: 0 4px; font-family: inherit; font-size: 10px; color: #e8c840; }
+</style>
+</head>
+<body>
+<div id="tabs">
+  <div class="tab active" data-tab="file">File</div>
+  <div class="tab" data-tab="saved">My Chords</div>
+  <div class="tab" data-tab="library">Library</div>
+</div>
+<div id="sw">
+  <input id="si" type="text" placeholder="Filter…"/>
+  <button id="sort-btn" title="Sort: frequency">A↕</button>
+</div>
+<div id="grid"></div>
+<div id="empty" style="display:none">No chords</div>
+<div id="hint-bar">Click to insert inline &nbsp;·&nbsp; <kbd>Ctrl</kbd>+click to insert diagram &nbsp;·&nbsp; Right-click for options &nbsp;·&nbsp; Auto-inserts <code>{define:}</code></div>
+<div id="ctx-menu">
+  <div class="ctx-item" data-action="inline"></div>
+  <div class="ctx-item" data-action="diagram"></div>
+</div>
+<script>
+const LIBRARY = ${library};
+const vscode = acquireVsCodeApi();
+let tab = 'file', fileChords = [], myChords = [], q = '', sortAlpha = false;
+const voicingIdx = {}; // name → current index in voicings array
+
+function drawSvg(frets, fingers) {
+    var W=64,H=72,NS=6,NF=4,PL=8,PR=10,PT=16,PB=4;
+    var SW=(W-PL-PR)/(NS-1), FH=(H-PT-PB)/NF;
+    var sx=function(i){return PL+i*SW;};
+    var fy=function(i){return PT+i*FH;};
+    var cy=function(i){return PT+(i-0.5)*FH;};
+    var played=frets.filter(function(f){return f>0;});
+    var minF=played.length?Math.min.apply(null,played):1;
+    var hasOpen=frets.some(function(f){return f===0;});
+    var showNut=hasOpen||minF<=2;
+    var startF=showNut?1:minF;
+    var fretCounts={};
+    frets.forEach(function(f){if(f>0)fretCounts[f]=(fretCounts[f]||0)+1;});
+    var barreF=minF&&fretCounts[minF]>=4?minF:0;
+    var s='';
+    if(showNut){
+        s+='<rect x="'+sx(0)+'" y="'+(fy(0)-3)+'" width="'+(sx(NS-1)-sx(0))+'" height="3" fill="#555"/>';
+    } else {
+        s+='<text x="'+(W-2)+'" y="'+(fy(1)-1)+'" font-size="7" fill="#8a7a58" text-anchor="end">'+startF+'fr</text>';
+    }
+    for(var i=showNut?1:0;i<=NF;i++){
+        s+='<line x1="'+sx(0)+'" y1="'+fy(i)+'" x2="'+sx(NS-1)+'" y2="'+fy(i)+'" stroke="#3a3a24" stroke-width="0.8"/>';
+    }
+    for(var i=0;i<NS;i++){
+        s+='<line x1="'+sx(i)+'" y1="'+fy(0)+'" x2="'+sx(i)+'" y2="'+fy(NF)+'" stroke="#4a4a2a" stroke-width="0.8"/>';
+    }
+    for(var i=0;i<NS;i++){
+        if(frets[i]===-1){
+            var x=sx(i),y=PT-7,d=3;
+            s+='<line x1="'+(x-d)+'" y1="'+(y-d)+'" x2="'+(x+d)+'" y2="'+(y+d)+'" stroke="#c04040" stroke-width="1.2"/>';
+            s+='<line x1="'+(x+d)+'" y1="'+(y-d)+'" x2="'+(x-d)+'" y2="'+(y+d)+'" stroke="#c04040" stroke-width="1.2"/>';
+        } else if(frets[i]===0){
+            s+='<circle cx="'+sx(i)+'" cy="'+(PT-7)+'" r="3" fill="none" stroke="#8a7a58" stroke-width="1"/>';
+        }
+    }
+    if(barreF){
+        var slot=barreF-startF+1;
+        var bs=frets.reduce(function(a,f,i){if(f===barreF)a.push(i);return a;},[]);
+        var bx1=sx(Math.min.apply(null,bs))-5, bx2=sx(Math.max.apply(null,bs))+5;
+        s+='<rect x="'+bx1+'" y="'+(cy(slot)-5)+'" width="'+(bx2-bx1)+'" height="10" rx="5" fill="#e8c840"/>';
+        var bfn=fingers&&fingers[bs[0]]>0?fingers[bs[0]]:0;
+        if(bfn) s+='<text x="'+((sx(Math.min.apply(null,bs))+sx(Math.max.apply(null,bs)))/2)+'" y="'+(cy(slot)+3)+'" font-size="7" fill="#1a1a0a" text-anchor="middle">'+bfn+'</text>';
+    }
+    frets.forEach(function(f,i){
+        if(f<=0)return;
+        if(barreF&&f===barreF)return;
+        var slot=f-startF+1;
+        if(slot<1||slot>NF)return;
+        var fn=fingers&&fingers[i]>0?fingers[i]:0;
+        var r=SW*0.38;
+        s+='<circle cx="'+sx(i)+'" cy="'+cy(slot)+'" r="'+r+'" fill="#e8c840"/>';
+        if(fn) s+='<text x="'+sx(i)+'" y="'+(cy(slot)+3)+'" font-size="7" fill="#1a1a0a" text-anchor="middle">'+fn+'</text>';
+    });
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="'+W+'" height="'+H+'">'+s+'</svg>';
+}
+
+var noDataSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="72"><text x="32" y="40" font-size="9" fill="#4a3a22" text-anchor="middle">?</text></svg>';
+
+function fuzzy(label, q) {
+    var fi=0, f=q.toLowerCase(), n=label.toLowerCase();
+    for(var i=0;i<n.length&&fi<f.length;i++){if(n[i]===f[fi])fi++;}
+    return fi===f.length;
+}
+
+function cardHtml(c, showDel) {
+    var voicings=c.voicings||[{frets:c.frets,fingers:c.fingers||null}];
+    var idx=voicingIdx[c.name]||0;
+    if(idx>=voicings.length)idx=0;
+    var v=voicings[idx];
+    var diagram=v&&v.frets?drawSvg(v.frets,v.fingers||null):noDataSvg;
+    var nav='';
+    if(voicings.length>1){
+        nav='<div class="vnav">'
+            +'<span class="varr" data-name="'+c.name+'" data-dir="-1">&#9664;</span>'
+            +'<span class="vcnt">'+(idx+1)+'/'+voicings.length+'</span>'
+            +'<span class="varr" data-name="'+c.name+'" data-dir="1">&#9654;</span>'
+            +'</div>';
+    }
+    var del=showDel?'<span class="del" data-name="'+c.name+'" title="Delete">&#x2715;</span>':'';
+    var tooltip='';
+    if(c.files&&c.files.length){
+        tooltip=' title="'+c.count+' file'+(c.count===1?'':'s')+':\\n'+c.files.join('\\n')+'"';
+    }
+    return '<div class="card" data-name="'+c.name+'"'+tooltip+'>'+del+diagram+'<div class="cname">'+c.name+'</div>'+nav+'</div>';
+}
+
+// Flat list of chords for current tab (normalise Library entries to have voicings array)
+function currentList() {
+    var raw = tab==='file' ? fileChords : tab==='saved' ? myChords : LIBRARY;
+    if(q) raw=raw.filter(function(c){return fuzzy(c.name,q);});
+    if(tab==='library') raw=raw.map(function(c){return {name:c.name,voicings:[{frets:c.frets,fingers:null}]};});
+    if(tab==='saved' && sortAlpha) raw=raw.slice().sort(function(a,b){return a.name.localeCompare(b.name);});
+    return raw;
+}
+
+function updateSortBtn() {
+    var btn=document.getElementById('sort-btn');
+    if(!btn) return;
+    var onSaved=(tab==='saved');
+    btn.style.display=onSaved?'':'none';
+    btn.textContent=sortAlpha?'#↕':'A↕';
+    btn.title=sortAlpha?'Sort: alphabetical (click for frequency)':'Sort: frequency (click for A–Z)';
+    btn.classList.toggle('active', sortAlpha);
+}
+
+function attachCardListeners(el, showDel) {
+    var name=el.dataset.name;
+    el.addEventListener('click',function(e){
+        if(e.target.classList.contains('varr')||e.target.classList.contains('del')) return;
+        var voicings=findVoicings(name);
+        var idx=voicingIdx[name]||0;
+        var v=voicings[idx]||voicings[0];
+        vscode.postMessage({name:name, voicingFrets:v?v.frets:null, voicingFingers:v?v.fingers:null, diagram:e.ctrlKey||e.metaKey});
+    });
+    el.querySelectorAll('.varr').forEach(function(a){
+        a.addEventListener('click',function(e){
+            e.stopPropagation();
+            var voicings=findVoicings(name);
+            if(!voicings||voicings.length<=1) return;
+            var idx=(voicingIdx[name]||0)+parseInt(a.dataset.dir);
+            if(idx<0) idx=voicings.length-1;
+            if(idx>=voicings.length) idx=0;
+            voicingIdx[name]=idx;
+            render();
+        });
+    });
+    if(showDel){
+        var delBtn=el.querySelector('.del');
+        if(delBtn) delBtn.addEventListener('click',function(e){
+            e.stopPropagation();
+            var voicings=findVoicings(name);
+            var idx=voicingIdx[name]||0;
+            var v=voicings[idx]||voicings[0];
+            vscode.postMessage({command:'deleteVoicing', name:name, voicingFrets:v?v.frets:null, voicingCount:voicings.length});
+        });
+    }
+}
+
+function render() {
+    var grid=document.getElementById('grid'), empty=document.getElementById('empty');
+    var chords=currentList();
+    var showDel=(tab==='saved');
+    updateSortBtn();
+    if(!chords.length){grid.innerHTML='';empty.style.display='block';return;}
+    empty.style.display='none';
+    grid.innerHTML=chords.map(function(c){return cardHtml(c,showDel);}).join('');
+    grid.querySelectorAll('.card').forEach(function(el){ attachCardListeners(el, showDel); });
+}
+
+function findVoicings(name) {
+    var list=tab==='file'?fileChords:tab==='saved'?myChords:LIBRARY;
+    var c=list.find(function(x){return x.name===name;});
+    if(!c) return [{frets:null,fingers:null}];
+    if(c.voicings) return c.voicings;
+    return [{frets:c.frets,fingers:c.fingers||null}];
+}
+
+document.querySelectorAll('.tab').forEach(function(t){
+    t.addEventListener('click',function(){
+        document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active');});
+        t.classList.add('active');
+        tab=t.dataset.tab;
+        render();
+    });
+});
+
+document.getElementById('si').addEventListener('input',function(e){
+    q=e.target.value.trim();
+    render();
+});
+
+document.getElementById('sort-btn').addEventListener('click',function(){
+    sortAlpha=!sortAlpha;
+    render();
+});
+updateSortBtn();
+
+// Right-click context menu
+var ctxMenu=document.getElementById('ctx-menu');
+var ctxCard=null;
+
+document.addEventListener('contextmenu',function(e){
+    var card=e.target.closest('.card');
+    if(!card){ctxMenu.style.display='none';return;}
+    e.preventDefault();
+    ctxCard=card;
+    var name=card.dataset.name;
+    ctxMenu.querySelector('[data-action="inline"]').textContent='Insert ['+name+']';
+    ctxMenu.querySelector('[data-action="diagram"]').textContent='Insert {chord: '+name+'}';
+    // Keep menu inside viewport
+    var x=e.clientX, y=e.clientY;
+    ctxMenu.style.display='block';
+    if(x+ctxMenu.offsetWidth>window.innerWidth) x=window.innerWidth-ctxMenu.offsetWidth-4;
+    if(y+ctxMenu.offsetHeight>window.innerHeight) y=window.innerHeight-ctxMenu.offsetHeight-4;
+    ctxMenu.style.left=x+'px';
+    ctxMenu.style.top=y+'px';
+});
+
+ctxMenu.querySelectorAll('.ctx-item').forEach(function(item){
+    item.addEventListener('click',function(e){
+        e.stopPropagation();
+        if(!ctxCard) return;
+        var name=ctxCard.dataset.name;
+        var voicings=findVoicings(name);
+        var v=voicings[voicingIdx[name]||0]||voicings[0];
+        vscode.postMessage({name:name, voicingFrets:v?v.frets:null, voicingFingers:v?v.fingers:null, diagram:item.dataset.action==='diagram'});
+        ctxMenu.style.display='none';
+        ctxCard=null;
+    });
+});
+
+document.addEventListener('click',function(){ctxMenu.style.display='none';});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')ctxMenu.style.display='none';});
+
+window.addEventListener('message',function(e){
+    var msg=e.data;
+    if(msg.type==='update'){fileChords=msg.fileChords;myChords=msg.myChords;render();}
+});
+
+render();
+</script>
+</body>
+</html>`;
+    }
+}
 
 // ─────────────────────────────────────────────
 // Song Library TreeDataProvider
@@ -1155,6 +1888,13 @@ function activate(context) {
         vscode.commands.executeCommand('chordproFretboard.chordBuilderView.focus');
     });
 
+    // Open a specific chord in the Builder (frets: lowE→highE absolute)
+    const openInBuilder = vscode.commands.registerCommand('chordpro.openInBuilder', (name, frets, fingers) => {
+        vscode.commands.executeCommand('chordproFretboard.chordBuilderView.focus');
+        // Brief delay so the panel has time to resolve before we post
+        setTimeout(() => chordBuilderProvider.loadChord(name, frets, fingers || null), 150);
+    });
+
     function pickChord(context, editor) {
         const docDefineNames = editor ? Object.keys(parseDocumentDefines(editor.document)) : [];
         const inlineChords = [];
@@ -1167,8 +1907,7 @@ function activate(context) {
                 if (ch && !docDefineNames.includes(ch)) { inlineChords.push(ch); }
             }
         }
-        const savedKeys = context.globalState.keys().filter(k => k.startsWith('chord_'));
-        const savedNames = savedKeys.map(k => k.slice('chord_'.length));
+        const savedNames = getAllSavedNames(context);
         const allNames = [...new Set([...docDefineNames, ...inlineChords, ...savedNames])];
         const baseItems = allNames.map(name => ({
             label: name,
@@ -1268,9 +2007,7 @@ function activate(context) {
                 if (bracketStart !== -1 && !linePrefix.includes(']', bracketStart)) {
                     const replaceRange = new vscode.Range(position.line, bracketStart + 1, position.line, position.character);
 
-                    const savedChordNames = context.globalState.keys()
-                        .filter(k => k.startsWith('chord_'))
-                        .map(k => k.slice('chord_'.length));
+                    const savedChordNames = getAllSavedNames(context);
 
                     const docDefineNames = Object.keys(parseDocumentDefines(document));
 
@@ -1487,11 +2224,11 @@ function activate(context) {
     // Merge CHORD_DB + Chord Builder saves + document {define:} into one fingering map
     function buildChordData(document) {
         const data = Object.assign({}, CHORD_DB);
-        for (const key of context.globalState.keys()) {
-            if (key.startsWith('chord_')) {
-                const chord = context.globalState.get(key);
-                if (chord && chord.frets)
-                    data[key.slice('chord_'.length)] = [...chord.frets].reverse();
+        const allVoicings = context.globalState.get('savedVoicings') || [];
+        // Use the first saved voicing per name (primary); doc defines will override below
+        for (const chord of allVoicings) {
+            if (!data[chord.name] && chord.frets) {
+                data[chord.name] = [...chord.frets].reverse();
             }
         }
         Object.assign(data, parseDocumentDefines(document)); // doc defines win
@@ -3012,7 +3749,7 @@ if(SONGS.length) loadSong(0);
             // Helper: build hover for a chord name with given token range
             function hoverForChord(chordName, start, end) {
                 const docDefines = parseDocumentDefines(document);
-                const saved = context.globalState.get(`chord_${chordName}`);
+                const saved = getPrimaryVoicing(context, chordName);
                 let frets = docDefines[chordName]
                     ?? (saved ? [...saved.frets].reverse() : null)
                     ?? CHORD_DB[chordName];
@@ -3025,11 +3762,31 @@ if(SONGS.length) loadSong(0);
                     const svg = generateChordSvg(frets, chordName);
                     const b64 = Buffer.from(svg).toString('base64');
                     md.appendMarkdown(`**${chordName}**\n\n![${chordName}](data:image/svg+xml;base64,${b64})`);
+                    const args = encodeURIComponent(JSON.stringify([chordName, frets, null]));
+                    md.appendMarkdown(`\n\n[Open in Chord Builder](command:chordpro.openInBuilder?${args})`);
                 } else {
                     md.appendMarkdown(`**${chordName}**`);
                 }
                 md.appendMarkdown(`\n\n*Used ${usageCount}× in this file*`);
                 return new vscode.Hover(md, new vscode.Range(position.line, start, position.line, end));
+            }
+
+            // {define: NAME ...} lines — show diagram + Open in Builder
+            const defineMatch = line.match(/^\s*\{(?:define|chord):?\s+([^\s}]+)/i);
+            if (defineMatch) {
+                const chordName = defineMatch[1];
+                const docDefines = parseDocumentDefines(document);
+                const frets = docDefines[chordName];
+                if (frets) {
+                    const md = new vscode.MarkdownString();
+                    md.isTrusted = true;
+                    const svg = generateChordSvg(frets, chordName);
+                    const b64 = Buffer.from(svg).toString('base64');
+                    md.appendMarkdown(`**${chordName}**\n\n![${chordName}](data:image/svg+xml;base64,${b64})`);
+                    const args = encodeURIComponent(JSON.stringify([chordName, frets, null]));
+                    md.appendMarkdown(`\n\n[Open in Chord Builder](command:chordpro.openInBuilder?${args})`);
+                    return new vscode.Hover(md);
+                }
             }
 
             // Standard [chord] tokens
@@ -3212,11 +3969,7 @@ if(SONGS.length) loadSong(0);
         const lines = document.getText().split('\n');
 
         const docDefines = parseDocumentDefines(document);
-        const savedNames = new Set(
-            context.globalState.keys()
-                .filter(k => k.startsWith('chord_'))
-                .map(k => k.slice('chord_'.length))
-        );
+        const savedNames = new Set(getAllSavedNames(context));
 
         const usedChords = new Set();
 
@@ -3337,6 +4090,29 @@ if(SONGS.length) loadSong(0);
     });
 
     // ─────────────────────────────────────────────
+    // Chord Reference Panel
+    // ─────────────────────────────────────────────
+    const chordRefProvider = new ChordReferenceViewProvider(context);
+    const chordRefView = vscode.window.registerWebviewViewProvider('chordproChordReference', chordRefProvider);
+    const onEditorChangeRef = vscode.window.onDidChangeActiveTextEditor(() => chordRefProvider.nudge());
+    const onDocChangeRef = vscode.workspace.onDidChangeTextDocument(e => {
+        if (vscode.window.activeTextEditor && e.document === vscode.window.activeTextEditor.document)
+            chordRefProvider.nudge();
+    });
+    // One-time migration: move old chord_NAME keys → savedVoicings array
+    migrateSavedChords(context);
+
+    const onOpenTrack = vscode.workspace.onDidOpenTextDocument(doc =>
+        trackChordUsage(doc, context, chordRefProvider)
+    );
+    const onSaveTrack = vscode.workspace.onDidSaveTextDocument(doc =>
+        trackChordUsage(doc, context, chordRefProvider, true)
+    );
+    // Track already-open documents at activation — force update to backfill any missing frets
+    vscode.workspace.textDocuments.forEach(doc => trackChordUsage(doc, context, chordRefProvider, true));
+    // Async scan: read any tracked files not currently open to recover their frets
+    backfillChordFileFrets(context, chordRefProvider);
+
     // Song Library Panel
     // ─────────────────────────────────────────────
     const songLibraryProvider = new SongLibraryProvider(context);
@@ -3429,6 +4205,7 @@ if(SONGS.length) loadSong(0);
         onSaveDisposable,
         chordBuilderView,
         openBuilder,
+        openInBuilder,
         insertTitle,
         insertChordInline,
         insertChordDiagram,
@@ -3447,6 +4224,11 @@ if(SONGS.length) loadSong(0);
         onOpenDiag,
         onChangeDiag,
         onCloseDiag,
+        chordRefView,
+        onEditorChangeRef,
+        onDocChangeRef,
+        onOpenTrack,
+        onSaveTrack,
         libraryTreeView,
         setLibraryFolder,
         refreshLibrary,

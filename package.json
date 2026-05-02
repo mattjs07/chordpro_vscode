@@ -47,7 +47,7 @@
         {
           "id": "chordproLibrary",
           "title": "ChordPro Library",
-          "icon": "$(music)"
+          "icon": "images/sidebar-icon.svg"
         }
       ],
       "panel": [
@@ -64,6 +64,11 @@
           "id": "chordproLibraryView",
           "name": "Song Library",
           "icon": "$(music)"
+        },
+        {
+          "type": "webview",
+          "id": "chordproChordReference",
+          "name": "Chord Reference"
         }
       ],
       "chordBuilder": [
@@ -183,6 +188,10 @@
       {
         "command": "extension.openGridEditor",
         "title": "ChordPro: Open Grid Editor"
+      },
+      {
+        "command": "chordpro.openInBuilder",
+        "title": "ChordPro: Open Chord in Builder"
       }
     ],
     "menus": {
@@ -213,6 +222,10 @@
       "commandPalette": [
         {
           "command": "chordpro.previewSongFromLibrary",
+          "when": "false"
+        },
+        {
+          "command": "chordpro.openInBuilder",
           "when": "false"
         }
       ]
@@ -299,6 +312,7 @@
     "onCommand:extension.capoHelper",
     "onCommand:extension.detectKey",
     "onView:chordproLibraryView",
+    "onView:chordproChordReference",
     "onCommand:chordpro.setLibraryFolder",
     "onCommand:chordpro.refreshLibrary",
     "onCommand:chordpro.openSetlistPreview",

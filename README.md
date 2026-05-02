@@ -17,7 +17,9 @@ ChordPro VSCode turns VSCode into a full-featured songwriting and performance en
 | | |
 |---|---|
 | 🎸 **Chord diagrams everywhere** | Hover over any `[chord]` in the source *or* in the live preview to see an SVG fretboard diagram |
-| 🎛 **Visual Chord Builder** | Click strings and frets on an interactive fretboard; the chord name is detected automatically |
+| 🎛 **Visual Chord Builder** | Click strings and frets on an interactive fretboard; the chord name is detected automatically; insert `{define:}` with one click |
+| 📖 **Chord Reference Panel** | Sidebar panel with three tabs — chords in the current file, your personal chord library, and the full built-in library; click to insert, Ctrl+click for diagram, right-click for options |
+| 🗂 **My Chords** | Automatically tracks every `{define:}` across all files you work on; stores multiple voicings per chord; navigate, delete, and sort your personal collection |
 | 🎼 **Visual Tab Editor** | Build guitar tablature by clicking a grid — no dashes to type |
 | 🎹 **Visual Grid Editor** | Build `{start_of_grid}` chord progression blocks visually — multi-beat cells, song chord palette, hover diagrams |
 | 📜 **Performance View** | Full-screen HTML view with auto-scroll, tap tempo, metronome, section jump, live transpose, and more |
@@ -38,6 +40,9 @@ ChordPro VSCode turns VSCode into a full-featured songwriting and performance en
 
 ### Chord Builder
 ![Chord Builder](images/gif_chord_builder.gif)
+
+### Chord Reference Panel
+![Chord Reference](images/gif_chord_ref.gif)
 
 ### Tab Editor
 ![Tab Editor](images/gif_tab_editor.gif)
@@ -93,9 +98,9 @@ PDF rendering requires the [ChordPro CLI](https://www.chordpro.org/chordpro/chor
 
 | Command | Shortcut | Description |
 |---|---|---|
-| ChordPro: Open Chord Builder | `Ctrl+Alt+B` | Interactive fretboard panel to define custom chords |
+| ChordPro: Open Chord Builder | `Ctrl+Alt+B` | Interactive fretboard panel to build and insert chord fingerings |
 | ChordPro: Insert Title | — | Insert a `{title: }` directive at the cursor |
-| ChordPro: Insert Chord Inline | `Ctrl+I` | Pick a chord from the song's defined/saved chords and insert `[CHORD]` |
+| ChordPro: Insert Chord Inline | `Ctrl+I` | Fuzzy-search your chords and insert `[CHORD]` at the cursor |
 | ChordPro: Insert Chord Diagram | `Ctrl+Shift+D` | Same picker, inserts `{chord: CHORD}` |
 | ChordPro: Open Tab Editor | `Ctrl+Alt+T` | Visual tab editor — click cells, type fret numbers |
 | ChordPro: Open Grid Editor | `Ctrl+Alt+G` | Visual chord grid editor — build `{start_of_grid}` blocks with a click-to-fill UI, with hover diagrams |
@@ -170,14 +175,43 @@ Open the **Song Library** panel in the activity bar (music note icon).
 5. In the Setlist Preview, use `PageUp` / `PageDown` or the `◀ ▶` buttons to navigate; enable **Auto** to advance automatically at the end of each song
 6. The setlist can be saved as a standalone HTML file with the `💾` button
 
+### Chord Reference Panel
+
+Open from the **ChordPro Library** activity bar icon — the **Chord Reference** view appears below the Song Library.
+
+Three tabs:
+
+| Tab | Contents |
+|---|---|
+| **File** | Every chord currently defined or used in the open `.cho` file |
+| **My Chords** | Your personal chord library — built automatically from every `{define:}` block across all files you work on |
+| **Library** | The full built-in library of ~100 standard voicings |
+
+**Interacting with chord cards:**
+
+- **Click** a card to insert `[CHORD]` inline at the cursor; if the chord has no `{define:}` in the file yet, one is inserted automatically in the header
+- **Ctrl+click** to insert `{chord: CHORD}` (diagram directive) instead
+- **Right-click** for a context menu with both insert options
+- **◀ ▶ arrows** to cycle through multiple voicings of the same chord
+- **× button** (hover over a card) to delete a voicing — choose to remove just that voicing or all voicings of the chord
+- **Search bar** filters all tabs by chord name (fuzzy matching)
+- **A↕ / #↕ toggle** (My Chords tab) to sort alphabetically or by frequency of use
+- **Hover tooltip** shows which files the chord was found in
+
+**My Chords tracking** — every `{define:}` you write or save is tracked automatically. Voicings from `{define:}` blocks, the Chord Builder, and the built-in library are merged and deduplicated per chord name. Saving a file updates My Chords immediately.
+
 ### Chord Builder
 
 Open with `Ctrl+Alt+B` or from the panel at the bottom.
 
-- Click strings and frets to place fingers on the fretboard
+- Click strings and frets to place fingers on the fretboard; drag across strings to place the same fret on multiple strings
 - The chord name is detected automatically from your finger positions
-- Click **Insert definition** to insert the `{define:}` block at the cursor
-- Saved chords appear at the top of the `[` auto-completion list and in the chord hover diagrams
+- **Fingering mode** — toggle to assign finger numbers (1–4) by clicking the fret dots
+- **At cursor** — inserts the `{define:}` block at the current cursor position
+- **With defines** — inserts the block grouped with existing `{define:}` lines in the file header; if the chord is already defined, you are prompted to replace or keep both
+- **↺ Reset** — clears the fretboard
+- **Open in Builder** link — hover over any `[chord]` or `{define:}` line and click the link to load that chord's fingering directly into the Builder
+- Saved chords appear at the top of the `[` auto-completion list and in chord hover diagrams
 
 ### Tab Editor
 
@@ -284,7 +318,7 @@ Press `Ctrl+Alt+A` to open [Oolimo](https://www.oolimo.com/en/guitar-chords/anal
 
 PDF rendering requires the [ChordPro CLI](https://www.chordpro.org/chordpro/chordpro-installation/) installed and on your system PATH.
 
-The **Performance View**, **Song Library**, **Setlist**, **Chord Builder**, **Tab Editor**, and **Chord Analyzer** work without the CLI.
+The **Performance View**, **Song Library**, **Setlist**, **Chord Builder**, **Chord Reference**, **Tab Editor**, and **Chord Analyzer** all work without the CLI.
 
 ---
 
