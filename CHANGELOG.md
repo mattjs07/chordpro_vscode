@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.15.0
+- **Chord Reference panel** — new sidebar view with three tabs: *File* (chords in the open file), *My Chords* (personal library), and *Library* (full built-in library)
+- **My Chords** — automatically tracks every `{define:}` block across all files you work on; voicings from file defines, the Chord Builder, and the built-in library are merged and deduplicated per chord name
+- Multiple voicings per chord in the reference panel: navigate with ◀ ▶ arrows; delete a single voicing or all voicings of a chord via the × button
+- Sort toggle in My Chords: A↕ alphabetical / #↕ by frequency of use; file tooltip on each card
+- Right-click context menu on reference cards: *Insert inline* / *Insert diagram*
+- Click a reference card to insert `[CHORD]` inline; `Ctrl+click` to insert `{chord:}`; both auto-add `{define:}` if the chord isn't yet defined in the file
+- Hint bar at the bottom of the reference panel with usage instructions
+- Chord names in reference cards enlarged (12 px bold)
+- **Chord Builder: fingering mode** — toggle to assign finger numbers 1–4 by clicking fret dots on the mini-diagram
+- **Load into Builder** — hover over any `[chord]` token or `{define:}` line and click *Open in Chord Builder* to load that voicing directly into the Builder
+- Builder *With defines* insert now prompts to replace or keep both when the chord is already defined in the file
+- Builder mini-diagram top-aligned; reduced dead space in SVG
+- **Tracking fixes** — chord usage re-tracked on every file save (`onDidSaveTextDocument`); closed files scanned at activation via `openTextDocument` to backfill missing frets; chords with an explicit `{define:}` are automatically un-hidden even if previously deleted from My Chords
+- Sidebar activity-bar icon updated to a chord-diagram SVG
+
 ## 1.14.2
 - Chord Builder: reworked layout — name field + Insert/Reset controls above fretboard, aligned to fretboard width
 - Chord Builder: two insert buttons ("At cursor" / "With defines") with smart placement logic; reset replaced by ↺ icon
