@@ -1571,7 +1571,12 @@ function drawSvg(frets, fingers) {
     var startF=showNut?1:minF;
     var fretCounts={};
     frets.forEach(function(f){if(f>0)fretCounts[f]=(fretCounts[f]||0)+1;});
-    var barreF=minF&&fretCounts[minF]>=4?minF:0;
+    var barreCandidate=minF&&fretCounts[minF]>=4?minF:0;
+    var barreF=0;
+    if(barreCandidate){
+        var bi=frets.reduce(function(a,f,i){if(f===barreCandidate)a.push(i);return a;},[]);
+        if(Math.max.apply(null,bi)-Math.min.apply(null,bi)+1===bi.length) barreF=barreCandidate;
+    }
     var s='';
     if(showNut){
         s+='<rect x="'+sx(0)+'" y="'+(fy(0)-3)+'" width="'+(sx(NS-1)-sx(0))+'" height="3" fill="#555"/>';
