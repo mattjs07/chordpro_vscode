@@ -855,6 +855,8 @@ body { margin: 0; padding: 6px; background: #1a1a0a; color: #d4c5a0; font-family
 #saveBtn       { padding: 3px 8px; font-size: 12px; cursor: pointer; background: #3a5a28; border: 1px solid #5a8a38; color: #d4e8b0; border-radius: 3px; white-space: nowrap; }
 #saveDefineBtn { padding: 3px 8px; font-size: 12px; cursor: pointer; background: #2a3a5a; border: 1px solid #3a5a8a; color: #b0c8e8; border-radius: 3px; white-space: nowrap; }
 #resetBtn      { margin-left: 8px; padding: 3px 7px; font-size: 15px; line-height: 1; cursor: pointer; background: transparent; border: 1px solid #6a2828; color: #c04040; border-radius: 3px; }
+#shiftDownBtn, #shiftUpBtn { padding: 2px 6px; font-size: 11px; cursor: pointer; background: transparent; border: 1px solid #4a3a22; color: #a09060; border-radius: 3px; }
+#shiftDownBtn:hover, #shiftUpBtn:hover { border-color: #c8a030; color: #c8a030; }
 #fretboard { display: inline-flex; flex-direction: column; position: relative; background: #1c1a0c; }
 .string-row { display: flex; align-items: center; height: 26px; position: relative; }
 .string-line { position: absolute; right: 0; top: 50%; transform: translateY(-50%); pointer-events: none; z-index: 2; }
@@ -889,6 +891,8 @@ body { margin: 0; padding: 6px; background: #1a1a0a; color: #d4c5a0; font-family
       <button id="saveBtn" title="Insert {define:} at cursor position">At cursor</button>
       <button id="saveDefineBtn" title="Insert {define:} grouped with other defines, or after metadata">With defines</button>
       <button id="resetBtn" title="Reset fretboard">↺</button>
+      <button id="shiftDownBtn" title="Shift all frets down by 1">−1</button>
+      <button id="shiftUpBtn" title="Shift all frets up by 1">+1</button>
     </div>
     <div id="fretboard"></div>
     <div id="fret-numbers"></div>
@@ -1096,6 +1100,19 @@ document.getElementById('resetBtn').addEventListener('click', () => {
     fingersOverride = Array(NUM_STRINGS).fill(null);
     document.getElementById('chordName').value = '';
     document.getElementById('suggestions').innerHTML = '<span>play some strings...</span>';
+    updateDisplay();
+});
+
+document.getElementById('shiftUpBtn').addEventListener('click', () => {
+    const hasFretted = fretsArray.some(f => f >= 0);
+    if (!hasFretted) return;
+    fretsArray = fretsArray.map(f => f === -1 ? -1 : Math.min(f + 1, NUM_FRETS));
+    updateDisplay();
+});
+document.getElementById('shiftDownBtn').addEventListener('click', () => {
+    const minFret = Math.min(...fretsArray.filter(f => f > 0));
+    if (!isFinite(minFret) || minFret <= 1) return;
+    fretsArray = fretsArray.map(f => f === -1 ? -1 : f === 0 ? 0 : f - 1);
     updateDisplay();
 });
 
@@ -1343,20 +1360,48 @@ class ChordReferenceViewProvider {
             if (!editor) return;
             // Snapshot cursor before any edit (edits shift the cursor and we need the original)
             let cursorPos = editor.selection.active;
+            // Build a {define:} string from voicing data (lowE→highE)
+            const buildDefineStr = (name, frets, fingers) => {
+                const frettedPositions = frets.filter(f => f > 0);
+                const baseFret = frettedPositions.length > 0 ? Math.min(...frettedPositions) : 1;
+                const values = frets.map(f => f === -1 ? 'x' : f === 0 ? '0' : String(f - baseFret + 1));
+                let def = `{define: ${name} base-fret ${baseFret} frets ${values.join(' ')}`;
+                if (fingers && fingers.some(f => f > 0)) {
+                    const fv = fingers.map((fn, i) => frets[i] <= 0 ? '0' : String(fn));
+                    def += ` fingers ${fv.join(' ')}`;
+                }
+                return def + '}';
+            };
+
+            // defineOnly: insert only the {define:} block (with define prompt if already exists)
+            if (msg.defineOnly) {
+                if (msg.voicingFrets) {
+                    const define = buildDefineStr(msg.name, msg.voicingFrets, msg.voicingFingers);
+                    const existingDefines = parseDocumentDefines(editor.document);
+                    if (existingDefines[msg.name]) {
+                        const answer = await vscode.window.showInformationMessage(
+                            `"${msg.name}" is already defined. Replace?`, 'Replace', 'Cancel'
+                        );
+                        if (answer !== 'Replace') return;
+                        const lines = editor.document.getText().split('\n');
+                        const matchRe = new RegExp(`^\\s*\\{(?:define|chord):?\\s+${escapeRegex(msg.name)}[\\s}]`, 'i');
+                        const lineIdx = lines.findIndex(l => matchRe.test(l));
+                        if (lineIdx >= 0) {
+                            editor.edit(eb => eb.replace(new vscode.Range(lineIdx, 0, lineIdx, lines[lineIdx].length), define));
+                        }
+                    } else {
+                        const insertLine = findDefineInsertLine(editor.document);
+                        editor.edit(eb => eb.insert(new vscode.Position(insertLine, 0), define + '\n'));
+                    }
+                }
+                return;
+            }
+
             // Auto-insert {define:} using the voicing data sent from the webview (lowE→highE)
             if (msg.voicingFrets) {
                 const existingDefines = parseDocumentDefines(editor.document);
                 if (!existingDefines[msg.name]) {
-                    const cpFrets = msg.voicingFrets;
-                    const frettedPositions = cpFrets.filter(f => f > 0);
-                    const baseFret = frettedPositions.length > 0 ? Math.min(...frettedPositions) : 1;
-                    const values = cpFrets.map(f => f === -1 ? 'x' : f === 0 ? '0' : String(f - baseFret + 1));
-                    let define = `{define: ${msg.name} base-fret ${baseFret} frets ${values.join(' ')}`;
-                    if (msg.voicingFingers && msg.voicingFingers.some(f => f > 0)) {
-                        const fv = msg.voicingFingers.map((fn, i) => cpFrets[i] <= 0 ? '0' : String(fn));
-                        define += ` fingers ${fv.join(' ')}`;
-                    }
-                    define += '}';
+                    const define = buildDefineStr(msg.name, msg.voicingFrets, msg.voicingFingers);
                     const insertLine = findDefineInsertLine(editor.document);
                     const ok = await editor.edit(eb => eb.insert(new vscode.Position(insertLine, 0), define + '\n'));
                     if (ok && insertLine <= cursorPos.line) {
@@ -1364,7 +1409,7 @@ class ChordReferenceViewProvider {
                     }
                 }
             }
-            const text = msg.diagram ? '{chord: ' + msg.name + '}' : '[' + msg.name + ']';
+            const text = msg.diagram ? '{chord: ' + msg.name + '}\n' : '[' + msg.name + ']';
             editor.edit(eb => eb.insert(cursorPos, text));
         });
         this._push();
@@ -1499,6 +1544,7 @@ body { background: #1e1e0e; color: #c8b87a; font-family: sans-serif; font-size: 
 <div id="ctx-menu">
   <div class="ctx-item" data-action="inline"></div>
   <div class="ctx-item" data-action="diagram"></div>
+  <div class="ctx-item" data-action="define">Insert {define:}</div>
 </div>
 <script>
 const LIBRARY = ${library};
@@ -1695,6 +1741,7 @@ document.addEventListener('contextmenu',function(e){
     var name=card.dataset.name;
     ctxMenu.querySelector('[data-action="inline"]').textContent='Insert ['+name+']';
     ctxMenu.querySelector('[data-action="diagram"]').textContent='Insert {chord: '+name+'}';
+    ctxMenu.querySelector('[data-action="define"]').textContent='Insert {define: '+name+'}';
     // Keep menu inside viewport
     var x=e.clientX, y=e.clientY;
     ctxMenu.style.display='block';
@@ -1711,7 +1758,8 @@ ctxMenu.querySelectorAll('.ctx-item').forEach(function(item){
         var name=ctxCard.dataset.name;
         var voicings=findVoicings(name);
         var v=voicings[voicingIdx[name]||0]||voicings[0];
-        vscode.postMessage({name:name, voicingFrets:v?v.frets:null, voicingFingers:v?v.fingers:null, diagram:item.dataset.action==='diagram'});
+        var action=item.dataset.action;
+        vscode.postMessage({name:name, voicingFrets:v?v.frets:null, voicingFingers:v?v.fingers:null, diagram:action==='diagram', defineOnly:action==='define'});
         ctxMenu.style.display='none';
         ctxCard=null;
     });
@@ -2273,6 +2321,7 @@ function activate(context) {
         const chordSvgs = buildChordSvgMap(source, chordData);
 
         if (scrollPanel) {
+            scrollDocUri = editor.document.uri.toString(); // keep uri in sync for save-reload
             scrollPanel.reveal(vscode.ViewColumn.Beside);
             scrollPanel.webview.postMessage({ command: 'reload', source, chordSvgs });
             return;
@@ -2355,11 +2404,15 @@ body {
   font-size: 0.78em; font-weight: bold; font-family: sans-serif;
   padding: 2px 10px; border-radius: 12px; margin-left: 6px; vertical-align: middle;
 }
-.section     { margin-bottom: 22px; }
+.section     { margin-bottom: 22px; position: relative; padding-left: 28px; }
 .section-label {
-  display: inline-block; font-size: 0.75em; font-weight: bold;
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 20px;
+  display: flex; align-items: center; justify-content: center;
+  writing-mode: vertical-rl; transform: rotate(180deg);
+  font-size: 0.65em; font-weight: bold;
   text-transform: uppercase; letter-spacing: 1px;
-  padding: 2px 10px; border-radius: 3px; margin-bottom: 6px;
+  border-radius: 3px; padding: 4px 0;
 }
 .section-chorus  .section-label { background: var(--sec-chorus-bg); color: var(--sec-chorus-fg); }
 .section-verse   .section-label { background: var(--sec-verse-bg);  color: var(--sec-verse-fg); }
@@ -3135,8 +3188,8 @@ body { padding-top: 52px; padding-bottom: 80px; }
 .song-subtitle { font-size: 1.1em; color: var(--fg-dim); margin-top: 2px; }
 .song-meta     { font-size: 0.85em; color: var(--fg-muted); margin-top: 6px; }
 .capo-badge { display: inline-block; margin-left: 8px; background: var(--capo-bg); color: var(--capo-fg); padding: 1px 7px; border-radius: 10px; font-size: 0.85em; }
-.section { margin-bottom: 18px; padding: 10px 14px; border-radius: 6px; }
-.section-label { font-size: 0.75em; font-weight: bold; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; opacity: 0.7; }
+.section { margin-bottom: 18px; padding: 10px 14px 10px 42px; border-radius: 6px; position: relative; }
+.section-label { position: absolute; left: 14px; top: 10px; bottom: 10px; width: 20px; display: flex; align-items: center; justify-content: center; writing-mode: vertical-rl; transform: rotate(180deg); font-size: 0.65em; font-weight: bold; text-transform: uppercase; letter-spacing: 0.08em; border-radius: 3px; padding: 4px 0; }
 .section-chorus .section-label { background: var(--sec-chorus-bg); color: var(--sec-chorus-fg); }
 .section-chorus .chord { color: var(--sec-chorus-fg); }
 .section-verse  .section-label { background: var(--sec-verse-bg);  color: var(--sec-verse-fg); }
