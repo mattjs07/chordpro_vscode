@@ -359,10 +359,16 @@ function generateChordSvg(frets, chordName) {
         startFret = minFret; showNut = false;
     }
 
-    // Detect barre: ≥ 4 strings on the same lowest fret
+    // Detect barre: ≥ 4 strings on the same lowest fret AND they form a contiguous range
     const fretCounts = {};
     frets.forEach(f => { if (f > 0) fretCounts[f] = (fretCounts[f] || 0) + 1; });
-    const barreFret = Number(Object.keys(fretCounts).find(f => fretCounts[f] >= 4 && Number(f) === minFret) || 0);
+    let barreFret = 0;
+    const barreFretCandidate = Number(Object.keys(fretCounts).find(f => fretCounts[f] >= 4 && Number(f) === minFret) || 0);
+    if (barreFretCandidate) {
+        const barIdxs = frets.reduce((a, f, i) => { if (f === barreFretCandidate) a.push(i); return a; }, []);
+        const span = Math.max(...barIdxs) - Math.min(...barIdxs) + 1;
+        if (span === barIdxs.length) barreFret = barreFretCandidate; // contiguous only
+    }
 
     const parts = [
         `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`,
@@ -2419,7 +2425,7 @@ body {
 .section-bridge  .section-label { background: var(--sec-bridge-bg); color: var(--sec-bridge-fg); }
 .section-tab     .section-label { background: var(--sec-tab-bg);    color: var(--sec-tab-fg); }
 .chord-line  { display: flex; flex-wrap: wrap; line-height: 1; margin-bottom: 4px; }
-.pair        { display: inline-flex; flex-direction: column; align-items: flex-start; }
+.pair        { display: inline-flex; flex-direction: column; align-items: flex-start; margin-right: 6px; }
 .chord       { color: var(--chord); font-weight: bold; font-size: 0.82em; min-height: 1.3em; font-family: sans-serif; white-space: pre; cursor: default; }
 .chord[data-chord] { cursor: help; }
 #chord-tip {
@@ -3196,7 +3202,7 @@ body { padding-top: 52px; padding-bottom: 80px; }
 .section-bridge .section-label { background: var(--sec-bridge-bg); color: var(--sec-bridge-fg); }
 .section-tab    { background: var(--sec-tab-bg); color: var(--sec-tab-fg); }
 .chord-line { display: flex; flex-wrap: wrap; margin-bottom: 2px; }
-.pair { display: inline-flex; flex-direction: column; margin-right: 2px; }
+.pair { display: inline-flex; flex-direction: column; margin-right: 6px; }
 .chord { font-weight: bold; font-size: 0.85em; color: var(--chord); min-height: 1.2em; white-space: pre; cursor: default; }
 .lyric { white-space: pre; }
 .lyric-line { margin-bottom: 2px; }
