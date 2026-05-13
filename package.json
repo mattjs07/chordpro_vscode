@@ -3,7 +3,7 @@
   "displayName": "ChordPro VSCode",
   "description": "Edit, render, and build ChordPro songs in VSCode — includes PDF rendering, templates, and an interactive chord builder with fretboard.",
   "publisher": "mattjs07",
-  "version": "1.16.1",
+  "version": "1.16.2",
   "icon": "images/icon.png",
   "categories": [
     "Other"
@@ -257,11 +257,26 @@
         }
       ],
       "chordpro.wrapSubmenu": [
-        { "command": "chordpro.wrapInSection.chorus", "group": "1_sections@1" },
-        { "command": "chordpro.wrapInSection.verse",  "group": "1_sections@2" },
-        { "command": "chordpro.wrapInSection.bridge", "group": "1_sections@3" },
-        { "command": "chordpro.wrapInSection.tab",    "group": "1_sections@4" },
-        { "command": "chordpro.wrapInSection.grid",   "group": "1_sections@5" }
+        {
+          "command": "chordpro.wrapInSection.chorus",
+          "group": "1_sections@1"
+        },
+        {
+          "command": "chordpro.wrapInSection.verse",
+          "group": "1_sections@2"
+        },
+        {
+          "command": "chordpro.wrapInSection.bridge",
+          "group": "1_sections@3"
+        },
+        {
+          "command": "chordpro.wrapInSection.tab",
+          "group": "1_sections@4"
+        },
+        {
+          "command": "chordpro.wrapInSection.grid",
+          "group": "1_sections@5"
+        }
       ],
       "commandPalette": [
         {
