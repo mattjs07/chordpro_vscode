@@ -853,39 +853,66 @@ function getWebviewContent() {
 <title>Chord Builder</title>
 <style>
 * { box-sizing: border-box; }
-body { margin: 0; padding: 6px; background: #1a1a0a; color: #d4c5a0; font-family: sans-serif; overflow: hidden; }
+/* Linear Violet palette — dark default, light when VS Code is in light theme */
+:root {
+  --bg: #131215; --surf: #1e1c22; --surf-hi: #262329;
+  --text: #e6e8ef; --muted: #8b8fa3; --border: #2e2b36;
+  --accent: #7c6af6; --accent-soft: rgba(124,106,246,0.15); --danger: #e5534b;
+  --string: #6a7286;
+}
+body.vscode-light, body.vscode-high-contrast-light {
+  --bg: #fafbfc; --surf: #ffffff; --surf-hi: #f0f3f9;
+  --text: #0f1117; --muted: #64748b; --border: #dde1eb;
+  --accent: #5e4fd8; --accent-soft: rgba(94,79,216,0.10); --danger: #cc3a33;
+  --string: #94a3b8;
+}
+
+body { margin: 0; padding: 8px; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 12px; overflow: hidden; }
 #wrapper { display: inline-block; }
-#top { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; width: 100%; }
-#chordName { flex: 1; min-width: 0; padding: 3px 6px; font-size: 13px; background: #2a2a1a; border: 1px solid #5a4a28; color: #d4c5a0; border-radius: 3px; outline: none; }
-.insert-label { font-size: 11px; color: #7a6a48; white-space: nowrap; }
-#saveBtn       { padding: 3px 8px; font-size: 12px; cursor: pointer; background: #3a5a28; border: 1px solid #5a8a38; color: #d4e8b0; border-radius: 3px; white-space: nowrap; }
-#saveDefineBtn { padding: 3px 8px; font-size: 12px; cursor: pointer; background: #2a3a5a; border: 1px solid #3a5a8a; color: #b0c8e8; border-radius: 3px; white-space: nowrap; }
-#resetBtn      { margin-left: 8px; padding: 3px 7px; font-size: 15px; line-height: 1; cursor: pointer; background: transparent; border: 1px solid #6a2828; color: #c04040; border-radius: 3px; }
-#shiftDownBtn, #shiftUpBtn { padding: 2px 6px; font-size: 11px; cursor: pointer; background: transparent; border: 1px solid #4a3a22; color: #a09060; border-radius: 3px; }
-#shiftDownBtn:hover, #shiftUpBtn:hover { border-color: #c8a030; color: #c8a030; }
-#fretboard { display: inline-flex; flex-direction: column; position: relative; background: #1c1a0c; }
+#top { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; width: 100%; }
+#chordName { flex: 1; min-width: 0; padding: 5px 10px; font-size: 13px; background: var(--surf); color: var(--text); border: 1px solid var(--border); border-radius: 5px; outline: none; font-family: inherit; transition: border-color 0.15s, box-shadow 0.15s; }
+#chordName:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.insert-label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+#saveBtn, #saveDefineBtn, #shiftDownBtn, #shiftUpBtn { padding: 5px 10px; font-size: 11px; cursor: pointer; background: var(--surf); color: var(--text); border: 1px solid var(--border); border-radius: 5px; white-space: nowrap; font-family: inherit; transition: all 0.12s ease; }
+#saveBtn:hover, #saveDefineBtn:hover, #shiftDownBtn:hover, #shiftUpBtn:hover { background: var(--surf-hi); border-color: var(--accent); color: var(--accent); }
+#fingeringToggle { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); cursor: pointer; user-select: none; }
+.toggle-track { width: 30px; height: 17px; border-radius: 9px; background: var(--border); position: relative; transition: background 0.2s; flex-shrink: 0; }
+#fingeringToggle.active .toggle-track { background: var(--accent); }
+.toggle-thumb { width: 13px; height: 13px; border-radius: 50%; background: #fff; position: absolute; top: 2px; left: 2px; transition: left 0.18s; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+#fingeringToggle.active .toggle-thumb { left: 15px; }
+#resetBtn { margin-left: 6px; padding: 4px 9px; font-size: 14px; line-height: 1; cursor: pointer; background: transparent; color: var(--danger); border: 1px solid var(--danger); border-radius: 5px; transition: all 0.12s ease; }
+#resetBtn:hover { background: var(--danger); color: var(--bg); }
+#fretboard { display: inline-flex; flex-direction: column; position: relative; background: var(--surf); border: 1px solid var(--border); border-radius: 6px; padding: 4px; margin-top: 4px; }
 .string-row { display: flex; align-items: center; height: 26px; position: relative; }
-.string-line { position: absolute; right: 0; top: 50%; transform: translateY(-50%); pointer-events: none; z-index: 2; }
-.string-indicator { width: 24px; height: 24px; flex-shrink: 0; margin-right: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 12px; font-weight: bold; border-radius: 50%; border: 2px solid; user-select: none; z-index: 4; position: relative; }
-.string-indicator.muted  { color: #e04040; border-color: #e04040; }
-.string-indicator.open   { color: #d4c5a0; border-color: #8a7a50; }
-.string-indicator.played { color: #3a3a3a; border-color: #3a3a3a; }
-.fret-cell { width: 40px; height: 26px; flex-shrink: 0; border-right: 1px solid #6a5530; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; z-index: 3; }
-.fret-cell.nut { border-left: 4px solid #a08840; }
-.string-row:first-child .fret-cell { border-top: 1px solid #2a2010; }
-.string-row:last-child  .fret-cell { border-bottom: 1px solid #2a2010; }
-.finger-dot { width: 18px; height: 18px; border-radius: 50%; background: #e8c840; display: none; position: absolute; z-index: 5; box-shadow: 0 1px 4px rgba(0,0,0,0.8); pointer-events: none; }
+.string-line { position: absolute; right: 0; top: 50%; transform: translateY(-50%); pointer-events: none; z-index: 2; background: var(--string); }
+.string-indicator { width: 24px; height: 24px; flex-shrink: 0; margin-right: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 12px; font-weight: bold; border-radius: 50%; border: 2px solid; user-select: none; z-index: 4; position: relative; background: var(--bg); transition: all 0.12s ease; }
+.string-indicator.muted  { color: var(--danger); border-color: var(--danger); }
+.string-indicator.open   { color: var(--accent); border-color: var(--accent); }
+.string-indicator.played { color: var(--muted); border-color: var(--muted); opacity: 0.4; }
+.fret-cell { width: 40px; height: 26px; flex-shrink: 0; border-right: 1px solid var(--border); background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; z-index: 3; transition: background 0.1s; }
+.fret-cell:hover { background: var(--accent-soft); }
+.fret-cell.nut { border-left: 4px solid var(--text); }
+.string-row:first-child .fret-cell { border-top: 1px solid var(--border); }
+.string-row:last-child  .fret-cell { border-bottom: 1px solid var(--border); }
+.finger-dot { width: 18px; height: 18px; border-radius: 50%; background: var(--accent); display: none; position: absolute; z-index: 5; box-shadow: 0 1px 4px rgba(0,0,0,0.5); pointer-events: none; }
 .fret-cell.selected .finger-dot { display: block; }
-#fret-numbers { display: flex; padding-left: 28px; margin-top: 2px; }
-.fret-num { width: 40px; text-align: center; font-size: 10px; color: #6a5830; flex-shrink: 0; }
-#suggestions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; min-height: 22px; align-items: center; }
-#suggestions span { font-size: 11px; color: #8a8068; }
-.suggestion { padding: 2px 8px; font-size: 12px; cursor: pointer; background: #2a2a1a; border: 1px solid #5a4a28; color: #d4c5a0; border-radius: 3px; user-select: none; }
-.suggestion:hover { background: #3a3a2a; border-color: #8a7a50; }
-#outer-row { display: flex; gap: 14px; align-items: flex-start; }
-#right-col { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 0; align-self: flex-start; }
+#fret-numbers { display: flex; padding-left: 28px; margin-top: 4px; }
+.fret-num { width: 40px; text-align: center; font-size: 10px; color: var(--muted); flex-shrink: 0; }
+#suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; min-height: 22px; align-items: center; }
+#suggestions > span { font-size: 11px; color: var(--muted); }
+.suggestion { padding: 3px 10px; font-size: 12px; cursor: pointer; background: var(--surf); color: var(--text); border: 1px solid var(--border); border-radius: 12px; user-select: none; transition: all 0.12s ease; }
+.suggestion:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+#outer-row { display: flex; gap: 16px; align-items: flex-start; }
+#right-col { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 0; align-self: flex-start; }
 #mini-diagram { user-select: none; }
-#fingeringToggle { padding: 2px 7px; font-size: 11px; cursor: pointer; background: transparent; border: 1px solid #4a3a22; color: #7a6a48; border-radius: 3px; white-space: nowrap; }
+.mini-svg .m-nut { fill: var(--text); }
+.mini-svg .m-grid { stroke: var(--border); }
+.mini-svg .m-string { stroke: var(--string); }
+.mini-svg .m-dot { fill: var(--accent); }
+.mini-svg .m-dot-text { fill: #ffffff; }
+.mini-svg .m-x { fill: var(--danger); }
+.mini-svg .m-o { stroke: var(--text); fill: none; }
+.mini-svg .m-label { fill: var(--muted); }
 </style>
 </head>
 <body>
@@ -906,19 +933,23 @@ body { margin: 0; padding: 6px; background: #1a1a0a; color: #d4c5a0; font-family
   </div>
   <div id="right-col">
     <div id="mini-diagram"></div>
-    <button id="fingeringToggle">Fingering: OFF</button>
-    <div id="fingering-hint" style="display:none;font-size:9px;color:#6a5a38;text-align:center;line-height:1.5;max-width:90px;">Click a dot to cycle finger (1–4)</div>
+    <div id="fingeringToggle">Fingering <span class="toggle-track"><span class="toggle-thumb"></span></span></div>
+    <div id="fingering-hint" style="display:none;font-size:10px;text-align:center;line-height:1.5;max-width:100px;color:var(--muted);">Click a dot to cycle finger (1–4)</div>
   </div>
 </div>
 <script>
 const vscode = acquireVsCodeApi();
 const NUM_STRINGS = 6, NUM_FRETS = 15, ROW_H = 26, FRET_W = 40, INDICATOR_W = 28;
 const STRING_THICKNESS = [1.0, 1.3, 1.7, 2.2, 2.8, 3.5];
-const STRING_COLOR = ['#786828','#887838','#988848','#a89858','#b8a86a','#c8b87a'];
 let fretsArray = Array(NUM_STRINGS).fill(-1);
 let fingersOverride = Array(NUM_STRINGS).fill(null);
 let fingeringActive = false;
 let isDragging = false, dragFret = 0;
+let builderUndoStack = [];
+function builderPushUndo() {
+    builderUndoStack.push({ f: fretsArray.slice(), g: fingersOverride.slice() });
+    if (builderUndoStack.length > 50) builderUndoStack.shift();
+}
 const fretboardDiv = document.getElementById('fretboard');
 const fretNumbersDiv = document.getElementById('fret-numbers');
 
@@ -928,7 +959,7 @@ for (let s = 0; s < NUM_STRINGS; s++) {
     const indicator = document.createElement('div');
     indicator.className = 'string-indicator muted';
     indicator.innerText = 'X';
-    indicator.addEventListener('click', () => { fretsArray[s] = (fretsArray[s] === 0) ? -1 : 0; fingersOverride[s] = null; updateDisplay(); });
+    indicator.addEventListener('click', () => { builderPushUndo(); fretsArray[s] = (fretsArray[s] === 0) ? -1 : 0; fingersOverride[s] = null; updateDisplay(); });
     row.appendChild(indicator);
     for (let f = 1; f <= NUM_FRETS; f++) {
         const cell = document.createElement('div');
@@ -938,6 +969,7 @@ for (let s = 0; s < NUM_STRINGS; s++) {
         cell.appendChild(dot);
         cell.addEventListener('mousedown', (e) => {
             e.preventDefault();
+            builderPushUndo();
             const next = (fretsArray[s] === f) ? -1 : f;
             fretsArray[s] = next;
             fingersOverride[s] = null;
@@ -957,7 +989,6 @@ for (let s = 0; s < NUM_STRINGS; s++) {
     sl.className = 'string-line';
     sl.style.left = INDICATOR_W + 'px';
     sl.style.height = STRING_THICKNESS[s] + 'px';
-    sl.style.background = STRING_COLOR[s];
     row.appendChild(sl);
     fretboardDiv.appendChild(row);
 }
@@ -967,7 +998,7 @@ const overlay = document.createElement('div');
 overlay.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:1;';
 function mkMarker(x, y) {
     const m = document.createElement('div');
-    m.style.cssText = \`position:absolute;width:7px;height:7px;border-radius:50%;background:#4a3818;left:\${x}px;top:\${y}px;transform:translate(-50%,-50%);\`;
+    m.style.cssText = \`position:absolute;width:7px;height:7px;border-radius:50%;background:var(--muted);opacity:0.35;left:\${x}px;top:\${y}px;transform:translate(-50%,-50%);\`;
     return m;
 }
 for (const f of [3,5,7,9]) { overlay.appendChild(mkMarker(INDICATOR_W + (f-0.5)*FRET_W, 3*ROW_H)); }
@@ -997,19 +1028,19 @@ function updateMiniDiagram() {
     let svg = '';
 
     if (baseFret === 1) {
-        svg += '<rect x="' + sx(0) + '" y="' + (MT-6) + '" width="' + gW + '" height="8" rx="3" fill="#c8b87a"/>';
+        svg += '<rect class="m-nut" x="' + sx(0) + '" y="' + (MT-6) + '" width="' + gW + '" height="8" rx="3"/>';
     } else {
-        svg += '<text x="' + (ML-3) + '" y="' + (cy(0)+5) + '" font-size="14" fill="#8a7a58" text-anchor="end">' + baseFret + 'fr</text>';
+        svg += '<text class="m-label" x="' + (ML-3) + '" y="' + (cy(0)+5) + '" font-size="14" text-anchor="end">' + baseFret + 'fr</text>';
     }
     for (let r = (baseFret === 1 ? 1 : 0); r <= SHOW; r++) {
-        svg += '<line x1="' + sx(0) + '" y1="' + fy(r) + '" x2="' + sx(NS-1) + '" y2="' + fy(r) + '" stroke="#5a4a28" stroke-width="1.2"/>';
+        svg += '<line class="m-grid" x1="' + sx(0) + '" y1="' + fy(r) + '" x2="' + sx(NS-1) + '" y2="' + fy(r) + '" stroke-width="1.2"/>';
     }
     for (let c = 0; c < NS; c++) {
         const pi = NS-1-c;
-        svg += '<line x1="' + sx(c) + '" y1="' + MT + '" x2="' + sx(c) + '" y2="' + fy(SHOW) + '" stroke="#786828" stroke-width="' + strThick[c] + '"/>';
+        svg += '<line class="m-string" x1="' + sx(c) + '" y1="' + MT + '" x2="' + sx(c) + '" y2="' + fy(SHOW) + '" stroke-width="' + strThick[c] + '"/>';
         const fv = fretsArray[pi];
-        if (fv === -1) { svg += '<text x="' + sx(c) + '" y="' + (MT-12) + '" font-size="16" fill="#c04040" text-anchor="middle">x</text>'; }
-        else if (fv === 0) { svg += '<circle cx="' + sx(c) + '" cy="' + (MT-15) + '" r="7" fill="none" stroke="#8a7a58" stroke-width="2"/>'; }
+        if (fv === -1) { svg += '<text class="m-x" x="' + sx(c) + '" y="' + (MT-12) + '" font-size="16" text-anchor="middle">x</text>'; }
+        else if (fv === 0) { svg += '<circle class="m-o" cx="' + sx(c) + '" cy="' + (MT-15) + '" r="7" stroke-width="2"/>'; }
     }
 
     for (let c = 0; c < NS; c++) {
@@ -1017,17 +1048,17 @@ function updateMiniDiagram() {
         if (fv <= 0) continue;
         const br = fv - baseFret;
         if (br < 0 || br >= SHOW) continue;
-        const r = fs*0.32, fn = fingersOverride[pi] || 0;
+        const r = fs*0.27, fn = fingersOverride[pi] || 0;
         if (fingeringActive) {
-            svg += '<circle class="fdot" data-pi="' + pi + '" cx="' + sx(c) + '" cy="' + cy(br) + '" r="' + r + '" fill="#e8c840" style="cursor:pointer"/>';
-            if (fn > 0) { svg += '<text x="' + sx(c) + '" y="' + (cy(br)+5) + '" font-size="12" fill="#1a1a0a" text-anchor="middle" pointer-events="none">' + fn + '</text>'; }
+            svg += '<circle class="fdot m-dot" data-pi="' + pi + '" cx="' + sx(c) + '" cy="' + cy(br) + '" r="' + r + '" style="cursor:pointer"/>';
+            if (fn > 0) { svg += '<text class="m-dot-text" x="' + sx(c) + '" y="' + (cy(br)+4) + '" font-size="12" text-anchor="middle" pointer-events="none">' + fn + '</text>'; }
         } else {
-            svg += '<circle cx="' + sx(c) + '" cy="' + cy(br) + '" r="' + r + '" fill="#e8c840"/>';
+            svg += '<circle class="m-dot" cx="' + sx(c) + '" cy="' + cy(br) + '" r="' + r + '"/>';
         }
     }
 
     document.getElementById('mini-diagram').innerHTML =
-        '<svg width="' + W + '" height="' + H + '" xmlns="http://www.w3.org/2000/svg">' + svg + '</svg>';
+        '<svg class="mini-svg" width="' + W + '" height="' + H + '" xmlns="http://www.w3.org/2000/svg">' + svg + '</svg>';
 
     if (fingeringActive) {
         const cycle = cur => (cur === null || cur === 0) ? 1 : cur >= 4 ? null : cur + 1;
@@ -1094,10 +1125,7 @@ document.getElementById('saveDefineBtn').addEventListener('click', () => doInser
 document.getElementById('chordName').addEventListener('keydown', e => { if (e.key === 'Enter') { doInsert('saveChord'); } });
 document.getElementById('fingeringToggle').addEventListener('click', () => {
     fingeringActive = !fingeringActive;
-    const btn = document.getElementById('fingeringToggle');
-    btn.textContent = fingeringActive ? 'Fingering: ON' : 'Fingering: OFF';
-    btn.style.borderColor = fingeringActive ? '#5a8a38' : '#4a3a22';
-    btn.style.color = fingeringActive ? '#d4e8b0' : '#7a6a48';
+    document.getElementById('fingeringToggle').classList.toggle('active', fingeringActive);
     document.getElementById('fingering-hint').style.display = fingeringActive ? 'block' : 'none';
     updateMiniDiagram();
 });
@@ -1112,14 +1140,23 @@ document.getElementById('resetBtn').addEventListener('click', () => {
 document.getElementById('shiftUpBtn').addEventListener('click', () => {
     const hasFretted = fretsArray.some(f => f >= 0);
     if (!hasFretted) return;
+    builderPushUndo();
     fretsArray = fretsArray.map(f => f === -1 ? -1 : Math.min(f + 1, NUM_FRETS));
     updateDisplay();
 });
 document.getElementById('shiftDownBtn').addEventListener('click', () => {
     const minFret = Math.min(...fretsArray.filter(f => f > 0));
     if (!isFinite(minFret) || minFret <= 1) return;
+    builderPushUndo();
     fretsArray = fretsArray.map(f => f === -1 ? -1 : f === 0 ? 0 : f - 1);
     updateDisplay();
+});
+document.addEventListener('keydown', e => {
+    if (e.ctrlKey && e.key === 'z' && builderUndoStack.length) {
+        const prev = builderUndoStack.pop();
+        fretsArray = prev.f; fingersOverride = prev.g;
+        updateDisplay(); e.preventDefault();
+    }
 });
 
 window.addEventListener('message', e => {
@@ -1129,10 +1166,7 @@ window.addEventListener('message', e => {
         fingersOverride = msg.fingers ? msg.fingers.slice() : Array(NUM_STRINGS).fill(null);
         fingeringActive = msg.fingers && msg.fingers.some(f => f > 0);
         document.getElementById('chordName').value = msg.name || '';
-        const btn = document.getElementById('fingeringToggle');
-        btn.textContent = fingeringActive ? 'Fingering: ON' : 'Fingering: OFF';
-        btn.style.borderColor = fingeringActive ? '#5a8a38' : '#4a3a22';
-        btn.style.color = fingeringActive ? '#d4e8b0' : '#7a6a48';
+        document.getElementById('fingeringToggle').classList.toggle('active', fingeringActive);
         document.getElementById('fingering-hint').style.display = fingeringActive ? 'block' : 'none';
         updateDisplay();
         vscode.postMessage({ command: 'detectChord', frets: fretsArray });
@@ -1178,6 +1212,8 @@ const DIRECTIVES = [
     { label: 'end_of_tab',           detail: 'End tablature section',            snippet: 'end_of_tab}'                                   },
     { label: 'start_of_grid',        detail: 'Start chord grid section',         snippet: 'start_of_grid}\n$1\n{end_of_grid}'             },
     { label: 'end_of_grid',          detail: 'End chord grid section',           snippet: 'end_of_grid}'                                  },
+    { label: 'x_columns_on',         detail: 'Start two-column zone (extension)',snippet: 'x_columns_on}'                                 },
+    { label: 'x_columns_off',        detail: 'End two-column zone (extension)',  snippet: 'x_columns_off}'                                },
     { label: 'start_of_textblock',   detail: 'Start raw text block',             snippet: 'start_of_textblock}\n$1\n{end_of_textblock}'   },
     { label: 'end_of_textblock',     detail: 'End raw text block',               snippet: 'end_of_textblock}'                             },
     { label: 'start_of_abc',         detail: 'Start ABC music notation block',   snippet: 'start_of_abc}\n$1\n{end_of_abc}'  },
@@ -1361,6 +1397,12 @@ class ChordReferenceViewProvider {
                 return;
             }
 
+            // ── Open in Chord Builder ─────────────────────────────────────
+            if (msg.command === 'openInBuilder') {
+                vscode.commands.executeCommand('chordpro.openInBuilder', msg.name, msg.frets, msg.fingers || null);
+                return;
+            }
+
             // ── Insert chord ──────────────────────────────────────────────
             const editor = vscode.window.activeTextEditor;
             if (!editor) return;
@@ -1502,36 +1544,59 @@ class ChordReferenceViewProvider {
 <meta charset="UTF-8">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: #1e1e0e; color: #c8b87a; font-family: sans-serif; font-size: 11px; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-#tabs { display: flex; border-bottom: 1px solid #3a2a10; flex-shrink: 0; }
-.tab { flex: 1; padding: 5px 2px; text-align: center; cursor: pointer; color: #7a6a48; border-bottom: 2px solid transparent; font-size: 10px; }
-.tab.active { color: #c8b87a; border-bottom-color: #c8a030; }
-#sw { padding: 4px; flex-shrink: 0; border-bottom: 1px solid #3a2a10; }
-#sw input { width: 100%; background: #2a2a14; border: 1px solid #3a2a10; color: #c8b87a; padding: 3px 6px; border-radius: 3px; font-size: 11px; outline: none; }
-#grid { flex: 1; overflow-y: auto; padding: 6px; display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; align-content: start; }
-.card { display: flex; flex-direction: column; align-items: center; cursor: pointer; padding: 3px; border-radius: 4px; border: 1px solid transparent; user-select: none; }
-.card:hover { border-color: #5a4a28; background: #2a2a14; }
+/* Linear Violet palette */
+:root {
+  --bg: #131215; --surf: #1e1c22; --surf-hi: #262329;
+  --text: #e6e8ef; --muted: #8b8fa3; --border: #2e2b36;
+  --accent: #7c6af6; --accent-soft: rgba(124,106,246,0.15); --danger: #e5534b;
+  --string: #6a7286;
+}
+body.vscode-light, body.vscode-high-contrast-light {
+  --bg: #fafbfc; --surf: #ffffff; --surf-hi: #f0f3f9;
+  --text: #0f1117; --muted: #64748b; --border: #dde1eb;
+  --accent: #5e4fd8; --accent-soft: rgba(94,79,216,0.10); --danger: #cc3a33;
+  --string: #94a3b8;
+}
+
+body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 11px; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+#tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.tab { flex: 1; padding: 7px 4px; text-align: center; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; font-size: 11px; transition: all 0.12s ease; }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+#sw { padding: 6px; flex-shrink: 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 4px; }
+#sw input { flex: 1; background: var(--surf); border: 1px solid var(--border); color: var(--text); padding: 5px 8px; border-radius: 5px; font-size: 11px; outline: none; font-family: inherit; transition: border-color 0.15s, box-shadow 0.15s; }
+#sw input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+#grid { flex: 1; overflow-y: auto; padding: 8px; display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 6px; align-content: start; }
+.card { display: flex; flex-direction: column; align-items: center; cursor: pointer; padding: 4px; border-radius: 5px; border: 1px solid transparent; user-select: none; position: relative; transition: all 0.12s ease; background: var(--surf); }
+.card:hover { border-color: var(--accent); background: var(--surf-hi); }
 .card svg { display: block; }
-.cname { margin-top: 2px; font-size: 12px; font-weight: 600; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cname { margin-top: 3px; font-size: 12px; font-weight: 600; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.card:hover .cname { color: var(--accent); }
 .vnav { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 2px; }
-.varr { cursor: pointer; padding: 2px 5px; color: #c8a030; font-size: 13px; line-height: 1; border-radius: 3px; }
-.varr:hover { color: #e8c840; background: #2a2a14; }
-.vcnt { font-size: 10px; color: #8a7a58; min-width: 24px; text-align: center; }
-.card { position: relative; }
-.del { position: absolute; top: 2px; right: 2px; font-size: 9px; color: #5a4a28; cursor: pointer; line-height: 1; display: none; padding: 1px 2px; }
+.varr { cursor: pointer; padding: 2px 5px; color: var(--accent); font-size: 13px; line-height: 1; border-radius: 3px; transition: background 0.12s; }
+.varr:hover { background: var(--accent-soft); }
+.vcnt { font-size: 10px; color: var(--muted); min-width: 24px; text-align: center; }
+.del { position: absolute; top: 3px; right: 3px; font-size: 11px; color: var(--muted); cursor: pointer; line-height: 1; display: none; padding: 2px 4px; border-radius: 3px; transition: all 0.12s; }
 .card:hover .del { display: block; }
-.del:hover { color: #c04040; }
-#empty { padding: 20px; text-align: center; color: #5a4a28; font-size: 11px; }
-#ctx-menu { position: fixed; background: #2a2a14; border: 1px solid #5a4a28; border-radius: 4px; padding: 3px 0; z-index: 999; display: none; min-width: 160px; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
-.ctx-item { padding: 5px 12px; cursor: pointer; font-size: 11px; color: #c8b87a; white-space: nowrap; }
-.ctx-item:hover { background: #3a3a1e; color: #e8d890; }
-#sort-btn { background: none; border: none; color: #5a4a28; cursor: pointer; font-size: 9px; padding: 3px 4px; border-radius: 3px; white-space: nowrap; }
-#sort-btn:hover { color: #c8b87a; background: #2a2a14; }
-#sort-btn.active { color: #c8a030; }
-#sw { display: flex; align-items: center; gap: 3px; }
-#sw input { flex: 1; }
-#hint-bar { flex-shrink: 0; border-top: 1px solid #3a2a10; padding: 6px 8px; font-size: 11px; color: #b8a870; line-height: 1.8; }
-#hint-bar kbd { background: #2a2a14; border: 1px solid #4a3a18; border-radius: 2px; padding: 0 4px; font-family: inherit; font-size: 10px; color: #e8c840; }
+.del:hover { color: var(--bg); background: var(--danger); }
+#empty { padding: 20px; text-align: center; color: var(--muted); font-size: 11px; }
+#ctx-menu { position: fixed; background: var(--surf); border: 1px solid var(--border); border-radius: 5px; padding: 4px 0; z-index: 999; display: none; min-width: 170px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+.ctx-item { padding: 6px 14px; cursor: pointer; font-size: 11px; color: var(--text); white-space: nowrap; transition: all 0.12s; }
+.ctx-item:hover { background: var(--accent-soft); color: var(--accent); }
+#sort-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 11px; padding: 4px 6px; border-radius: 3px; white-space: nowrap; transition: all 0.12s; }
+#sort-btn:hover { color: var(--text); background: var(--surf-hi); }
+#sort-btn.active { color: var(--accent); }
+#hint-bar { flex-shrink: 0; border-top: 1px solid var(--border); padding: 8px 10px; font-size: 11px; color: var(--muted); line-height: 1.8; background: var(--surf); }
+#hint-bar kbd { background: var(--surf-hi); border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px; font-family: inherit; font-size: 10px; color: var(--accent); }
+/* chord diagram SVG classes */
+.cd-nut { fill: var(--text); }
+.cd-grid { stroke: var(--border); fill: none; }
+.cd-string { stroke: var(--string); fill: none; }
+.cd-dot { fill: var(--accent); }
+.cd-dot-text { fill: var(--bg); font-size: 7px; text-anchor: middle; }
+.cd-x { stroke: var(--danger); fill: none; }
+.cd-o { stroke: var(--accent); fill: none; }
+.cd-label { fill: var(--muted); }
 </style>
 </head>
 <body>
@@ -1551,6 +1616,7 @@ body { background: #1e1e0e; color: #c8b87a; font-family: sans-serif; font-size: 
   <div class="ctx-item" data-action="inline"></div>
   <div class="ctx-item" data-action="diagram"></div>
   <div class="ctx-item" data-action="define">Insert {define:}</div>
+  <div class="ctx-item" data-action="openInBuilder">Open in Chord Builder</div>
 </div>
 <script>
 const LIBRARY = ${library};
@@ -1579,32 +1645,32 @@ function drawSvg(frets, fingers) {
     }
     var s='';
     if(showNut){
-        s+='<rect x="'+sx(0)+'" y="'+(fy(0)-3)+'" width="'+(sx(NS-1)-sx(0))+'" height="3" fill="#555"/>';
+        s+='<rect class="cd-nut" x="'+sx(0)+'" y="'+(fy(0)-3)+'" width="'+(sx(NS-1)-sx(0))+'" height="3"/>';
     } else {
-        s+='<text x="'+(W-2)+'" y="'+(fy(1)-1)+'" font-size="7" fill="#8a7a58" text-anchor="end">'+startF+'fr</text>';
+        s+='<text class="cd-label" x="'+(W-2)+'" y="'+(fy(1)-1)+'" font-size="7" text-anchor="end">'+startF+'fr</text>';
     }
     for(var i=showNut?1:0;i<=NF;i++){
-        s+='<line x1="'+sx(0)+'" y1="'+fy(i)+'" x2="'+sx(NS-1)+'" y2="'+fy(i)+'" stroke="#3a3a24" stroke-width="0.8"/>';
+        s+='<line class="cd-grid" x1="'+sx(0)+'" y1="'+fy(i)+'" x2="'+sx(NS-1)+'" y2="'+fy(i)+'" stroke-width="0.8"/>';
     }
     for(var i=0;i<NS;i++){
-        s+='<line x1="'+sx(i)+'" y1="'+fy(0)+'" x2="'+sx(i)+'" y2="'+fy(NF)+'" stroke="#4a4a2a" stroke-width="0.8"/>';
+        s+='<line class="cd-string" x1="'+sx(i)+'" y1="'+fy(0)+'" x2="'+sx(i)+'" y2="'+fy(NF)+'" stroke-width="0.8"/>';
     }
     for(var i=0;i<NS;i++){
         if(frets[i]===-1){
             var x=sx(i),y=PT-7,d=3;
-            s+='<line x1="'+(x-d)+'" y1="'+(y-d)+'" x2="'+(x+d)+'" y2="'+(y+d)+'" stroke="#c04040" stroke-width="1.2"/>';
-            s+='<line x1="'+(x+d)+'" y1="'+(y-d)+'" x2="'+(x-d)+'" y2="'+(y+d)+'" stroke="#c04040" stroke-width="1.2"/>';
+            s+='<line class="cd-x" x1="'+(x-d)+'" y1="'+(y-d)+'" x2="'+(x+d)+'" y2="'+(y+d)+'" stroke-width="1.2"/>';
+            s+='<line class="cd-x" x1="'+(x+d)+'" y1="'+(y-d)+'" x2="'+(x-d)+'" y2="'+(y+d)+'" stroke-width="1.2"/>';
         } else if(frets[i]===0){
-            s+='<circle cx="'+sx(i)+'" cy="'+(PT-7)+'" r="3" fill="none" stroke="#8a7a58" stroke-width="1"/>';
+            s+='<circle class="cd-o" cx="'+sx(i)+'" cy="'+(PT-7)+'" r="3" fill="none" stroke-width="1"/>';
         }
     }
     if(barreF){
         var slot=barreF-startF+1;
         var bs=frets.reduce(function(a,f,i){if(f===barreF)a.push(i);return a;},[]);
         var bx1=sx(Math.min.apply(null,bs))-5, bx2=sx(Math.max.apply(null,bs))+5;
-        s+='<rect x="'+bx1+'" y="'+(cy(slot)-5)+'" width="'+(bx2-bx1)+'" height="10" rx="5" fill="#e8c840"/>';
+        s+='<rect class="cd-dot" x="'+bx1+'" y="'+(cy(slot)-5)+'" width="'+(bx2-bx1)+'" height="10" rx="5"/>';
         var bfn=fingers&&fingers[bs[0]]>0?fingers[bs[0]]:0;
-        if(bfn) s+='<text x="'+((sx(Math.min.apply(null,bs))+sx(Math.max.apply(null,bs)))/2)+'" y="'+(cy(slot)+3)+'" font-size="7" fill="#1a1a0a" text-anchor="middle">'+bfn+'</text>';
+        if(bfn) s+='<text class="cd-dot-text" x="'+((sx(Math.min.apply(null,bs))+sx(Math.max.apply(null,bs)))/2)+'" y="'+(cy(slot)+3)+'" font-size="7" text-anchor="middle">'+bfn+'</text>';
     }
     frets.forEach(function(f,i){
         if(f<=0)return;
@@ -1613,13 +1679,13 @@ function drawSvg(frets, fingers) {
         if(slot<1||slot>NF)return;
         var fn=fingers&&fingers[i]>0?fingers[i]:0;
         var r=SW*0.38;
-        s+='<circle cx="'+sx(i)+'" cy="'+cy(slot)+'" r="'+r+'" fill="#e8c840"/>';
-        if(fn) s+='<text x="'+sx(i)+'" y="'+(cy(slot)+3)+'" font-size="7" fill="#1a1a0a" text-anchor="middle">'+fn+'</text>';
+        s+='<circle class="cd-dot" cx="'+sx(i)+'" cy="'+cy(slot)+'" r="'+r+'"/>';
+        if(fn) s+='<text class="cd-dot-text" x="'+sx(i)+'" y="'+(cy(slot)+3)+'" font-size="7" text-anchor="middle">'+fn+'</text>';
     });
     return '<svg xmlns="http://www.w3.org/2000/svg" width="'+W+'" height="'+H+'">'+s+'</svg>';
 }
 
-var noDataSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="72"><text x="32" y="40" font-size="9" fill="#4a3a22" text-anchor="middle">?</text></svg>';
+var noDataSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="72"><text x="32" y="40" font-size="9" class="cd-label" text-anchor="middle">?</text></svg>';
 
 function fuzzy(label, q) {
     var fi=0, f=q.toLowerCase(), n=label.toLowerCase();
@@ -1770,7 +1836,11 @@ ctxMenu.querySelectorAll('.ctx-item').forEach(function(item){
         var voicings=findVoicings(name);
         var v=voicings[voicingIdx[name]||0]||voicings[0];
         var action=item.dataset.action;
-        vscode.postMessage({name:name, voicingFrets:v?v.frets:null, voicingFingers:v?v.fingers:null, diagram:action==='diagram', defineOnly:action==='define'});
+        if(action==='openInBuilder'){
+            vscode.postMessage({command:'openInBuilder', name:name, frets:v?v.frets:null, fingers:v?v.fingers:null});
+        } else {
+            vscode.postMessage({name:name, voicingFrets:v?v.frets:null, voicingFingers:v?v.fingers:null, diagram:action==='diagram', defineOnly:action==='define'});
+        }
         ctxMenu.style.display='none';
         ctxCard=null;
     });
@@ -1953,6 +2023,36 @@ function activate(context) {
         // Brief delay so the panel has time to resolve before we post
         setTimeout(() => chordBuilderProvider.loadChord(name, frets, fingers || null), 150);
     });
+
+    function doWrapInSection(type) {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) return;
+        const sel = editor.selection;
+        const startLine = sel.start.line;
+        const endLine   = sel.isEmpty ? sel.start.line : (sel.end.character === 0 ? sel.end.line - 1 : sel.end.line);
+        const range = new vscode.Range(
+            new vscode.Position(startLine, 0),
+            new vscode.Position(endLine, editor.document.lineAt(endLine).text.length)
+        );
+        const body = editor.document.getText(range);
+        editor.edit(eb => eb.replace(range, `{start_of_${type}}\n${body}\n{end_of_${type}}`));
+    }
+
+    const wrapInSection = vscode.commands.registerCommand('chordpro.wrapInSection', async () => {
+        const TYPES = [
+            { label: 'Chorus', value: 'chorus' },
+            { label: 'Verse',  value: 'verse'  },
+            { label: 'Bridge', value: 'bridge' },
+            { label: 'Tab',    value: 'tab'    },
+            { label: 'Grid',   value: 'grid'   },
+        ];
+        const pick = await vscode.window.showQuickPick(TYPES, { placeHolder: 'Select section type' });
+        if (pick) doWrapInSection(pick.value);
+    });
+
+    const wrapSectionSubs = ['chorus', 'verse', 'bridge', 'tab', 'grid'].map(type =>
+        vscode.commands.registerCommand(`chordpro.wrapInSection.${type}`, () => doWrapInSection(type))
+    );
 
     function pickChord(context, editor) {
         const docDefineNames = editor ? Object.keys(parseDocumentDefines(editor.document)) : [];
@@ -2350,7 +2450,6 @@ function activate(context) {
             if (msg.command === 'saveHtml') {
                 const srcPath = editor.document.uri.fsPath;
                 const outPath = srcPath.replace(/\.[^.]+$/, '') + '_preview.html';
-                // Strip VSCode CSP and replace acquireVsCodeApi with a no-op for browser use
                 const standalone = getScrollWebviewContent(
                     editor.document.getText(),
                     buildChordSvgMap(editor.document.getText(), buildChordData(editor.document))
@@ -2362,6 +2461,8 @@ function activate(context) {
                     if (err) vscode.window.showErrorMessage('Failed to save HTML: ' + err.message);
                     else vscode.window.showInformationMessage('Saved: ' + path.basename(outPath));
                 });
+            } else if (msg.command === 'toggleFullscreen') {
+                vscode.commands.executeCommand('workbench.action.maximizeEditorHideSidebar');
             }
         });
         scrollPanel.onDidDispose(() => { scrollPanel = null; scrollDocUri = null; });
@@ -2404,7 +2505,7 @@ function activate(context) {
 body {
   font-family: Georgia, serif; font-size: 17px; line-height: 1.6;
   background: var(--bg); color: var(--fg);
-  padding: 40px clamp(16px, 6vw, 56px) 160px; max-width: 860px; margin: 0 auto;
+  padding: 40px clamp(16px, 4vw, 56px) 160px;
 }
 .song-header { text-align: center; margin-bottom: 36px; padding-bottom: 20px; border-bottom: 2px solid var(--border); }
 .song-title  { font-size: 2em; font-weight: bold; }
@@ -2455,7 +2556,7 @@ body {
   background: var(--tab-bg); padding: 12px 16px; border-radius: 4px;
   border-left: 3px solid var(--tab-border); white-space: pre; overflow-x: auto;
 }
-.grid-block .chord { color: var(--chord); font-weight: bold; cursor: pointer; }
+.grid-block .chord { color: var(--chord); font-family: inherit; font-size: inherit; font-weight: inherit; cursor: pointer; }
 .page-break  { border: none; border-top: 2px dashed var(--border); margin: 28px 0; }
 /* ── Progress bar ─────────────────────────────────────────────────────────── */
 #progress-bar {
@@ -2515,6 +2616,10 @@ body {
 #song.two-col { column-count: 2; column-gap: 3em; column-rule: 1px solid var(--border); }
 #song.two-col .section { break-inside: avoid-column; }
 #song.two-col .song-header { column-span: all; }
+/* Column zones: when {x_columns_on}/{x_columns_off} are used, only the marked zone gets columns */
+#song.has-col-zones.two-col { column-count: 1; column-rule: none; }
+#song.has-col-zones.two-col .col-zone { column-count: 2; column-gap: 3em; column-rule: 1px solid var(--border); }
+#song.has-col-zones.two-col .col-zone .section { break-inside: avoid-column; }
 /* ── Additional button styles ────────────────────────────────────────────── */
 #theme-btn  { font-size: 14px; }
 #twocol-btn { font-size: 14px; }
@@ -2530,23 +2635,43 @@ body {
 /* ── Lyrics-only mode ────────────────────────────────────────────────────── */
 .chord { transition: opacity 0.2s; }
 #song.lyrics-only .chord { opacity: 0; }
-/* ── Section jump popup ──────────────────────────────────────────────────── */
-#sec-popup {
-  display: none; position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%);
+/* ── Export popup ────────────────────────────────────────────────────────── */
+#export-popup {
+  display: none; position: fixed; bottom: 72px; right: 24px;
   background: rgba(20,20,20,0.96); border: 1px solid #555; border-radius: 10px;
-  padding: 6px; z-index: 9998; min-width: 150px; max-height: 280px; overflow-y: auto;
+  padding: 4px; z-index: 9998; min-width: 160px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.5);
 }
-.sec-item {
-  display: block; width: 100%; text-align: left; padding: 7px 14px;
-  background: none; border: none; color: #eee; cursor: pointer; border-radius: 5px;
+#export-popup.open { display: block; }
+.exp-item {
+  display: block; width: 100%; text-align: left; padding: 8px 14px;
+  background: none; border: none; color: #eee; cursor: pointer; border-radius: 6px;
   font-family: sans-serif; font-size: 13px; white-space: nowrap;
 }
-.sec-item:hover { background: #3a3a3a; }
+.exp-item:hover { background: #3a3a3a; }
+#export-btn { font-size: 14px; opacity: 0.7; }
+#export-btn:hover { opacity: 1; }
+/* ── Chord Legend ─────────────────────────────────────────────────────────── */
+#legend-end { display: none; margin-top: 48px; padding-top: 24px; border-top: 2px solid var(--border); }
+#legend-end.active { display: block; }
+#legend-side {
+  display: none; position: fixed; right: 0; top: 0; bottom: 0; width: 200px;
+  overflow-y: auto; padding: 16px 12px 80px; z-index: 9990;
+  background: rgba(20,20,20,0.93); border-left: 1px solid #444;
+  font-family: sans-serif;
+}
+#legend-side.active { display: flex; flex-direction: column; }
+body.legend-side-on { padding-right: 210px; }
+.legend-title { font-size: 11px; font-weight: bold; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+.legend-grid { display: flex; flex-wrap: wrap; gap: 10px 8px; }
+#legend-btn { font-size: 11px; font-family: sans-serif; border-radius: 6px !important; width: auto !important; padding: 0 7px !important; opacity: 0.7; }
+#legend-btn:hover { opacity: 1; }
+#legend-btn.active-end  { opacity: 1; color: #ffd700; border-color: #ffd700; }
+#legend-btn.active-side { opacity: 1; color: #90c040; border-color: #90c040; }
 /* ── Print ────────────────────────────────────────────────────────────────── */
 @media print {
-  #scroll-bar, #progress-bar { display: none !important; }
-  body { background: #fff !important; color: #000 !important; padding: 20px !important; max-width: 100% !important; font-size: 13px !important; }
+  #scroll-bar, #progress-bar, #legend-side { display: none !important; }
+  body { background: #fff !important; color: #000 !important; padding: 20px !important; max-width: 100% !important; font-size: 13px !important; padding-right: 20px !important; }
   .song-header { border-bottom-color: #ccc !important; }
   .chord { color: #1a5fb4 !important; }
   .tab-block { background: #f8f8f8 !important; border-left-color: #aaa !important; }
@@ -2555,13 +2680,20 @@ body {
   .section-bridge .section-label { background: #fef0d0 !important; color: #a05000 !important; }
   .section-tab    .section-label { background: #f0f4e8 !important; color: #4a6a20 !important; }
   .capo-badge { background: #ffe8b0 !important; color: #7a4000 !important; }
+  #legend-end.active { display: block !important; border-top: 1px solid #ccc !important; }
+  .legend-title { color: #666 !important; }
 }
 </style>
 </head>
 <body>
 <div id="progress-bar"></div>
 <div id="song"></div>
-<div id="sec-popup"></div>
+<div id="legend-end"><div class="legend-title">Chords used</div><div class="legend-grid"></div></div>
+<div id="legend-side"><div class="legend-title">Chords</div><div class="legend-grid"></div></div>
+<div id="export-popup">
+  <button class="exp-item" id="exp-html">💾 Save as HTML</button>
+  <button class="exp-item" id="exp-pdf">🖨 Print / PDF</button>
+</div>
 <div id="scroll-bar">
   <button id="tap-btn"      title="Tap tempo (T)">Tap</button>
   <span   id="tap-label"></span>
@@ -2577,11 +2709,11 @@ body {
   <button id="font-smaller" title="Smaller text (A−)">A−</button>
   <button id="font-larger"  title="Larger text (A+)">A+</button>
   <button id="lyrics-btn"   title="Lyrics only — hide chords (L)">Ly</button>
-  <button id="sec-btn"      title="Jump to section (§)">§</button>
-  <button id="fs-btn"       title="Full screen (F)" style="display:none">⤢</button>
+  <button id="fs-btn"       title="Full screen (F)">⤢</button>
   <button id="twocol-btn"   title="Toggle two-column layout">⊞</button>
   <button id="theme-btn"    title="Toggle dark/light theme">🌙</button>
-  <button id="save-btn"     title="Save as HTML">💾</button>
+  <button id="export-btn"   title="Save / Export">💾</button>
+  <button id="legend-btn"   title="Chord diagrams legend (none / end of page / side panel)">Cd</button>
 </div>
 <script>
 // ── Browser transpose helpers ─────────────────────────────────────────────
@@ -2652,6 +2784,8 @@ function parse(text) {
       if (k === 'end_of_tab'     ||k==='eot') { next('verse',   '',          false); continue; }
       if (k === 'start_of_grid'  ||k==='sog') { next('grid',    v||'Grid',   true);  continue; }
       if (k === 'end_of_grid'    ||k==='eog') { next('verse',   '',          false); continue; }
+      if (k === 'x_columns_on')  { flush(); sections.push({ type: 'col-zone-start', lines: [], label: '', nav: false }); cur = { type: 'verse', label: '', lines: [], nav: false }; continue; }
+      if (k === 'x_columns_off') { flush(); sections.push({ type: 'col-zone-end',   lines: [], label: '', nav: false }); cur = { type: 'verse', label: '', lines: [], nav: false }; continue; }
       if (k === 'comment'||k==='c'||k==='highlight') { cur.lines.push({ type:'comment',     text:v }); continue; }
       if (k === 'comment_italic' ||k==='ci')          { cur.lines.push({ type:'comment',     text:v }); continue; }
       if (k === 'comment_box'    ||k==='cb')          { cur.lines.push({ type:'comment-box', text:v }); continue; }
@@ -2678,10 +2812,11 @@ function esc(s) {
 function safeFmt(s) {
   return esc(s).replace(new RegExp('&lt;(\\/?(b|i|em|strong|u|s))&gt;', 'gi'), '\x3c$1\x3e');
 }
-function renderGridLine(text) {
+function renderGridLine(text, transpose) {
   return text.split(' ').map(function(tok) {
-    if (tok && /^[A-G][b#]?[^|.]*$/.test(tok) && tok !== '.' && CHORD_SVGS[tok]) {
-      return '\x3cspan class="chord" data-chord="' + esc(tok) + '"\x3e' + esc(tok) + '\x3c/span\x3e';
+    if (tok && /^[A-G][b#]?[^|.]*$/.test(tok) && tok !== '.') {
+      var dc = transposeChordName(tok, transpose || 0);
+      return '\x3cspan class="chord" data-chord="' + esc(dc) + '"\x3e' + esc(dc) + '\x3c/span\x3e';
     }
     return esc(tok);
   }).join(' ');
@@ -2700,8 +2835,18 @@ function render({ meta, sections }, transpose) {
   if (metaLine || capoBadge) out.push('<div class="song-meta">' + metaLine + capoBadge + '</div>');
   out.push('</div>');
 
+  // Balance col-zones: {x_columns_off} alone → implicit zone from start of song
+  var _hasCZS = sections.some(function(s) { return s.type === 'col-zone-start'; });
+  var _hasCZE = sections.some(function(s) { return s.type === 'col-zone-end'; });
+  var effSections = (_hasCZE && !_hasCZS)
+    ? [{ type: 'col-zone-start', lines: [], label: '', nav: false }].concat(sections)
+    : sections;
+
   var secIdx = 0;
-  for (const sec of sections) {
+  var inColZone = false;
+  for (const sec of effSections) {
+    if (sec.type === 'col-zone-start') { out.push('<div class="col-zone">'); inColZone = true; continue; }
+    if (sec.type === 'col-zone-end')   { out.push('</div>'); inColZone = false; continue; }
     out.push('<div class="section section-' + sec.type + '" id="sec-' + (secIdx++) + '"' + (sec.nav ? ' data-nav="1"' : '') + '>');
     if (sec.label) out.push('<div class="section-label">' + esc(sec.label) + '</div>');
 
@@ -2711,10 +2856,7 @@ function render({ meta, sections }, transpose) {
       out.push('</pre>');
     } else if (sec.type === 'grid') {
       out.push('<pre class="grid-block">');
-      for (const l of sec.lines) {
-        if (l.type !== 'grid-line') continue;
-        out.push(renderGridLine(l.text));
-      }
+      for (const l of sec.lines) if (l.type === 'grid-line') out.push(renderGridLine(l.text, transpose));
       out.push('</pre>');
     } else {
       for (const l of sec.lines) {
@@ -2735,11 +2877,12 @@ function render({ meta, sections }, transpose) {
         else if   (l.type === 'chorus-ref')   out.push('<div class="chorus-ref">[ Chorus ]</div>');
         else if   (l.type === 'empty')        out.push('<div class="empty-line"></div>');
         else if   (l.type === 'page-break')   out.push('<hr class="page-break">');
-        else if   (l.type === 'chord-diagram')out.push('<div class="chord-diagram-cell" data-chord="' + esc(l.name) + '"></div>');
+        else if   (l.type === 'chord-diagram')out.push('<div class="chord-diagram-cell" data-chord="' + esc(transposeChordName(l.name, transpose || 0)) + '"></div>');
       }
     }
     out.push('</div>');
   }
+  if (inColZone) out.push('</div>');
   return out.join('\\n');
 }
 
@@ -2818,11 +2961,61 @@ function changeFontSize(delta) {
 document.getElementById('font-smaller').addEventListener('click', function() { changeFontSize(-1); });
 document.getElementById('font-larger').addEventListener('click',  function() { changeFontSize(+1); });
 
+// ── Col-zone class sync ───────────────────────────────────────────────────
+function applyColZones() {
+  var hasCZ = PARSED.sections.some(function(s) { return s.type === 'col-zone-start' || s.type === 'col-zone-end'; });
+  document.getElementById('song').classList.toggle('has-col-zones', hasCZ);
+}
+
+// ── Chord Legend ──────────────────────────────────────────────────────────
+var legendMode = 0; // 0=none 1=end 2=side
+var legendEndEl  = document.getElementById('legend-end');
+var legendSideEl = document.getElementById('legend-side');
+var legendBtn    = document.getElementById('legend-btn');
+function _getChordSvg(name) {
+  var svg = CHORD_SVGS[name];
+  if (!svg) {
+    var rm = name && name.match(/^([A-G][b#]?)(.*)/);
+    if (rm) {
+      var si = _SH.indexOf(rm[1]), fi = _FL.indexOf(rm[1]);
+      if (si >= 0) svg = CHORD_SVGS[_FL[si] + rm[2]];
+      if (!svg && fi >= 0) svg = CHORD_SVGS[_SH[fi] + rm[2]];
+    }
+  }
+  return svg || '';
+}
+function updateLegend() {
+  var seen = {}, names = [];
+  document.querySelectorAll('.chord[data-chord]').forEach(function(el) {
+    if (!seen[el.dataset.chord]) { seen[el.dataset.chord] = true; names.push(el.dataset.chord); }
+  });
+  document.querySelectorAll('.chord-diagram-cell[data-chord]').forEach(function(el) {
+    if (!seen[el.dataset.chord]) { seen[el.dataset.chord] = true; names.push(el.dataset.chord); }
+  });
+  names.sort();
+  var html = names.map(function(n) {
+    var svg = _getChordSvg(n);
+    return svg ? '<div class="chord-diagram-cell">' + svg + '<div class="cd-label">' + esc(n) + '</div></div>' : '';
+  }).join('');
+  legendEndEl.querySelector('.legend-grid').innerHTML  = html;
+  legendSideEl.querySelector('.legend-grid').innerHTML = html;
+  legendEndEl.classList.toggle('active', legendMode === 1);
+  legendSideEl.classList.toggle('active', legendMode === 2);
+  document.body.classList.toggle('legend-side-on', legendMode === 2);
+  legendBtn.classList.toggle('active-end',  legendMode === 1);
+  legendBtn.classList.toggle('active-side', legendMode === 2);
+}
+legendBtn.addEventListener('click', function() {
+  legendMode = (legendMode + 1) % 3;
+  updateLegend();
+});
 // ── Rerender (called when transpose or any display param changes) ─────────
 function rerender() {
   document.getElementById('song').innerHTML = render(PARSED, previewTranspose);
+  applyColZones();
   bindTooltips();
   populateChordDiagrams();
+  updateLegend();
   if (tempoSpeed) setTimeout(function() { applyTempoSpeed(PARSED.meta, false, true); }, 100);
 }
 
@@ -2865,8 +3058,10 @@ const vscodeApi = acquireVsCodeApi();
 const SOURCE = ${safeSource};
 var PARSED = parse(SOURCE);
 document.getElementById('song').innerHTML = render(PARSED);
+applyColZones();
 bindTooltips();
 populateChordDiagrams();
+updateLegend();
 
 // ── Auto-scroll ──────────────────────────────────────────────────────────────
 let speed = 30, playing = false, lastTs = null, accum = 0;
@@ -2939,8 +3134,26 @@ playBtn.addEventListener('click', () => {
 });
 document.getElementById('faster-btn').addEventListener('click', function() { speed = Math.min(speed + 5, 300); updateUI(); });
 document.getElementById('slower-btn').addEventListener('click', function() { speed = Math.max(speed - 5, 5);   updateUI(); });
-document.getElementById('save-btn').addEventListener('click',   function() { vscodeApi.postMessage({ command: 'saveHtml' }); });
 tempoBtn.addEventListener('click', function() { if (tempoSpeed) { speed = tempoSpeed; updateUI(); } });
+
+// ── Export popup ──────────────────────────────────────────────────────────
+var exportPopup = document.getElementById('export-popup');
+var exportBtn   = document.getElementById('export-btn');
+exportBtn.addEventListener('click', function(e) {
+  e.stopPropagation();
+  exportPopup.classList.toggle('open');
+});
+document.getElementById('exp-html').addEventListener('click', function() {
+  exportPopup.classList.remove('open');
+  vscodeApi.postMessage({ command: 'saveHtml' });
+});
+document.getElementById('exp-pdf').addEventListener('click', function() {
+  exportPopup.classList.remove('open');
+  window.print();
+});
+document.addEventListener('click', function(e) {
+  if (!exportBtn.contains(e.target) && !exportPopup.contains(e.target)) exportPopup.classList.remove('open');
+});
 // ── Tap tempo ─────────────────────────────────────────────────────────────
 var tapTimes = [];
 var tapLabel = document.getElementById('tap-label');
@@ -2961,46 +3174,6 @@ document.getElementById('tap-btn').addEventListener('click', function() {
   if (computed > 0) { tempoSpeed = computed; speed = tempoSpeed; updateUI(); }
 });
 
-// ── Section jump ──────────────────────────────────────────────────────────
-var secPopup = document.getElementById('sec-popup');
-var secBtn   = document.getElementById('sec-btn');
-var SECTION_TYPE_LABELS = { chorus:'Chorus', verse:'Verse', bridge:'Bridge', tab:'Tab', grid:'Grid' };
-function buildSectionNav() {
-  secPopup.innerHTML = '';
-  var secs = document.querySelectorAll('.section[data-nav]');
-  var typeCounts = {};
-  secs.forEach(function(sec, idx) {
-    // Robust type extraction: find the class that starts with 'section-' (but isn't 'section')
-    var type = '';
-    var cls = sec.className.split(/\s+/);
-    for (var ci = 0; ci < cls.length; ci++) {
-      if (cls[ci].indexOf('section-') === 0 && cls[ci] !== 'section') {
-        type = cls[ci].slice(8); break;
-      }
-    }
-    var labelEl  = sec.querySelector('.section-label');
-    var baseName = labelEl ? labelEl.textContent.trim()
-                           : (SECTION_TYPE_LABELS[type] || (type ? type.charAt(0).toUpperCase() + type.slice(1) : 'Section'));
-    typeCounts[baseName] = (typeCounts[baseName] || 0) + 1;
-    var text = (idx + 1) + '. ' + baseName;
-    var item = document.createElement('button');
-    item.className   = 'sec-item';
-    item.textContent = text;
-    item.addEventListener('click', function() {
-      sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      secPopup.style.display = 'none';
-    });
-    secPopup.appendChild(item);
-  });
-}
-secBtn.addEventListener('click', function() {
-  if (secPopup.style.display === 'block') { secPopup.style.display = 'none'; return; }
-  buildSectionNav();
-  secPopup.style.display = 'block';
-});
-document.addEventListener('click', function(e) {
-  if (!secBtn.contains(e.target) && !secPopup.contains(e.target)) secPopup.style.display = 'none';
-});
 
 // ── Lyrics-only toggle ────────────────────────────────────────────────────
 var lyricsBtn = document.getElementById('lyrics-btn');
@@ -3010,21 +3183,14 @@ lyricsBtn.addEventListener('click', function() {
   lyricsBtn.title = on ? 'Show chords (L)' : 'Lyrics only — hide chords (L)';
 });
 
-// ── Full-screen ───────────────────────────────────────────────────────────
+// ── Full-screen (VSCode: maximise editor + hide sidebar) ──────────────────
 var fsBtn = document.getElementById('fs-btn');
-fsBtn.style.display = 'flex'; // always show; silently fails in VSCode webview
+var _fsActive = false;
 fsBtn.addEventListener('click', function() {
-  try {
-    if (!document.fullscreenElement) {
-      var p = document.documentElement.requestFullscreen();
-      if (p && p.catch) p.catch(function() {});
-    } else {
-      document.exitFullscreen();
-    }
-  } catch(e) {}
-});
-document.addEventListener('fullscreenchange', function() {
-  fsBtn.textContent = document.fullscreenElement ? '⤡' : '⤢';
+  _fsActive = !_fsActive;
+  fsBtn.textContent = _fsActive ? '⤡' : '⤢';
+  fsBtn.title = _fsActive ? 'Exit full screen (F)' : 'Full screen (F)';
+  vscodeApi.postMessage({ command: 'toggleFullscreen' });
 });
 
 // ── Metronome ─────────────────────────────────────────────────────────────
@@ -3085,7 +3251,7 @@ document.addEventListener('keydown', e => {
   if (e.code === 'ArrowDown') { document.getElementById('slower-btn').click(); e.preventDefault(); }
   if (e.key  === 't' || e.key === 'T') { document.getElementById('tap-btn').click(); e.preventDefault(); }
   if (e.key  === 'l' || e.key === 'L') { lyricsBtn.click(); e.preventDefault(); }
-  if (e.key  === 'f' || e.key === 'F') { if (fsBtn.style.display !== 'none') fsBtn.click(); e.preventDefault(); }
+  if (e.key  === 'f' || e.key === 'F') { fsBtn.click(); e.preventDefault(); }
   if (e.key  === 'm' || e.key === 'M') { metroBtn.click(); e.preventDefault(); }
 });
 
@@ -3096,8 +3262,10 @@ window.addEventListener('message', function(e) {
     if (e.data.chordSvgs) CHORD_SVGS = e.data.chordSvgs;
     PARSED = parse(e.data.source);
     document.getElementById('song').innerHTML = render(PARSED, previewTranspose);
+    applyColZones();
     bindTooltips();
     populateChordDiagrams();
+    updateLegend();
     window.scrollTo(0, savedY);
     setTimeout(function() { applyTempoSpeed(PARSED.meta); }, 200);
   }
@@ -3193,7 +3361,7 @@ body { padding-top: 52px; padding-bottom: 80px; }
 #song-nav-title { flex: 1; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #nav-bar button.active { color: #ffd700; border-color: #ffd700; }
 #progress-bar { position: fixed; top: 50px; left: 0; height: 3px; background: #79b8ff; width: 0%; z-index: 9999; transition: width 0.1s; }
-#song { max-width: 720px; margin: 0 auto; padding: 24px clamp(10px, 4vw, 40px) 40px; }
+#song { padding: 24px clamp(10px, 4vw, 40px) 40px; }
 .song-header { margin-bottom: 18px; }
 .song-title    { font-size: 2em; font-weight: bold; color: var(--fg); }
 .song-subtitle { font-size: 1.1em; color: var(--fg-dim); margin-top: 2px; }
@@ -3216,7 +3384,7 @@ body { padding-top: 52px; padding-bottom: 80px; }
 .chorus-ref { color: var(--fg-muted); font-style: italic; }
 .empty-line { height: 0.6em; }
 .tab-block, .grid-block { font-family: monospace; font-size: 0.9em; background: var(--tab-bg); border: 1px solid var(--tab-border); padding: 8px 12px; border-radius: 4px; overflow-x: auto; white-space: pre; line-height: 1.5; }
-.grid-block .chord { color: var(--chord); font-weight: bold; cursor: pointer; }
+.grid-block .chord { color: var(--chord); font-family: inherit; font-size: inherit; font-weight: inherit; cursor: pointer; }
 .page-break { border: none; border-top: 1px dashed var(--border); margin: 16px 0; }
 .chord-diagrams { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 6px 0; }
 .chord-diagram-cell { display: inline-flex; flex-direction: column; align-items: center; }
@@ -3226,6 +3394,9 @@ body { padding-top: 52px; padding-bottom: 80px; }
 #song.two-col { column-count: 2; column-gap: 3em; column-rule: 1px solid var(--border); }
 #song.two-col .section { break-inside: avoid-column; }
 #song.two-col .song-header { column-span: all; }
+#song.has-col-zones.two-col { column-count: 1; column-rule: none; }
+#song.has-col-zones.two-col .col-zone { column-count: 2; column-gap: 3em; column-rule: 1px solid var(--border); }
+#song.has-col-zones.two-col .col-zone .section { break-inside: avoid-column; }
 #chord-tip { position: fixed; display: none; background: var(--tip-bg); border: 1px solid var(--tip-border); border-radius: 8px; padding: 8px; z-index: 99999; pointer-events: none; text-align: center; color: var(--tip-fg); font-family: sans-serif; font-size: 12px; }
 #scroll-bar {
   position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
@@ -3363,6 +3534,8 @@ function parse(text) {
       if (k==='end_of_tab'||k==='eot')      { next('verse','',false); continue; }
       if (k==='start_of_grid'||k==='sog')   { next('grid',v||'Grid',true); continue; }
       if (k==='end_of_grid'||k==='eog')     { next('verse','',false); continue; }
+      if (k==='x_columns_on')  { flush(); sections.push({type:'col-zone-start',lines:[],label:'',nav:false}); cur={type:'verse',label:'',lines:[],nav:false}; continue; }
+      if (k==='x_columns_off') { flush(); sections.push({type:'col-zone-end',  lines:[],label:'',nav:false}); cur={type:'verse',label:'',lines:[],nav:false}; continue; }
       if (k==='comment'||k==='c'||k==='highlight') { cur.lines.push({type:'comment',text:v}); continue; }
       if (k==='comment_italic'||k==='ci')           { cur.lines.push({type:'comment',text:v}); continue; }
       if (k==='comment_box'||k==='cb')              { cur.lines.push({type:'comment-box',text:v}); continue; }
@@ -3383,10 +3556,11 @@ function parse(text) {
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function safeFmt(s) { return esc(s).replace(new RegExp('&lt;(\\/?(b|i|em|strong|u|s))&gt;', 'gi'), '\x3c$1\x3e'); }
-function renderGridLine(text) {
+function renderGridLine(text, transpose) {
   return text.split(' ').map(function(tok) {
-    if (tok && /^[A-G][b#]?[^|.]*$/.test(tok) && tok !== '.' && CHORD_SVGS[tok]) {
-      return '\x3cspan class="chord" data-chord="' + esc(tok) + '"\x3e' + esc(tok) + '\x3c/span\x3e';
+    if (tok && /^[A-G][b#]?[^|.]*$/.test(tok) && tok !== '.') {
+      var dc = transposeChordName(tok, transpose || 0);
+      return '\x3cspan class="chord" data-chord="' + esc(dc) + '"\x3e' + esc(dc) + '\x3c/span\x3e';
     }
     return esc(tok);
   }).join(' ');
@@ -3403,7 +3577,13 @@ function render({ meta, sections }, transpose) {
   var capoBadge = meta.capo ? '<span class="capo-badge">Capo ' + esc(meta.capo) + '</span>' : '';
   if (mp.length || capoBadge) out.push('<div class="song-meta">' + mp.join(' &nbsp;·&nbsp; ') + capoBadge + '</div>');
   out.push('</div>');
-  for (var sec of sections) {
+  var _hasCZS2=sections.some(function(s){return s.type==='col-zone-start';});
+  var _hasCZE2=sections.some(function(s){return s.type==='col-zone-end';});
+  var effSections2=(_hasCZE2&&!_hasCZS2)?[{type:'col-zone-start',lines:[],label:'',nav:false}].concat(sections):sections;
+  var _inColZone = false;
+  for (var sec of effSections2) {
+    if (sec.type === 'col-zone-start') { out.push('<div class="col-zone">'); _inColZone = true; continue; }
+    if (sec.type === 'col-zone-end')   { out.push('</div>'); _inColZone = false; continue; }
     out.push('<div class="section section-' + sec.type + '">');
     if (sec.label) out.push('<div class="section-label">' + esc(sec.label) + '</div>');
     if (sec.type === 'tab') {
@@ -3412,10 +3592,7 @@ function render({ meta, sections }, transpose) {
       out.push('</pre>');
     } else if (sec.type === 'grid') {
       out.push('<pre class="grid-block">');
-      for (var l of sec.lines) {
-        if (l.type !== 'grid-line') continue;
-        out.push(renderGridLine(l.text));
-      }
+      for (var l of sec.lines) if (l.type==='grid-line') out.push(renderGridLine(l.text, transpose));
       out.push('</pre>');
     } else {
       for (var l of sec.lines) {
@@ -3432,11 +3609,12 @@ function render({ meta, sections }, transpose) {
         else if   (l.type==='chorus-ref')   out.push('<div class="chorus-ref">[ Chorus ]</div>');
         else if   (l.type==='empty')        out.push('<div class="empty-line"></div>');
         else if   (l.type==='page-break')   out.push('<hr class="page-break">');
-        else if   (l.type==='chord-diagram')out.push('<div class="chord-diagram-cell" data-chord="' + esc(l.name) + '"></div>');
+        else if   (l.type==='chord-diagram')out.push('<div class="chord-diagram-cell" data-chord="' + esc(transposeChordName(l.name, transpose||0)) + '"></div>');
       }
     }
     out.push('</div>');
   }
+  if (_inColZone) out.push('</div>');
   return out.join('\\n');
 }
 
@@ -3597,7 +3775,8 @@ function _updateTransLabel(){
 }
 document.getElementById('trans-down').addEventListener('click',function(){previewTranspose--;_updateTransLabel();rerender();});
 document.getElementById('trans-up').addEventListener('click',  function(){previewTranspose++;_updateTransLabel();rerender();});
-function rerender(){document.getElementById('song').innerHTML=render(PARSED,previewTranspose);bindTooltips();populateChordDiagrams();}
+function applyColZones(){var hasCZ=PARSED.sections.some(function(s){return s.type==='col-zone-start'||s.type==='col-zone-end';});document.getElementById('song').classList.toggle('has-col-zones',hasCZ);}
+function rerender(){document.getElementById('song').innerHTML=render(PARSED,previewTranspose);applyColZones();bindTooltips();populateChordDiagrams();}
 
 // Theme
 var _sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -3635,6 +3814,7 @@ function loadSong(idx){
   previewTranspose=0; _updateTransLabel();
   PARSED=parse(s.source);
   document.getElementById('song').innerHTML=render(PARSED,0);
+  applyColZones();
   bindTooltips();
   populateChordDiagrams();
   window.scrollTo(0,0);
@@ -4074,6 +4254,22 @@ if(SONGS.length) loadSong(0);
             }
         }
 
+        // Warn about {x_columns_off} with no {x_columns_on} anywhere in the file
+        const colDirRe = /^\s*\{(x_columns_on|x_columns_off)\}\s*$/i;
+        const hasColsOn = lines.some(l => colDirRe.test(l) && l.match(colDirRe)?.[1]?.toLowerCase() === 'x_columns_on');
+        if (!hasColsOn) {
+            for (let i = 0; i < lines.length; i++) {
+                const m = colDirRe.exec(lines[i]);
+                if (!m || m[1].toLowerCase() !== 'x_columns_off') continue;
+                const col = lines[i].indexOf('{');
+                diags.push(new vscode.Diagnostic(
+                    new vscode.Range(i, col, i, lines[i].trimEnd().length),
+                    '{x_columns_off} has no matching {x_columns_on} — columns will start implicitly from the beginning of the song',
+                    vscode.DiagnosticSeverity.Warning
+                ));
+            }
+        }
+
         diagnosticCollection.set(document.uri, diags);
     }
 
@@ -4303,7 +4499,9 @@ if(SONGS.length) loadSong(0);
         registerChordProConfig,
         editChordProConfig,
         setUserConfigsFolder,
-        registerGridEditor(context)
+        registerGridEditor(context),
+        wrapInSection,
+        ...wrapSectionSubs
     );
 }
 
@@ -4434,6 +4632,8 @@ const NS = 6;
 
 let cols = [];    // { type: 'notes', values: string[NS] } | { type: 'bar' }
 let selC = -1, selS = -1, inputBuf = '';
+let tabUndoStack = [];
+function tabPushUndo() { tabUndoStack.push(JSON.parse(JSON.stringify(cols))); if (tabUndoStack.length > 50) tabUndoStack.shift(); }
 
 // Start with 8 columns, bar, 8 columns
 for (let i = 0; i < 8; i++) addNote();
@@ -4517,12 +4717,18 @@ document.getElementById('grid').addEventListener('click', e => {
 });
 
 document.addEventListener('keydown', e => {
+  if (e.ctrlKey && e.key === 'z') {
+    if (tabUndoStack.length) { cols = tabUndoStack.pop(); selC = -1; selS = -1; inputBuf = ''; render(); }
+    e.preventDefault(); return;
+  }
   if (selC < 0) return;
   if (e.key >= '0' && e.key <= '9') {
+    if (!inputBuf) tabPushUndo();
     const next = inputBuf + e.key;
     inputBuf = (+next <= 24 && next.length <= 2) ? next : e.key;
     render(); e.preventDefault();
   } else if (e.key === 'Backspace') {
+    tabPushUndo();
     inputBuf = '';
     if (cols[selC]) cols[selC].values[selS] = '';
     render(); e.preventDefault();
@@ -4542,23 +4748,25 @@ document.addEventListener('keydown', e => {
 });
 
 document.getElementById('btn-col').addEventListener('click', () => {
-  commit();
+  tabPushUndo(); commit();
   if (selC >= 0) cols.splice(selC + 1, 0, { type: 'notes', values: Array(NS).fill('') });
   else addNote();
   selC = -1; selS = -1; render();
 });
 document.getElementById('btn-bar').addEventListener('click',    () => {
-  commit();
+  tabPushUndo(); commit();
   if (selC >= 0) cols.splice(selC + 1, 0, { type: 'bar' });
   else addBar();
   selC = -1; selS = -1; render();
 });
 document.getElementById('btn-del').addEventListener('click',    () => {
   if (!cols.length) return;
+  tabPushUndo();
   if (selC === cols.length - 1) { selC = -1; selS = -1; }
   cols.pop(); render();
 });
 document.getElementById('btn-clear').addEventListener('click',  () => {
+  tabPushUndo();
   cols.forEach(col => { if (col.type === 'notes') col.values = Array(NS).fill(''); });
   selC = -1; selS = -1; inputBuf = ''; render();
 });

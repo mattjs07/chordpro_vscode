@@ -3,7 +3,7 @@
   "displayName": "ChordPro VSCode",
   "description": "Edit, render, and build ChordPro songs in VSCode — includes PDF rendering, templates, and an interactive chord builder with fretboard.",
   "publisher": "mattjs07",
-  "version": "1.15.0",
+  "version": "1.16.0",
   "icon": "images/icon.png",
   "categories": [
     "Other"
@@ -192,6 +192,36 @@
       {
         "command": "chordpro.openInBuilder",
         "title": "ChordPro: Open Chord in Builder"
+      },
+      {
+        "command": "chordpro.wrapInSection",
+        "title": "ChordPro: Wrap in Section"
+      },
+      {
+        "command": "chordpro.wrapInSection.chorus",
+        "title": "Chorus"
+      },
+      {
+        "command": "chordpro.wrapInSection.verse",
+        "title": "Verse"
+      },
+      {
+        "command": "chordpro.wrapInSection.bridge",
+        "title": "Bridge"
+      },
+      {
+        "command": "chordpro.wrapInSection.tab",
+        "title": "Tab"
+      },
+      {
+        "command": "chordpro.wrapInSection.grid",
+        "title": "Grid"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "chordpro.wrapSubmenu",
+        "label": "Wrap in Section"
       }
     ],
     "menus": {
@@ -219,6 +249,20 @@
           "group": "inline"
         }
       ],
+      "editor/context": [
+        {
+          "submenu": "chordpro.wrapSubmenu",
+          "when": "editorHasSelection && editorLangId == 'chordpro'",
+          "group": "1_modification"
+        }
+      ],
+      "chordpro.wrapSubmenu": [
+        { "command": "chordpro.wrapInSection.chorus", "group": "1_sections@1" },
+        { "command": "chordpro.wrapInSection.verse",  "group": "1_sections@2" },
+        { "command": "chordpro.wrapInSection.bridge", "group": "1_sections@3" },
+        { "command": "chordpro.wrapInSection.tab",    "group": "1_sections@4" },
+        { "command": "chordpro.wrapInSection.grid",   "group": "1_sections@5" }
+      ],
       "commandPalette": [
         {
           "command": "chordpro.previewSongFromLibrary",
@@ -226,6 +270,26 @@
         },
         {
           "command": "chordpro.openInBuilder",
+          "when": "false"
+        },
+        {
+          "command": "chordpro.wrapInSection.chorus",
+          "when": "false"
+        },
+        {
+          "command": "chordpro.wrapInSection.verse",
+          "when": "false"
+        },
+        {
+          "command": "chordpro.wrapInSection.bridge",
+          "when": "false"
+        },
+        {
+          "command": "chordpro.wrapInSection.tab",
+          "when": "false"
+        },
+        {
+          "command": "chordpro.wrapInSection.grid",
           "when": "false"
         }
       ]

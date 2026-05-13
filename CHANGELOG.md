@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.16.0
+- **Chord Builder & Chord Reference redesign** — both panels adopt the Linear Violet palette with CSS variables for dark/light mode; cleaner card layout, smooth hover transitions, violet accent colour throughout
+- **`{x_columns_on}` / `{x_columns_off}` directives** — new extension directives wrap a zone of sections in two-column layout; works in the performance view and setlist; `{x_columns_off}` alone implicitly starts the zone from the beginning; autocomplete entries added; diagnostic warning when `{x_columns_off}` has no matching `{x_columns_on}`
+- **Wrap in Section** — right-click context menu on any selection in a `.cho` file → *Wrap in Section* → Chorus / Verse / Bridge / Tab / Grid; inserts the matching `{start_of_*}` … `{end_of_*}` tags around the selected text; also available as individual commands
+- **`[]` auto-closing** — square brackets now auto-close and auto-surround selections in ChordPro files (consistent with `{}` and `()`)
+- **Section badges** — Verse / Chorus / Bridge labels in the performance view and setlist moved to the left edge as a vertical rotated pill; no longer consume vertical space above the section content
+- **Performance mode: transpose now covers all chord types** — grid chord tokens (`{start_of_grid}`) and `{chord:}` directives now correctly follow the ♭/♯ transpose buttons; previously only inline `[chord]` tokens were transposed
+- **Chord legend** — `Cd` button in the performance view control bar cycles through three modes: hidden / appended at end of page / fixed right-side panel; populated from the same chord library and enharmonic fallbacks as hover tooltips; updates on every rerender and file reload
+- **Print / Save as PDF** — new `🖨 Print / PDF` option via the export popup; print stylesheet hides the control bar and side legend while keeping the end-of-page legend if active
+- **Export dropdown** — "Save as HTML" and "Print / PDF" merged into a single `💾` button that unfolds a small popup; replaces the two separate buttons
+- **Full screen fixed** — `⤢` / `F` now calls `workbench.action.maximizeEditorHideSidebar` instead of the blocked `requestFullscreen()` API; button icon toggles `⤢` / `⤡` to reflect state
+- **Sections (`§`) button removed** from the performance view control bar
+- **Fingering toggle** in Chord Builder converted from a button to an animated CSS pill switch
+- **Ctrl+Z undo** in Chord Builder (fret clicks, string toggles, shift up/down) and Tab Editor (digit entry, backspace, column/bar ops)
+- **Open in Chord Builder** from the Chord Reference panel right-click menu
+- **Barre rendering fix** — barre bar is only drawn when fretted strings are contiguous; non-contiguous voicings (e.g. G#m7) now render as individual dots in both the hover tooltip and the Reference panel
+
 ## 1.15.0
 - **Chord Reference panel** — new sidebar view with three tabs: *File* (chords in the open file), *My Chords* (personal library), and *Library* (full built-in library)
 - **My Chords** — automatically tracks every `{define:}` block across all files you work on; voicings from file defines, the Chord Builder, and the built-in library are merged and deduplicated per chord name
