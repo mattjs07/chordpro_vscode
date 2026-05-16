@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.0.0
+
+### Performance View
+- **Grouped control bar** — buttons reorganised into three labelled bracket sections: Tempo, Scroll, and Transpose; remaining controls (A−/A+, Ly, ⤢, 💾, ⚙) sit ungrouped at the right
+- **Settings panel** — ⚙ gear button opens a popup with: Chord legend mode (Off / End / Side), legend diagram size slider, song diagram size slider, Theme (Dark/Light), and Columns (Single/Two); replaces the previous Cd / 🌙 / ⊞ buttons in the control bar
+- **BPM input field** — replaces the tap label; type a BPM directly or use the Tap button; Enter confirms and returns focus to the page; keyboard shortcuts are suppressed while the field is focused
+- **Physical metronome icon** — ♪ replaced with an inline SVG of a metronome (inverted-V body + swinging arm)
+- **Sync-scroll button** — moved to the Scroll group with a ↓♩ icon; turns violet when active (distinct from the metronome's gold)
+- **Mid-word chord spacing fix** — chord pairs whose lyric does not end with a space get `margin-right: 0`, eliminating the visual gap in mid-word chords like `hel[G]lo`
+- **Proportional section gap** — paragraph spacing between sections scales with font size (`A−` / `A+`) instead of staying fixed
+- **Lyrics-only collapses chord row** — in lyrics-only mode the chord row is physically removed (height: 0) so lyric lines have the same spacing as plain text
+- **SVG diagram size controls** — two independent sliders in the Settings panel control legend diagram width and inline `{chord:}` diagram width
+
+### Editor & Language
+- **`{x_start_section: title}` / `{x_end_section}`** — new extension directives create a generic labeled section with a teal vertical badge; syntax-highlighted as section directives; autocomplete snippets added
+- **Double-bracket autocomplete fix** — accepting a directive or chord completion no longer produces `{title: }}` or `[Am]]` when VS Code has already auto-closed the bracket
+- **Cursor placement after chord insert** — inserting a chord from the Chord Reference panel places the cursor immediately after `]` using a snippet `$0` marker
+- **Unused-define warning includes `{chord:}` usages** — a chord used only via `{chord: NAME}` (without an inline `[NAME]` token) no longer triggers the "defined but never used" hint
+
+### Chord Builder
+- **Three insert buttons** — *Inline* inserts `[CHORD]` at the cursor; *{chord:}* inserts `{chord: CHORD}` at the cursor and adds `{define:}` in the defines section; *{define:}* adds `{define:}` to the defines section only
+- **"Chord already defined" prompt** — when inserting a chord that is already defined, offers: *Go to definition* (jumps to the `{define:}` line in the editor), *Replace* (overwrites the existing define), or *Add as A_2* (inserts a new define with the next available `_N` suffix)
+- **Multiple voicings per chord** — chords named `A`, `A_2`, `A_3`, … are grouped under a single card in My Chords with ◀ ▶ navigation; each voicing carries its exact variant name so insertion uses the correct define
+- **Note names in fret dots** — selected fret dots show the note name (always-sharp convention, e.g. C#); display scales with the larger 32 px row height
+- **Interval display** — a *Notes / Intervals* segmented toggle switches dots between absolute note names and interval names relative to the chord root (1, m3, 3, 5, b7, maj7 …); Notes is the default
+- **Auto-detect chord name** — the chord name field fills automatically with the best-matching name as frets change; typing or clicking a suggestion locks the name; clearing the field resumes auto-detect
+
 ## 1.16.0
 - **Chord Builder & Chord Reference redesign** — both panels adopt the Linear Violet palette with CSS variables for dark/light mode; cleaner card layout, smooth hover transitions, violet accent colour throughout
 - **`{x_columns_on}` / `{x_columns_off}` directives** — new extension directives wrap a zone of sections in two-column layout; works in the performance view and setlist; `{x_columns_off}` alone implicitly starts the zone from the beginning; autocomplete entries added; diagnostic warning when `{x_columns_off}` has no matching `{x_columns_on}`

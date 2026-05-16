@@ -725,6 +725,20 @@ function getAllSavedNames(context) {
     return [...new Set(all.map(v => v.name))];
 }
 
+// Returns the next available voicing name (e.g. "A" → "A_2", "A"+"A_2" → "A_3")
+function nextVoicingName(document, baseName) {
+    const text = document.getText();
+    const escaped = escapeRegex(baseName);
+    const re = new RegExp(`\\{define:?\\s+${escaped}(_\\d+)?[\\s}]`, 'gi');
+    let maxN = 0;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+        const n = m[1] ? parseInt(m[1].slice(1)) : 1;
+        if (n > maxN) maxN = n;
+    }
+    return maxN === 0 ? null : baseName + '_' + (maxN + 1);
+}
+
 function addSavedVoicing(context, chord) {
     const all = context.globalState.get('savedVoicings') || [];
     const key = _svKey(chord);
@@ -801,39 +815,113 @@ class ChordBuilderViewProvider {
         webviewView.webview.html = getWebviewContent();
 
         webviewView.webview.onDidReceiveMessage(async message => {
-            if (message.command === 'saveChord' || message.command === 'saveChordWithDefines') {
+            if (message.command === 'insertInline') {
                 const chord = message.chord;
                 addSavedVoicing(this.context, chord);
-                const define = toChordProDefine(chord);
                 const editor = vscode.window.activeTextEditor;
                 if (!editor) {
-                    vscode.env.clipboard.writeText(define);
-                    vscode.window.showInformationMessage('No active editor — definition copied to clipboard');
-                } else if (message.command === 'saveChordWithDefines') {
+                    vscode.env.clipboard.writeText('[' + chord.name + ']');
+                    vscode.window.showInformationMessage('No active editor — chord name copied to clipboard');
+                } else {
+                    editor.insertSnippet(new vscode.SnippetString('[' + chord.name + ']$0'));
+                }
+            }
+
+            if (message.command === 'insertChordDirective') {
+                const chord = message.chord;
+                const editor = vscode.window.activeTextEditor;
+                if (!editor) {
+                    vscode.env.clipboard.writeText('{chord: ' + chord.name + '}\n' + toChordProDefine(chord));
+                    vscode.window.showInformationMessage('No active editor — directive copied to clipboard');
+                    addSavedVoicing(this.context, chord);
+                } else {
                     const existingDefines = parseDocumentDefines(editor.document);
                     if (existingDefines[chord.name]) {
+                        const nextName = nextVoicingName(editor.document, chord.name);
+                        const lines = editor.document.getText().split('\n');
+                        const matchRe = new RegExp(`^\\s*\\{(?:define|chord):?\\s+${escapeRegex(chord.name)}[\\s}]`, 'i');
+                        const lineIdx = lines.findIndex(l => matchRe.test(l));
                         const answer = await vscode.window.showInformationMessage(
-                            `"${chord.name}" is already defined in this file. Replace the existing definition?`,
-                            'Replace', 'Keep both'
+                            `"${chord.name}" is already defined in this file.`,
+                            'Go to definition', 'Replace', `Add as ${nextName}`
                         );
-                        if (answer === 'Replace') {
-                            const lines = editor.document.getText().split('\n');
-                            const matchRe = new RegExp(`^\\s*\\{(?:define|chord):?\\s+${escapeRegex(chord.name)}[\\s}]`, 'i');
-                            const lineIdx = lines.findIndex(l => matchRe.test(l));
+                        if (answer === 'Go to definition') {
+                            if (lineIdx >= 0) {
+                                const pos = new vscode.Position(lineIdx, 0);
+                                editor.selection = new vscode.Selection(pos, pos);
+                                editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
+                            }
+                        } else if (answer === 'Replace') {
                             if (lineIdx >= 0) {
                                 await editor.edit(eb => eb.replace(
                                     new vscode.Range(lineIdx, 0, lineIdx, lines[lineIdx].length),
-                                    define
+                                    toChordProDefine(chord)
                                 ));
-                                return;
                             }
+                            const cursorPos = editor.selection.active;
+                            await editor.edit(eb => eb.insert(cursorPos, '{chord: ' + chord.name + '}\n'));
+                            addSavedVoicing(this.context, chord);
+                        } else if (answer === `Add as ${nextName}`) {
+                            const newChord = Object.assign({}, chord, { name: nextName });
+                            const insertLine = findDefineInsertLine(editor.document);
+                            await editor.edit(eb => eb.insert(new vscode.Position(insertLine, 0), toChordProDefine(newChord) + '\n'));
+                            const cursorPos = editor.selection.active;
+                            await editor.edit(eb => eb.insert(cursorPos, '{chord: ' + nextName + '}\n'));
+                            addSavedVoicing(this.context, newChord);
                         }
-                        if (!answer || answer === 'Keep both') return;
+                    } else {
+                        addSavedVoicing(this.context, chord);
+                        const cursorPos = editor.selection.active;
+                        await editor.edit(eb => eb.insert(cursorPos, '{chord: ' + chord.name + '}\n'));
+                        const insertLine = findDefineInsertLine(editor.document);
+                        editor.edit(eb => eb.insert(new vscode.Position(insertLine, 0), toChordProDefine(chord) + '\n'));
                     }
-                    const insertLine = findDefineInsertLine(editor.document);
-                    editor.edit(eb => eb.insert(new vscode.Position(insertLine, 0), define + '\n'));
+                }
+            }
+
+            if (message.command === 'insertDefine') {
+                const chord = message.chord;
+                const editor = vscode.window.activeTextEditor;
+                if (!editor) {
+                    vscode.env.clipboard.writeText(toChordProDefine(chord));
+                    vscode.window.showInformationMessage('No active editor — definition copied to clipboard');
+                    addSavedVoicing(this.context, chord);
                 } else {
-                    editor.insertSnippet(new vscode.SnippetString(define + '\n'));
+                    const existingDefines = parseDocumentDefines(editor.document);
+                    if (existingDefines[chord.name]) {
+                        const nextName = nextVoicingName(editor.document, chord.name);
+                        const lines = editor.document.getText().split('\n');
+                        const matchRe = new RegExp(`^\\s*\\{(?:define|chord):?\\s+${escapeRegex(chord.name)}[\\s}]`, 'i');
+                        const lineIdx = lines.findIndex(l => matchRe.test(l));
+                        const answer = await vscode.window.showInformationMessage(
+                            `"${chord.name}" is already defined in this file.`,
+                            'Go to definition', 'Replace', `Add as ${nextName}`
+                        );
+                        if (answer === 'Go to definition') {
+                            if (lineIdx >= 0) {
+                                const pos = new vscode.Position(lineIdx, 0);
+                                editor.selection = new vscode.Selection(pos, pos);
+                                editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
+                            }
+                        } else if (answer === 'Replace') {
+                            if (lineIdx >= 0) {
+                                await editor.edit(eb => eb.replace(
+                                    new vscode.Range(lineIdx, 0, lineIdx, lines[lineIdx].length),
+                                    toChordProDefine(chord)
+                                ));
+                            }
+                            addSavedVoicing(this.context, chord);
+                        } else if (answer === `Add as ${nextName}`) {
+                            const newChord = Object.assign({}, chord, { name: nextName });
+                            const insertLine = findDefineInsertLine(editor.document);
+                            await editor.edit(eb => eb.insert(new vscode.Position(insertLine, 0), toChordProDefine(newChord) + '\n'));
+                            addSavedVoicing(this.context, newChord);
+                        }
+                    } else {
+                        addSavedVoicing(this.context, chord);
+                        const insertLine = findDefineInsertLine(editor.document);
+                        editor.edit(eb => eb.insert(new vscode.Position(insertLine, 0), toChordProDefine(chord) + '\n'));
+                    }
                 }
             }
 
@@ -873,29 +961,35 @@ body { margin: 0; padding: 8px; background: var(--bg); color: var(--text); font-
 #chordName { flex: 1; min-width: 0; padding: 5px 10px; font-size: 13px; background: var(--surf); color: var(--text); border: 1px solid var(--border); border-radius: 5px; outline: none; font-family: inherit; transition: border-color 0.15s, box-shadow 0.15s; }
 #chordName:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .insert-label { font-size: 11px; color: var(--muted); white-space: nowrap; }
-#saveBtn, #saveDefineBtn, #shiftDownBtn, #shiftUpBtn { padding: 5px 10px; font-size: 11px; cursor: pointer; background: var(--surf); color: var(--text); border: 1px solid var(--border); border-radius: 5px; white-space: nowrap; font-family: inherit; transition: all 0.12s ease; }
-#saveBtn:hover, #saveDefineBtn:hover, #shiftDownBtn:hover, #shiftUpBtn:hover { background: var(--surf-hi); border-color: var(--accent); color: var(--accent); }
+#saveBtn, #saveDefineBtn, #saveDefineOnlyBtn, #shiftDownBtn, #shiftUpBtn { padding: 5px 10px; font-size: 11px; cursor: pointer; background: var(--surf); color: var(--text); border: 1px solid var(--border); border-radius: 5px; white-space: nowrap; font-family: inherit; transition: all 0.12s ease; }
+#saveBtn:hover, #saveDefineBtn:hover, #saveDefineOnlyBtn:hover, #shiftDownBtn:hover, #shiftUpBtn:hover { background: var(--surf-hi); border-color: var(--accent); color: var(--accent); }
 #fingeringToggle { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); cursor: pointer; user-select: none; }
 .toggle-track { width: 30px; height: 17px; border-radius: 9px; background: var(--border); position: relative; transition: background 0.2s; flex-shrink: 0; }
 #fingeringToggle.active .toggle-track { background: var(--accent); }
 .toggle-thumb { width: 13px; height: 13px; border-radius: 50%; background: #fff; position: absolute; top: 2px; left: 2px; transition: left 0.18s; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
 #fingeringToggle.active .toggle-thumb { left: 15px; }
+#dot-mode-wrap { margin-top: 12px; }
+#dot-mode-label { font-size: 10px; color: var(--muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+#dot-mode-btns { display: flex; background: var(--border); border-radius: 8px; padding: 2px; gap: 2px; }
+.dm-btn { flex: 1; font-size: 11px; font-weight: 500; padding: 6px 4px; background: transparent; color: var(--muted); border: none; border-radius: 6px; cursor: pointer; font-family: inherit; transition: all 0.15s ease; white-space: nowrap; line-height: 1; }
+.dm-btn.active { background: var(--accent); color: #fff; font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,0.25); }
 #resetBtn { margin-left: 6px; padding: 4px 9px; font-size: 14px; line-height: 1; cursor: pointer; background: transparent; color: var(--danger); border: 1px solid var(--danger); border-radius: 5px; transition: all 0.12s ease; }
 #resetBtn:hover { background: var(--danger); color: var(--bg); }
 #fretboard { display: inline-flex; flex-direction: column; position: relative; background: var(--surf); border: 1px solid var(--border); border-radius: 6px; padding: 4px; margin-top: 4px; }
-.string-row { display: flex; align-items: center; height: 26px; position: relative; }
+.string-row { display: flex; align-items: center; height: 32px; position: relative; }
 .string-line { position: absolute; right: 0; top: 50%; transform: translateY(-50%); pointer-events: none; z-index: 2; background: var(--string); }
 .string-indicator { width: 24px; height: 24px; flex-shrink: 0; margin-right: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 12px; font-weight: bold; border-radius: 50%; border: 2px solid; user-select: none; z-index: 4; position: relative; background: var(--bg); transition: all 0.12s ease; }
 .string-indicator.muted  { color: var(--danger); border-color: var(--danger); }
 .string-indicator.open   { color: var(--accent); border-color: var(--accent); }
 .string-indicator.played { color: var(--muted); border-color: var(--muted); opacity: 0.4; }
-.fret-cell { width: 40px; height: 26px; flex-shrink: 0; border-right: 1px solid var(--border); background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; z-index: 3; transition: background 0.1s; }
+.fret-cell { width: 40px; height: 32px; flex-shrink: 0; border-right: 1px solid var(--border); background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; z-index: 3; transition: background 0.1s; }
 .fret-cell:hover { background: var(--accent-soft); }
 .fret-cell.nut { border-left: 4px solid var(--text); }
 .string-row:first-child .fret-cell { border-top: 1px solid var(--border); }
 .string-row:last-child  .fret-cell { border-bottom: 1px solid var(--border); }
-.finger-dot { width: 18px; height: 18px; border-radius: 50%; background: var(--accent); display: none; position: absolute; z-index: 5; box-shadow: 0 1px 4px rgba(0,0,0,0.5); pointer-events: none; }
-.fret-cell.selected .finger-dot { display: block; }
+.finger-dot { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); display: none; align-items: center; justify-content: center; position: absolute; z-index: 5; box-shadow: 0 1px 4px rgba(0,0,0,0.5); pointer-events: none; }
+.fret-cell.selected .finger-dot { display: flex; }
+.dot-note { font-size: 13px; font-weight: 700; color: #fff; line-height: 1; pointer-events: none; letter-spacing: -0.5px; }
 #fret-numbers { display: flex; padding-left: 28px; margin-top: 4px; }
 .fret-num { width: 40px; text-align: center; font-size: 10px; color: var(--muted); flex-shrink: 0; }
 #suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; min-height: 22px; align-items: center; }
@@ -921,8 +1015,9 @@ body { margin: 0; padding: 8px; background: var(--bg); color: var(--text); font-
     <div id="top">
       <input id="chordName" placeholder="Chord name" />
       <span class="insert-label">Insert:</span>
-      <button id="saveBtn" title="Insert {define:} at cursor position">At cursor</button>
-      <button id="saveDefineBtn" title="Insert {define:} grouped with other defines, or after metadata">With defines</button>
+      <button id="saveBtn" title="Insert [CHORD] inline at cursor">Inline</button>
+      <button id="saveDefineBtn" title="Insert {chord: CHORD} at cursor and add {define:} to file">{chord:}</button>
+      <button id="saveDefineOnlyBtn" title="Add {define:} to file (in defines section)">{define:}</button>
       <button id="resetBtn" title="Reset fretboard">↺</button>
       <button id="shiftDownBtn" title="Shift all frets down by 1">−1</button>
       <button id="shiftUpBtn" title="Shift all frets up by 1">+1</button>
@@ -935,11 +1030,44 @@ body { margin: 0; padding: 8px; background: var(--bg); color: var(--text); font-
     <div id="mini-diagram"></div>
     <div id="fingeringToggle">Fingering <span class="toggle-track"><span class="toggle-thumb"></span></span></div>
     <div id="fingering-hint" style="display:none;font-size:10px;text-align:center;line-height:1.5;max-width:100px;color:var(--muted);">Click a dot to cycle finger (1–4)</div>
+    <div id="dot-mode-wrap">
+      <div id="dot-mode-label">Show in dots</div>
+      <div id="dot-mode-btns">
+        <button class="dm-btn active" data-mode="notes">Notes</button>
+        <button class="dm-btn" data-mode="intervals">Intervals</button>
+      </div>
+    </div>
   </div>
 </div>
 <script>
 const vscode = acquireVsCodeApi();
-const NUM_STRINGS = 6, NUM_FRETS = 15, ROW_H = 26, FRET_W = 40, INDICATOR_W = 28;
+const NUM_STRINGS = 6, NUM_FRETS = 15, ROW_H = 32, FRET_W = 40, INDICATOR_W = 28;
+const OPEN_SEMITONES = [4, 11, 7, 2, 9, 4]; // highE→lowE: E B G D A E (matches fretsArray index 0=highE)
+const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const INTERVAL_NAMES = ['1','b2','2','m3','3','4','b5','5','#5','6','b7','maj7'];
+const ROOT_SEMITONES = {C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+function noteName(s, fret) { return NOTE_NAMES[(OPEN_SEMITONES[s] + fret) % 12]; }
+function parseRoot(chordName) {
+    if (!chordName) return null;
+    const m = chordName.match(/^([A-G])([#b]?)/);
+    if (!m) return null;
+    let n = ROOT_SEMITONES[m[1]];
+    if (m[2] === '#') n = (n + 1) % 12;
+    if (m[2] === 'b') n = (n + 11) % 12;
+    return n;
+}
+function intervalName(s, fret, root) {
+    return INTERVAL_NAMES[((OPEN_SEMITONES[s] + fret) - root + 12) % 12];
+}
+function dotLabel(s, fret) {
+    if (displayMode === 'intervals') {
+        const root = parseRoot(document.getElementById('chordName').value.trim());
+        return root !== null ? intervalName(s, fret, root) : noteName(s, fret);
+    }
+    return noteName(s, fret);
+}
+let displayMode = 'notes';
+let manualChordName = false;
 const STRING_THICKNESS = [1.0, 1.3, 1.7, 2.2, 2.8, 3.5];
 let fretsArray = Array(NUM_STRINGS).fill(-1);
 let fingersOverride = Array(NUM_STRINGS).fill(null);
@@ -966,6 +1094,9 @@ for (let s = 0; s < NUM_STRINGS; s++) {
         cell.className = 'fret-cell' + (f === 1 ? ' nut' : '');
         const dot = document.createElement('div');
         dot.className = 'finger-dot';
+        const noteSpan = document.createElement('span');
+        noteSpan.className = 'dot-note';
+        dot.appendChild(noteSpan);
         cell.appendChild(dot);
         cell.addEventListener('mousedown', (e) => {
             e.preventDefault();
@@ -1077,9 +1208,14 @@ function updateDisplay() {
     for (let s = 0; s < NUM_STRINGS; s++) {
         const row = rows[s], indic = row.children[0], val = fretsArray[s];
         if (val === -1)     { indic.className = 'string-indicator muted';  indic.innerText = 'X'; }
-        else if (val === 0) { indic.className = 'string-indicator open';   indic.innerText = 'O'; }
+        else if (val === 0) { indic.className = 'string-indicator open';   indic.innerText = dotLabel(s, 0); }
         else                { indic.className = 'string-indicator played';  indic.innerText = ''; }
-        for (let f = 1; f <= NUM_FRETS; f++) { row.children[f].classList.toggle('selected', val === f); }
+        for (let f = 1; f <= NUM_FRETS; f++) {
+            const cell = row.children[f];
+            cell.classList.toggle('selected', val === f);
+            const ns = cell.querySelector('.dot-note');
+            if (ns) ns.textContent = val === f ? dotLabel(s, f) : '';
+        }
     }
     updateMiniDiagram();
     vscode.postMessage({ command: 'detectChord', frets: [...fretsArray] });
@@ -1091,6 +1227,20 @@ window.addEventListener('message', e => {
     const div = document.getElementById('suggestions');
     div.innerHTML = '';
     if (!msg.groups.length) { div.innerHTML = '<span>no chord found</span>'; return; }
+    // Auto-fill best guess unless user has typed a custom name
+    if (!manualChordName) {
+        const bestGuess = msg.groups[0][0];
+        const nameField = document.getElementById('chordName');
+        if (nameField.value !== bestGuess) {
+            nameField.value = bestGuess;
+            updateDisplay(); // refresh interval labels with new root
+        }
+    }
+    const pickName = name => {
+        document.getElementById('chordName').value = name;
+        manualChordName = true;
+        updateDisplay();
+    };
     msg.groups.forEach(group => {
         if (group.length > 1) {
             const stack = document.createElement('div');
@@ -1099,7 +1249,7 @@ window.addEventListener('message', e => {
                 const btn = document.createElement('div');
                 btn.className = 'suggestion';
                 btn.innerText = name;
-                btn.addEventListener('click', () => { document.getElementById('chordName').value = name; });
+                btn.addEventListener('click', () => pickName(name));
                 stack.appendChild(btn);
             });
             div.appendChild(stack);
@@ -1107,7 +1257,7 @@ window.addEventListener('message', e => {
             const btn = document.createElement('div');
             btn.className = 'suggestion';
             btn.innerText = group[0];
-            btn.addEventListener('click', () => { document.getElementById('chordName').value = group[0]; });
+            btn.addEventListener('click', () => pickName(group[0]));
             div.appendChild(btn);
         }
     });
@@ -1120,18 +1270,31 @@ function doInsert(cmd) {
     const fingers = hasFingers ? fingersOverride.map(f => f === null ? 0 : f) : null;
     vscode.postMessage({ command: cmd, chord: { name, frets: [...fretsArray], fingers } });
 }
-document.getElementById('saveBtn').addEventListener('click', () => doInsert('saveChord'));
-document.getElementById('saveDefineBtn').addEventListener('click', () => doInsert('saveChordWithDefines'));
-document.getElementById('chordName').addEventListener('keydown', e => { if (e.key === 'Enter') { doInsert('saveChord'); } });
+document.getElementById('saveBtn').addEventListener('click', () => doInsert('insertInline'));
+document.getElementById('saveDefineBtn').addEventListener('click', () => doInsert('insertChordDirective'));
+document.getElementById('saveDefineOnlyBtn').addEventListener('click', () => doInsert('insertDefine'));
+document.getElementById('chordName').addEventListener('keydown', e => { if (e.key === 'Enter') { doInsert('insertInline'); } });
 document.getElementById('fingeringToggle').addEventListener('click', () => {
     fingeringActive = !fingeringActive;
     document.getElementById('fingeringToggle').classList.toggle('active', fingeringActive);
     document.getElementById('fingering-hint').style.display = fingeringActive ? 'block' : 'none';
     updateMiniDiagram();
 });
+document.querySelectorAll('.dm-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        displayMode = btn.dataset.mode;
+        document.querySelectorAll('.dm-btn').forEach(b => b.classList.toggle('active', b === btn));
+        updateDisplay();
+    });
+});
+document.getElementById('chordName').addEventListener('input', () => {
+    manualChordName = document.getElementById('chordName').value.trim().length > 0;
+    updateDisplay();
+});
 document.getElementById('resetBtn').addEventListener('click', () => {
     fretsArray = Array(NUM_STRINGS).fill(-1);
     fingersOverride = Array(NUM_STRINGS).fill(null);
+    manualChordName = false;
     document.getElementById('chordName').value = '';
     document.getElementById('suggestions').innerHTML = '<span>play some strings...</span>';
     updateDisplay();
@@ -1165,6 +1328,7 @@ window.addEventListener('message', e => {
         fretsArray = msg.frets.slice();
         fingersOverride = msg.fingers ? msg.fingers.slice() : Array(NUM_STRINGS).fill(null);
         fingeringActive = msg.fingers && msg.fingers.some(f => f > 0);
+        manualChordName = false;
         document.getElementById('chordName').value = msg.name || '';
         document.getElementById('fingeringToggle').classList.toggle('active', fingeringActive);
         document.getElementById('fingering-hint').style.display = fingeringActive ? 'block' : 'none';
@@ -1214,6 +1378,8 @@ const DIRECTIVES = [
     { label: 'end_of_grid',          detail: 'End chord grid section',           snippet: 'end_of_grid}'                                  },
     { label: 'x_columns_on',         detail: 'Start two-column zone (extension)',snippet: 'x_columns_on}'                                 },
     { label: 'x_columns_off',        detail: 'End two-column zone (extension)',  snippet: 'x_columns_off}'                                },
+    { label: 'x_start_section',            detail: 'Labeled section with badge (extension)', snippet: 'x_start_section: $1}\n$2\n{x_end_section}'   },
+    { label: 'x_end_section',        detail: 'End labeled section (extension)',  snippet: 'x_end_section}'                               },
     { label: 'start_of_textblock',   detail: 'Start raw text block',             snippet: 'start_of_textblock}\n$1\n{end_of_textblock}'   },
     { label: 'end_of_textblock',     detail: 'End raw text block',               snippet: 'end_of_textblock}'                             },
     { label: 'start_of_abc',         detail: 'Start ABC music notation block',   snippet: 'start_of_abc}\n$1\n{end_of_abc}'  },
@@ -1457,8 +1623,11 @@ class ChordReferenceViewProvider {
                     }
                 }
             }
-            const text = msg.diagram ? '{chord: ' + msg.name + '}\n' : '[' + msg.name + ']';
-            editor.edit(eb => eb.insert(cursorPos, text));
+            if (msg.diagram) {
+                editor.edit(eb => eb.insert(cursorPos, '{chord: ' + msg.name + '}\n'));
+            } else {
+                editor.insertSnippet(new vscode.SnippetString('[' + msg.name + ']$0'), cursorPos);
+            }
         });
         this._push();
     }
@@ -1496,37 +1665,49 @@ class ChordReferenceViewProvider {
         const isSuppressed = (name, frets) => suppressedVoicings.some(
             s => s.name === name && s.fretsKey === JSON.stringify(frets)
         );
-        const myChords = Object.entries(chordFiles)
-            .filter(([name]) => !hiddenChords.has(name))
-            .map(([name, entries]) => {
-                // Normalize: may be legacy strings or new {uri, frets} objects
-                const norm = entries.map(e => typeof e === 'string' ? { uri: e, frets: null } : e);
-                const count = norm.length;
-                // Collect unique voicings — file defines first, then Chord Builder, then CHORD_DB fallback
+        // Group variants (A, A_2, A_3 …) under their base name
+        const groups = {};
+        for (const [name, entries] of Object.entries(chordFiles)) {
+            const baseName = name.replace(/_\d+$/, '');
+            if (hiddenChords.has(baseName) || hiddenChords.has(name)) continue;
+            if (!groups[baseName]) groups[baseName] = [];
+            groups[baseName].push({ name, entries });
+        }
+        const myChords = Object.entries(groups).map(([baseName, nameGroups]) => {
+                // Sort variants: base name first (treated as _1), then _2, _3 …
+                nameGroups.sort((a, b) => {
+                    const nA = parseInt((a.name.match(/_(\d+)$/) || [0, '1'])[1]);
+                    const nB = parseInt((b.name.match(/_(\d+)$/) || [0, '1'])[1]);
+                    return nA - nB;
+                });
                 const seen = new Set();
                 const voicings = [];
-                const addVoicing = (frets, fingers) => {
+                let totalCount = 0;
+                const allFiles = [];
+                const addVoicing = (frets, fingers, actualName) => {
                     if (!frets) return;
-                    if (isSuppressed(name, frets)) return;
+                    if (isSuppressed(actualName, frets)) return;
                     const k = JSON.stringify(frets);
                     if (seen.has(k)) return;
                     seen.add(k);
-                    voicings.push({ frets, fingers: fingers || null });
+                    voicings.push({ frets, fingers: fingers || null, actualName });
                 };
-                // From file {define:} blocks (lowE→highE absolute)
-                for (const e of norm) { addVoicing(e.frets, null); }
-                // From Chord Builder saves (stored highE→lowE, flip to lowE→highE)
-                for (const v of getSavedVoicings(this._ctx, name)) {
-                    addVoicing([...v.frets].reverse(), v.fingers ? [...v.fingers].reverse() : null);
+                for (const { name, entries } of nameGroups) {
+                    const norm = entries.map(e => typeof e === 'string' ? { uri: e, frets: null } : e);
+                    totalCount += norm.length;
+                    for (const e of norm) { addVoicing(e.frets, null, name); }
+                    for (const v of getSavedVoicings(this._ctx, name)) {
+                        addVoicing([...v.frets].reverse(), v.fingers ? [...v.fingers].reverse() : null, name);
+                    }
+                    for (const e of norm) {
+                        try { allFiles.push(require('path').basename(vscode.Uri.parse(e.uri).fsPath)); }
+                        catch (_) { allFiles.push(e.uri.split('/').pop()); }
+                    }
                 }
-                // CHORD_DB fallback if nothing else
-                if (!voicings.length && CHORD_DB[name]) { addVoicing(CHORD_DB[name], null); }
-                // File basenames for tooltip
-                const files = norm.map(e => {
-                    try { return require('path').basename(vscode.Uri.parse(e.uri).fsPath); }
-                    catch (_) { return e.uri.split('/').pop(); }
-                });
-                return { name, count, voicings, files };
+                if (!voicings.length && CHORD_DB[baseName]) {
+                    voicings.push({ frets: CHORD_DB[baseName], fingers: null, actualName: baseName });
+                }
+                return { name: baseName, count: totalCount, voicings, files: allFiles };
             })
             .filter(({ voicings }) => voicings.length > 0)
             .sort((a, b) => b.count - a.count)
@@ -1741,7 +1922,8 @@ function attachCardListeners(el, showDel) {
         var voicings=findVoicings(name);
         var idx=voicingIdx[name]||0;
         var v=voicings[idx]||voicings[0];
-        vscode.postMessage({name:name, voicingFrets:v?v.frets:null, voicingFingers:v?v.fingers:null, diagram:e.ctrlKey||e.metaKey});
+        var actualName=(v&&v.actualName)?v.actualName:name;
+        vscode.postMessage({name:actualName, voicingFrets:v?v.frets:null, voicingFingers:v?v.fingers:null, diagram:e.ctrlKey||e.metaKey});
     });
     el.querySelectorAll('.varr').forEach(function(a){
         a.addEventListener('click',function(e){
@@ -1762,7 +1944,8 @@ function attachCardListeners(el, showDel) {
             var voicings=findVoicings(name);
             var idx=voicingIdx[name]||0;
             var v=voicings[idx]||voicings[0];
-            vscode.postMessage({command:'deleteVoicing', name:name, voicingFrets:v?v.frets:null, voicingCount:voicings.length});
+            var actualName=(v&&v.actualName)?v.actualName:name;
+            vscode.postMessage({command:'deleteVoicing', name:actualName, voicingFrets:v?v.frets:null, voicingCount:voicings.length});
         });
     }
 }
@@ -2131,9 +2314,14 @@ function activate(context) {
                 const isCommentLine = /^\s*#/.test(fullLine);
                 const braceStart = linePrefix.lastIndexOf('{');
 
+                // Helper: if VSCode auto-closed the bracket, the close char sits right at the cursor
+                const charAtCursor = fullLine[position.character];
+                const endColBrace   = charAtCursor === '}' ? position.character + 1 : position.character;
+                const endColBracket = charAtCursor === ']' ? position.character + 1 : position.character;
+
                 // Render option completions: inside {…} on a comment line
                 if (isCommentLine && braceStart !== -1 && !linePrefix.includes('}', braceStart)) {
-                    const replaceRange = new vscode.Range(position.line, braceStart + 1, position.line, position.character);
+                    const replaceRange = new vscode.Range(position.line, braceStart + 1, position.line, endColBrace);
                     return Object.entries(RENDER_OPTIONS).map(([key, info]) => {
                         const item = new vscode.CompletionItem(key, vscode.CompletionItemKind.Property);
                         item.detail = info.placeholder;
@@ -2151,7 +2339,7 @@ function activate(context) {
 
                 // Directive completions: inside {…} not yet closed
                 if (braceStart !== -1 && !linePrefix.includes('}', braceStart)) {
-                    const replaceRange = new vscode.Range(position.line, braceStart + 1, position.line, position.character);
+                    const replaceRange = new vscode.Range(position.line, braceStart + 1, position.line, endColBrace);
                     return DIRECTIVES.map(d => {
                         const item = new vscode.CompletionItem(d.label, vscode.CompletionItemKind.Keyword);
                         item.insertText = new vscode.SnippetString(d.snippet);
@@ -2164,7 +2352,7 @@ function activate(context) {
                 // Chord completions: inside […] not yet closed
                 const bracketStart = linePrefix.lastIndexOf('[');
                 if (bracketStart !== -1 && !linePrefix.includes(']', bracketStart)) {
-                    const replaceRange = new vscode.Range(position.line, bracketStart + 1, position.line, position.character);
+                    const replaceRange = new vscode.Range(position.line, bracketStart + 1, position.line, endColBracket);
 
                     const savedChordNames = getAllSavedNames(context);
 
@@ -2484,6 +2672,7 @@ function activate(context) {
   --sec-verse-bg: #f0f0f0;  --sec-verse-fg: #555;
   --sec-bridge-bg: #fef0d0; --sec-bridge-fg: #a05000;
   --sec-tab-bg: #f0f4e8;    --sec-tab-fg: #4a6a20;
+  --sec-xsec-bg: #e0f4f4;   --sec-xsec-fg: #1a7a7a;
   --tab-bg: #f4f4f0; --tab-border: #bbb;
   --tip-bg: #fff; --tip-border: #ccc; --tip-fg: #333;
   --capo-bg: #ffe8b0; --capo-fg: #7a4000;
@@ -2496,6 +2685,7 @@ function activate(context) {
     --sec-verse-bg: #2a2a2a;  --sec-verse-fg: #aaa;
     --sec-bridge-bg: #3a2a10; --sec-bridge-fg: #e8a050;
     --sec-tab-bg: #1e2a14;    --sec-tab-fg: #90c040;
+    --sec-xsec-bg: #0e2a2a;   --sec-xsec-fg: #5cc8c8;
     --tab-bg: #252525; --tab-border: #555;
     --tip-bg: #2d2d2d; --tip-border: #555; --tip-fg: #ccc;
     --capo-bg: #4a3010; --capo-fg: #ffcc60;
@@ -2516,7 +2706,7 @@ body {
   font-size: 0.78em; font-weight: bold; font-family: sans-serif;
   padding: 2px 10px; border-radius: 12px; margin-left: 6px; vertical-align: middle;
 }
-.section     { margin-bottom: 22px; position: relative; padding-left: 28px; }
+.section     { margin-bottom: var(--section-gap, 22px); position: relative; padding-left: 28px; }
 .section-label {
   position: absolute; left: 0; top: 0; bottom: 0;
   width: 20px;
@@ -2530,8 +2720,10 @@ body {
 .section-verse   .section-label { background: var(--sec-verse-bg);  color: var(--sec-verse-fg); }
 .section-bridge  .section-label { background: var(--sec-bridge-bg); color: var(--sec-bridge-fg); }
 .section-tab     .section-label { background: var(--sec-tab-bg);    color: var(--sec-tab-fg); }
+.section-x-section .section-label { background: var(--sec-xsec-bg); color: var(--sec-xsec-fg); }
 .chord-line  { display: flex; flex-wrap: wrap; line-height: 1; margin-bottom: 4px; }
 .pair        { display: inline-flex; flex-direction: column; align-items: flex-start; margin-right: 6px; }
+.pair.tight  { margin-right: 0; }
 .chord       { color: var(--chord); font-weight: bold; font-size: 0.82em; min-height: 1.3em; font-family: sans-serif; white-space: pre; cursor: default; }
 .chord[data-chord] { cursor: help; }
 #chord-tip {
@@ -2567,26 +2759,51 @@ body {
 /* ── Control bar ──────────────────────────────────────────────────────────── */
 #scroll-bar {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-  display: flex; align-items: center; gap: 8px;
-  background: rgba(20,20,20,0.92); border: 1px solid #555; border-radius: 28px;
-  padding: 8px 18px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  display: flex; align-items: flex-end; gap: 10px;
+  background: rgba(20,20,20,0.92); border: 1px solid #555; border-radius: 18px;
+  padding: 0 18px 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
   font-family: sans-serif; color: #eee; user-select: none; z-index: 9999;
 }
 #scroll-bar button {
   background: #3a3a3a; border: 1px solid #666; color: #eee;
   border-radius: 50%; width: 30px; height: 30px; font-size: 15px;
   cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0;
+  flex-shrink: 0;
 }
 #scroll-bar button:hover { background: #555; }
+/* Labeled groups */
+.ctrl-group {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 5px 8px 0; border-top: 1px solid #3d3d3d;
+  border-left: 1px solid #3d3d3d; border-right: 1px solid #3d3d3d;
+  border-radius: 6px 6px 0 0;
+}
+.ctrl-label {
+  font-size: 8px; color: #555; text-transform: uppercase; letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+.ctrl-btns { display: flex; align-items: center; gap: 5px; padding-bottom: 2px; }
+.ctrl-sep-inner { width: 1px; height: 18px; background: #3d3d3d; margin: 0 1px; flex-shrink: 0; }
+/* Ungrouped buttons sit at the bottom (align-items: flex-end on parent) */
+#scroll-bar > button { margin-bottom: 0; }
+/* Play button */
 #play-btn    { width: 38px; height: 38px; font-size: 18px; }
 #speed-label { min-width: 52px; text-align: center; font-size: 12px; color: #aaa; }
-#save-btn    { font-size: 14px; opacity: 0.7; }
-#save-btn:hover { opacity: 1; }
-#tempo-btn   { font-size: 15px; opacity: 0.7; }
-#tempo-btn:hover { opacity: 1; }
-#tempo-btn.active { opacity: 1; color: #ffd700; border-color: #ffd700; }
-#metro-btn   { font-size: 15px; opacity: 0.7; }
-#metro-btn:hover { opacity: 1; }
+/* BPM input */
+#bpm-input {
+  width: 50px; background: rgba(255,255,255,0.07); border: 1px solid #555;
+  border-radius: 6px; color: #eee; font-size: 12px; text-align: center;
+  padding: 4px 2px; font-family: sans-serif; height: 30px; box-sizing: border-box;
+}
+#bpm-input::-webkit-inner-spin-button, #bpm-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+#bpm-input::placeholder { color: #444; font-size: 10px; }
+#bpm-input:focus { outline: 1px solid #7c6df0; outline-offset: 0; }
+/* Tempo/metro buttons */
+#tempo-btn { opacity: 0.35; }
+#tempo-btn:not(:disabled):hover { opacity: 1; }
+#tempo-btn.active { opacity: 1; color: #7c6df0; border-color: #7c6df0; }
+#metro-btn { opacity: 0.35; }
+#metro-btn:not(:disabled):hover { opacity: 1; }
 #metro-btn.active { opacity: 1; color: #ffd700; border-color: #ffd700; }
 #font-smaller, #font-larger { font-size: 11px; font-family: sans-serif; letter-spacing: -0.5px; border-radius: 6px !important; width: auto !important; padding: 0 7px !important; }
 /* ── Theme manual override (takes precedence over prefers-color-scheme) ───── */
@@ -2621,23 +2838,22 @@ body {
 #song.has-col-zones.two-col .col-zone { column-count: 2; column-gap: 3em; column-rule: 1px solid var(--border); }
 #song.has-col-zones.two-col .col-zone .section { break-inside: avoid-column; }
 /* ── Additional button styles ────────────────────────────────────────────── */
-#theme-btn  { font-size: 14px; }
-#twocol-btn { font-size: 14px; }
-#twocol-btn.active { color: #ffd700; border-color: #ffd700; }
+#settings-btn { font-size: 20px; opacity: 0.7; }
+#settings-btn:hover, #settings-btn.open { opacity: 1; }
 #trans-down, #trans-up { font-size: 13px; }
 #trans-label { min-width: 28px; text-align: center; font-size: 12px; color: #aaa; padding: 0 2px; }
 #trans-label.active { color: #ffd700; }
 #tap-btn    { font-size: 11px; font-family: sans-serif; border-radius: 6px !important; width: auto !important; padding: 0 7px !important; }
-#tap-label  { min-width: 44px; text-align: center; font-size: 11px; color: #888; padding: 0 2px; }
 #lyrics-btn { font-size: 11px; font-family: sans-serif; border-radius: 6px !important; width: auto !important; padding: 0 7px !important; }
 #lyrics-btn.active { color: #ffd700; border-color: #ffd700; }
 #fs-btn     { font-size: 14px; }
 /* ── Lyrics-only mode ────────────────────────────────────────────────────── */
-.chord { transition: opacity 0.2s; }
-#song.lyrics-only .chord { opacity: 0; }
+.chord { transition: opacity 0.2s, height 0.2s, min-height 0.2s; }
+#song.lyrics-only .chord { opacity: 0; height: 0; min-height: 0; overflow: hidden; }
+#song.lyrics-only .chord-line { margin-bottom: 2px; line-height: inherit; }
 /* ── Export popup ────────────────────────────────────────────────────────── */
 #export-popup {
-  display: none; position: fixed; bottom: 72px; right: 24px;
+  display: none; position: fixed; bottom: 100px; right: 24px;
   background: rgba(20,20,20,0.96); border: 1px solid #555; border-radius: 10px;
   padding: 4px; z-index: 9998; min-width: 160px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.5);
@@ -2664,13 +2880,29 @@ body {
 body.legend-side-on { padding-right: 210px; }
 .legend-title { font-size: 11px; font-weight: bold; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
 .legend-grid { display: flex; flex-wrap: wrap; gap: 10px 8px; }
-#legend-btn { font-size: 11px; font-family: sans-serif; border-radius: 6px !important; width: auto !important; padding: 0 7px !important; opacity: 0.7; }
-#legend-btn:hover { opacity: 1; }
-#legend-btn.active-end  { opacity: 1; color: #ffd700; border-color: #ffd700; }
-#legend-btn.active-side { opacity: 1; color: #90c040; border-color: #90c040; }
+/* ── Settings popup ───────────────────────────────────────────────────────── */
+#settings-popup {
+  display: none; position: fixed; bottom: 100px; right: 24px;
+  background: rgba(20,20,20,0.97); border: 1px solid #555; border-radius: 10px;
+  padding: 14px 16px; z-index: 9997; min-width: 260px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5); font-family: sans-serif;
+}
+#settings-popup.open { display: block; }
+.set-title { font-size: 11px; font-weight: bold; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+.set-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.set-row:last-child { margin-bottom: 0; }
+.set-label { font-size: 12px; color: #aaa; flex-shrink: 0; width: 118px; }
+.set-radios { display: flex; gap: 10px; flex-wrap: wrap; }
+.set-radios label { font-size: 12px; color: #eee; display: flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap; }
+.set-radios input[type="radio"] { cursor: pointer; accent-color: #7c6df0; }
+.set-slider { flex: 1; accent-color: #7c6df0; cursor: pointer; min-width: 80px; }
+.set-val { font-size: 11px; color: #888; min-width: 34px; text-align: right; }
+/* Diagram size CSS variables */
+#legend-end .legend-grid svg, #legend-side .legend-grid svg { width: var(--legend-svg-w, 80px); height: auto; }
+#song .chord-diagram-cell svg { width: var(--song-svg-w, 110px); height: auto; }
 /* ── Print ────────────────────────────────────────────────────────────────── */
 @media print {
-  #scroll-bar, #progress-bar, #legend-side { display: none !important; }
+  #scroll-bar, #progress-bar, #legend-side, #settings-popup { display: none !important; }
   body { background: #fff !important; color: #000 !important; padding: 20px !important; max-width: 100% !important; font-size: 13px !important; padding-right: 20px !important; }
   .song-header { border-bottom-color: #ccc !important; }
   .chord { color: #1a5fb4 !important; }
@@ -2694,26 +2926,75 @@ body.legend-side-on { padding-right: 210px; }
   <button class="exp-item" id="exp-html">💾 Save as HTML</button>
   <button class="exp-item" id="exp-pdf">🖨 Print / PDF</button>
 </div>
+<div id="settings-popup">
+  <div class="set-title">⚙ Settings</div>
+  <div class="set-row">
+    <span class="set-label">Chord legend</span>
+    <div class="set-radios">
+      <label><input type="radio" name="legend-mode" value="0" checked> Off</label>
+      <label><input type="radio" name="legend-mode" value="1"> End of page</label>
+      <label><input type="radio" name="legend-mode" value="2"> Side panel</label>
+    </div>
+  </div>
+  <div class="set-row">
+    <span class="set-label">Legend diagram size</span>
+    <input type="range" class="set-slider" id="legend-sz" min="40" max="110" step="10" value="80">
+    <span class="set-val" id="legend-sz-val">80px</span>
+  </div>
+  <div class="set-row">
+    <span class="set-label">Song diagram size</span>
+    <input type="range" class="set-slider" id="song-sz" min="40" max="110" step="10" value="110">
+    <span class="set-val" id="song-sz-val">110px</span>
+  </div>
+  <div class="set-row">
+    <span class="set-label">Theme</span>
+    <div class="set-radios" id="theme-radios">
+      <label><input type="radio" name="theme-mode" value="dark"> Dark</label>
+      <label><input type="radio" name="theme-mode" value="light"> Light</label>
+    </div>
+  </div>
+  <div class="set-row">
+    <span class="set-label">Columns</span>
+    <div class="set-radios">
+      <label><input type="radio" name="col-mode" value="1" checked> Single</label>
+      <label><input type="radio" name="col-mode" value="2"> Two</label>
+    </div>
+  </div>
+</div>
 <div id="scroll-bar">
-  <button id="tap-btn"      title="Tap tempo (T)">Tap</button>
-  <span   id="tap-label"></span>
-  <button id="trans-down"   title="Transpose down (♭)">♭</button>
-  <span   id="trans-label">0</span>
-  <button id="trans-up"     title="Transpose up (♯)">♯</button>
-  <button id="slower-btn"   title="Slower (↓)">−</button>
-  <button id="play-btn"     title="Play / Pause (Space)">▶</button>
-  <button id="faster-btn"   title="Faster (↑)">+</button>
-  <span   id="speed-label">30 px/s</span>
-  <button id="tempo-btn"    title="Snap to tempo speed" style="display:none">♩</button>
-  <button id="metro-btn"    title="Metronome (M)" disabled style="opacity:0.3">♪</button>
+  <div class="ctrl-group">
+    <span class="ctrl-label">Tempo</span>
+    <div class="ctrl-btns">
+      <button id="tap-btn"   title="Tap tempo (T)">Tap</button>
+      <input  type="number"  id="bpm-input" min="20" max="300" placeholder="BPM" title="Type BPM or use Tap">
+      <button id="metro-btn" title="Metronome click track (M)" disabled style="opacity:0.35"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M7 22L11 2h2l4 20z" opacity="0.45"/><line x1="12" y1="15" x2="18" y2="6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="15" r="1.8"/></svg></button>
+    </div>
+  </div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">Scroll</span>
+    <div class="ctrl-btns">
+      <button id="slower-btn" title="Slower (↓)">−</button>
+      <button id="play-btn"   title="Play / Pause (Space)">▶</button>
+      <button id="faster-btn" title="Faster (↑)">+</button>
+      <span   id="speed-label">30 px/s</span>
+      <div class="ctrl-sep-inner"></div>
+      <button id="tempo-btn" title="Sync scroll speed to BPM" disabled style="font-size:12px">↓♩</button>
+    </div>
+  </div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">Transpose</span>
+    <div class="ctrl-btns">
+      <button id="trans-down" title="Transpose down (♭)">♭</button>
+      <span   id="trans-label">0</span>
+      <button id="trans-up"   title="Transpose up (♯)">♯</button>
+    </div>
+  </div>
   <button id="font-smaller" title="Smaller text (A−)">A−</button>
   <button id="font-larger"  title="Larger text (A+)">A+</button>
   <button id="lyrics-btn"   title="Lyrics only — hide chords (L)">Ly</button>
   <button id="fs-btn"       title="Full screen (F)">⤢</button>
-  <button id="twocol-btn"   title="Toggle two-column layout">⊞</button>
-  <button id="theme-btn"    title="Toggle dark/light theme">🌙</button>
   <button id="export-btn"   title="Save / Export">💾</button>
-  <button id="legend-btn"   title="Chord diagrams legend (none / end of page / side panel)">Cd</button>
+  <button id="settings-btn" title="Settings">⚙</button>
 </div>
 <script>
 // ── Browser transpose helpers ─────────────────────────────────────────────
@@ -2774,16 +3055,18 @@ function parse(text) {
       if (k === 'key')                   { meta.key      = v; continue; }
       if (k === 'capo')                  { meta.capo     = v; continue; }
       if (k === 'tempo')                 { meta.tempo    = v; continue; }
-      if (k === 'start_of_chorus'||k==='soc') { next('chorus',  v||'Chorus', true);  continue; }
-      if (k === 'end_of_chorus'  ||k==='eoc') { next('verse',   '',          false); continue; }
-      if (k === 'start_of_verse' ||k==='sov') { next('verse',   v||'Verse',  true);  continue; }
-      if (k === 'end_of_verse'   ||k==='eov') { next('verse',   '',          false); continue; }
-      if (k === 'start_of_bridge'||k==='sob') { next('bridge',  v||'Bridge', true);  continue; }
-      if (k === 'end_of_bridge'  ||k==='eob') { next('verse',   '',          false); continue; }
-      if (k === 'start_of_tab'   ||k==='sot') { next('tab',     v||'Tab',    true);  continue; }
-      if (k === 'end_of_tab'     ||k==='eot') { next('verse',   '',          false); continue; }
-      if (k === 'start_of_grid'  ||k==='sog') { next('grid',    v||'Grid',   true);  continue; }
-      if (k === 'end_of_grid'    ||k==='eog') { next('verse',   '',          false); continue; }
+      if (k === 'start_of_chorus'||k==='soc') { next('chorus',     v||'Chorus',  true);  continue; }
+      if (k === 'end_of_chorus'  ||k==='eoc') { next('verse',      '',           false); continue; }
+      if (k === 'start_of_verse' ||k==='sov') { next('verse',      v||'Verse',   true);  continue; }
+      if (k === 'end_of_verse'   ||k==='eov') { next('verse',      '',           false); continue; }
+      if (k === 'start_of_bridge'||k==='sob') { next('bridge',     v||'Bridge',  true);  continue; }
+      if (k === 'end_of_bridge'  ||k==='eob') { next('verse',      '',           false); continue; }
+      if (k === 'start_of_tab'   ||k==='sot') { next('tab',        v||'Tab',     true);  continue; }
+      if (k === 'end_of_tab'     ||k==='eot') { next('verse',      '',           false); continue; }
+      if (k === 'start_of_grid'  ||k==='sog') { next('grid',       v||'Grid',    true);  continue; }
+      if (k === 'end_of_grid'    ||k==='eog') { next('verse',      '',           false); continue; }
+      if (k === 'x_start_section')                  { next('x-section',  v||'Section', true);  continue; }
+      if (k === 'x_end_section')              { next('verse',      '',           false); continue; }
       if (k === 'x_columns_on')  { flush(); sections.push({ type: 'col-zone-start', lines: [], label: '', nav: false }); cur = { type: 'verse', label: '', lines: [], nav: false }; continue; }
       if (k === 'x_columns_off') { flush(); sections.push({ type: 'col-zone-end',   lines: [], label: '', nav: false }); cur = { type: 'verse', label: '', lines: [], nav: false }; continue; }
       if (k === 'comment'||k==='c'||k==='highlight') { cur.lines.push({ type:'comment',     text:v }); continue; }
@@ -2864,7 +3147,8 @@ function render({ meta, sections }, transpose) {
           out.push('<div class="chord-line">');
           for (const s of l.segs) {
             var dc = transposeChordName(s.chord || '', transpose || 0);
-            out.push('<span class="pair">'
+            var tight = s.lyric && s.lyric.length > 0 && s.lyric[s.lyric.length - 1] !== ' ';
+            out.push('<span class="pair' + (tight ? ' tight' : '') + '">'
               + '<span class="chord"' + (dc ? ' data-chord="' + esc(dc) + '"' : '') + '>'
               + (dc ? esc(dc) : '&nbsp;') + '</span>'
               + '<span class="lyric">'  + esc(s.lyric || ' ') + '</span>'
@@ -2956,6 +3240,7 @@ var fontSize = 17;
 function changeFontSize(delta) {
   fontSize = Math.max(11, Math.min(28, fontSize + delta));
   document.body.style.fontSize = fontSize + 'px';
+  document.body.style.setProperty('--section-gap', Math.round(22 * fontSize / 17) + 'px');
   if (tempoSpeed) setTimeout(function() { applyTempoSpeed(PARSED.meta, false, true); }, 100);
 }
 document.getElementById('font-smaller').addEventListener('click', function() { changeFontSize(-1); });
@@ -2971,7 +3256,6 @@ function applyColZones() {
 var legendMode = 0; // 0=none 1=end 2=side
 var legendEndEl  = document.getElementById('legend-end');
 var legendSideEl = document.getElementById('legend-side');
-var legendBtn    = document.getElementById('legend-btn');
 function _getChordSvg(name) {
   var svg = CHORD_SVGS[name];
   if (!svg) {
@@ -3002,13 +3286,7 @@ function updateLegend() {
   legendEndEl.classList.toggle('active', legendMode === 1);
   legendSideEl.classList.toggle('active', legendMode === 2);
   document.body.classList.toggle('legend-side-on', legendMode === 2);
-  legendBtn.classList.toggle('active-end',  legendMode === 1);
-  legendBtn.classList.toggle('active-side', legendMode === 2);
 }
-legendBtn.addEventListener('click', function() {
-  legendMode = (legendMode + 1) % 3;
-  updateLegend();
-});
 // ── Rerender (called when transpose or any display param changes) ─────────
 function rerender() {
   document.getElementById('song').innerHTML = render(PARSED, previewTranspose);
@@ -3019,24 +3297,67 @@ function rerender() {
   if (tempoSpeed) setTimeout(function() { applyTempoSpeed(PARSED.meta, false, true); }, 100);
 }
 
-// ── Theme toggle ──────────────────────────────────────────────────────────
-var themeBtn  = document.getElementById('theme-btn');
-var _sysDark  = window.matchMedia('(prefers-color-scheme: dark)').matches;
-function _updateThemeBtn() {
-  var cur = document.documentElement.dataset.theme || (_sysDark ? 'dark' : 'light');
-  themeBtn.textContent = cur === 'dark' ? '☀️' : '🌙';
-}
-themeBtn.addEventListener('click', function() {
-  var cur = document.documentElement.dataset.theme || (_sysDark ? 'dark' : 'light');
-  document.documentElement.dataset.theme = cur === 'dark' ? 'light' : 'dark';
-  _updateThemeBtn();
+// ── Settings panel ────────────────────────────────────────────────────────
+var _sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+var settingsPopup = document.getElementById('settings-popup');
+var settingsBtn   = document.getElementById('settings-btn');
+
+settingsBtn.addEventListener('click', function(e) {
+  e.stopPropagation();
+  exportPopup.classList.remove('open');
+  var open = settingsPopup.classList.toggle('open');
+  settingsBtn.classList.toggle('open', open);
+});
+document.addEventListener('click', function(e) {
+  if (!settingsBtn.contains(e.target) && !settingsPopup.contains(e.target)) {
+    settingsPopup.classList.remove('open');
+    settingsBtn.classList.remove('open');
+  }
 });
 
-// ── Two-column toggle ─────────────────────────────────────────────────────
-var twoColBtn = document.getElementById('twocol-btn');
-twoColBtn.addEventListener('click', function() {
-  var on = document.getElementById('song').classList.toggle('two-col');
-  twoColBtn.classList.toggle('active', on);
+// Legend mode radios
+document.querySelectorAll('input[name="legend-mode"]').forEach(function(r) {
+  r.addEventListener('change', function() {
+    legendMode = parseInt(this.value, 10);
+    updateLegend();
+  });
+});
+
+// Legend diagram size slider
+var legendSzSlider = document.getElementById('legend-sz');
+var legendSzVal    = document.getElementById('legend-sz-val');
+legendSzSlider.addEventListener('input', function() {
+  document.body.style.setProperty('--legend-svg-w', this.value + 'px');
+  legendSzVal.textContent = this.value + 'px';
+});
+document.body.style.setProperty('--legend-svg-w', legendSzSlider.value + 'px');
+
+// Song diagram size slider
+var songSzSlider = document.getElementById('song-sz');
+var songSzVal    = document.getElementById('song-sz-val');
+songSzSlider.addEventListener('input', function() {
+  document.body.style.setProperty('--song-svg-w', this.value + 'px');
+  songSzVal.textContent = this.value + 'px';
+});
+document.body.style.setProperty('--song-svg-w', songSzSlider.value + 'px');
+
+// Theme radios
+(function() {
+  var cur = _sysDark ? 'dark' : 'light';
+  var radios = document.querySelectorAll('input[name="theme-mode"]');
+  radios.forEach(function(r) { if (r.value === cur) r.checked = true; });
+  radios.forEach(function(r) {
+    r.addEventListener('change', function() {
+      document.documentElement.dataset.theme = this.value;
+    });
+  });
+})();
+
+// Columns radios
+document.querySelectorAll('input[name="col-mode"]').forEach(function(r) {
+  r.addEventListener('change', function() {
+    document.getElementById('song').classList.toggle('two-col', this.value === '2');
+  });
 });
 
 // ── Live transpose ────────────────────────────────────────────────────────
@@ -3068,18 +3389,34 @@ let speed = 30, playing = false, lastTs = null, accum = 0;
 const playBtn      = document.getElementById('play-btn');
 const speedLabel   = document.getElementById('speed-label');
 
-var tempoSpeed = 0; // non-zero when a {tempo:} was detected
-var activeBpm  = 0; // current BPM (from directive or tap tempo) for metronome
+var tempoSpeed = 0; // non-zero when a {tempo:} is known
+var activeBpm  = 0; // current BPM (from directive, tap, or typed)
 const tempoBtn = document.getElementById('tempo-btn');
+const bpmInput = document.getElementById('bpm-input');
+
+function _updateTempoBtns() {
+  var hasBpm = activeBpm > 0;
+  tempoBtn.disabled = !hasBpm;
+  tempoBtn.style.opacity = hasBpm ? '' : '0.35';
+  tempoBtn.classList.toggle('active', hasBpm && speed === tempoSpeed);
+}
 
 function updateUI() {
   playBtn.textContent = playing ? '⏸' : '▶';
   speedLabel.textContent = speed + ' px/s';
-  if (tempoSpeed) {
-    tempoBtn.style.display = 'flex';
-    tempoBtn.classList.toggle('active', speed === tempoSpeed);
-    tempoBtn.title = 'Tempo speed (' + tempoSpeed + ' px/s)';
-  }
+  _updateTempoBtns();
+}
+
+// Central BPM setter — used by tap tempo, manual input, and {tempo:} directive
+function setBpm(bpm) {
+  if (!bpm || bpm < 20 || bpm > 300) return;
+  activeBpm = bpm;
+  bpmInput.value = bpm;
+  if (_metroActive) startMetronome();
+  _updateMetroBtn();
+  var computed = computeScrollSpeed(bpm);
+  if (computed > 0) { tempoSpeed = computed; speed = tempoSpeed; updateUI(); }
+  else { _updateTempoBtns(); }
 }
 
 // Returns computed px/s for a given BPM, or 0 if layout isn't ready
@@ -3095,7 +3432,7 @@ function computeScrollSpeed(bpm) {
 }
 
 // Set scroll speed from {tempo:} — 1 chord-line ≈ 1 bar (4 beats)
-// keepManual=true: update tempoSpeed but don't change speed if user had manually overridden it
+// keepManual=true: update tempoSpeed but don't override a manually-set speed
 function applyTempoSpeed(meta, _retry, keepManual) {
   var bpm = parseInt(meta.tempo || '0');
   if (!bpm) return;
@@ -3109,6 +3446,7 @@ function applyTempoSpeed(meta, _retry, keepManual) {
   tempoSpeed = newTempo;
   if (!keepManual || wasOnTempo) speed = tempoSpeed;
   activeBpm = bpm;
+  bpmInput.value = bpm;
   if (_metroActive) startMetronome();
   _updateMetroBtn();
   updateUI();
@@ -3136,11 +3474,22 @@ document.getElementById('faster-btn').addEventListener('click', function() { spe
 document.getElementById('slower-btn').addEventListener('click', function() { speed = Math.max(speed - 5, 5);   updateUI(); });
 tempoBtn.addEventListener('click', function() { if (tempoSpeed) { speed = tempoSpeed; updateUI(); } });
 
+// BPM input — manual entry
+bpmInput.addEventListener('keydown', function(e) {
+  e.stopPropagation(); // prevent global shortcuts while typing
+  if (e.key === 'Enter') { this.blur(); }
+});
+bpmInput.addEventListener('change', function() {
+  setBpm(parseInt(this.value, 10));
+});
+
 // ── Export popup ──────────────────────────────────────────────────────────
 var exportPopup = document.getElementById('export-popup');
 var exportBtn   = document.getElementById('export-btn');
 exportBtn.addEventListener('click', function(e) {
   e.stopPropagation();
+  settingsPopup.classList.remove('open');
+  settingsBtn.classList.remove('open');
   exportPopup.classList.toggle('open');
 });
 document.getElementById('exp-html').addEventListener('click', function() {
@@ -3156,22 +3505,16 @@ document.addEventListener('click', function(e) {
 });
 // ── Tap tempo ─────────────────────────────────────────────────────────────
 var tapTimes = [];
-var tapLabel = document.getElementById('tap-label');
 document.getElementById('tap-btn').addEventListener('click', function() {
   var now = Date.now();
   if (tapTimes.length && now - tapTimes[tapTimes.length - 1] > 3000) tapTimes = [];
   tapTimes.push(now);
-  if (tapTimes.length < 2) { tapLabel.textContent = '…'; return; }
+  if (tapTimes.length < 2) { bpmInput.placeholder = '…'; return; }
   if (tapTimes.length > 8) tapTimes.shift();
   var intervals = [];
   for (var i = 1; i < tapTimes.length; i++) intervals.push(tapTimes[i] - tapTimes[i - 1]);
   var bpm = Math.round(60000 / (intervals.reduce(function(a,b){return a+b;},0) / intervals.length));
-  tapLabel.textContent = bpm + ' ♩';
-  activeBpm = bpm;
-  if (_metroActive) startMetronome();
-  _updateMetroBtn();
-  var computed = computeScrollSpeed(bpm);
-  if (computed > 0) { tempoSpeed = computed; speed = tempoSpeed; updateUI(); }
+  setBpm(bpm);
 });
 
 
@@ -3236,8 +3579,9 @@ function stopMetronome() {
 }
 
 function _updateMetroBtn() {
-  metroBtn.disabled = activeBpm === 0;
-  metroBtn.style.opacity = activeBpm === 0 ? '0.3' : '';
+  var hasBpm = activeBpm > 0;
+  metroBtn.disabled = !hasBpm;
+  metroBtn.style.opacity = hasBpm ? '' : '0.35';
   metroBtn.classList.toggle('active', _metroActive);
 }
 
@@ -3246,6 +3590,7 @@ metroBtn.addEventListener('click', function() {
 });
 
 document.addEventListener('keydown', e => {
+  if (document.activeElement === bpmInput) return; // let the input handle its own keys
   if (e.code === 'Space')     { playBtn.click(); e.preventDefault(); }
   if (e.code === 'ArrowUp')   { document.getElementById('faster-btn').click(); e.preventDefault(); }
   if (e.code === 'ArrowDown') { document.getElementById('slower-btn').click(); e.preventDefault(); }
@@ -3271,7 +3616,6 @@ window.addEventListener('message', function(e) {
   }
 });
 
-_updateThemeBtn();
 updateUI();
 setTimeout(function() { applyTempoSpeed(PARSED.meta); }, 200);
 </script>
@@ -3327,6 +3671,7 @@ setTimeout(function() { applyTempoSpeed(PARSED.meta); }, 200);
   --sec-verse-bg: #f0f0f0;  --sec-verse-fg: #555;
   --sec-bridge-bg: #fef0d0; --sec-bridge-fg: #a05000;
   --sec-tab-bg: #f0f4e8;    --sec-tab-fg: #4a6a20;
+  --sec-xsec-bg: #e0f4f4;   --sec-xsec-fg: #1a7a7a;
   --tab-bg: #f4f4f0; --tab-border: #bbb;
   --tip-bg: #fff; --tip-border: #ccc; --tip-fg: #333;
   --capo-bg: #ffe8b0; --capo-fg: #7a4000;
@@ -3338,6 +3683,7 @@ setTimeout(function() { applyTempoSpeed(PARSED.meta); }, 200);
   --sec-verse-bg: #2a2a2a;  --sec-verse-fg: #aaa;
   --sec-bridge-bg: #3a2a10; --sec-bridge-fg: #e8a050;
   --sec-tab-bg: #1e2a14;    --sec-tab-fg: #90c040;
+  --sec-xsec-bg: #0e2a2a;   --sec-xsec-fg: #5cc8c8;
   --tab-bg: #252525; --tab-border: #555;
   --tip-bg: #2d2d2d; --tip-border: #555; --tip-fg: #ccc;
   --capo-bg: #4a3010; --capo-fg: #ffcc60;
@@ -3369,13 +3715,15 @@ body { padding-top: 52px; padding-bottom: 80px; }
 .capo-badge { display: inline-block; margin-left: 8px; background: var(--capo-bg); color: var(--capo-fg); padding: 1px 7px; border-radius: 10px; font-size: 0.85em; }
 .section { margin-bottom: 18px; padding: 10px 14px 10px 42px; border-radius: 6px; position: relative; }
 .section-label { position: absolute; left: 14px; top: 10px; bottom: 10px; width: 20px; display: flex; align-items: center; justify-content: center; writing-mode: vertical-rl; transform: rotate(180deg); font-size: 0.65em; font-weight: bold; text-transform: uppercase; letter-spacing: 0.08em; border-radius: 3px; padding: 4px 0; }
-.section-chorus .section-label { background: var(--sec-chorus-bg); color: var(--sec-chorus-fg); }
+.section-chorus    .section-label { background: var(--sec-chorus-bg); color: var(--sec-chorus-fg); }
 .section-chorus .chord { color: var(--sec-chorus-fg); }
-.section-verse  .section-label { background: var(--sec-verse-bg);  color: var(--sec-verse-fg); }
-.section-bridge .section-label { background: var(--sec-bridge-bg); color: var(--sec-bridge-fg); }
-.section-tab    { background: var(--sec-tab-bg); color: var(--sec-tab-fg); }
+.section-verse     .section-label { background: var(--sec-verse-bg);  color: var(--sec-verse-fg); }
+.section-bridge    .section-label { background: var(--sec-bridge-bg); color: var(--sec-bridge-fg); }
+.section-tab       { background: var(--sec-tab-bg); color: var(--sec-tab-fg); }
+.section-x-section .section-label { background: var(--sec-xsec-bg); color: var(--sec-xsec-fg); }
 .chord-line { display: flex; flex-wrap: wrap; margin-bottom: 2px; }
 .pair { display: inline-flex; flex-direction: column; margin-right: 6px; }
+.pair.tight { margin-right: 0; }
 .chord { font-weight: bold; font-size: 0.85em; color: var(--chord); min-height: 1.2em; white-space: pre; cursor: default; }
 .lyric { white-space: pre; }
 .lyric-line { margin-bottom: 2px; }
@@ -3390,7 +3738,7 @@ body { padding-top: 52px; padding-bottom: 80px; }
 .chord-diagram-cell { display: inline-flex; flex-direction: column; align-items: center; }
 .chord-diagram-cell svg { display: block; }
 .chord-diagram-cell .cd-label { font-size: 0.78em; font-weight: bold; color: var(--chord); margin-top: 2px; }
-#song.lyrics-only .chord { opacity: 0; }
+#song.lyrics-only .chord { opacity: 0; height: 0; min-height: 0; overflow: hidden; }
 #song.two-col { column-count: 2; column-gap: 3em; column-rule: 1px solid var(--border); }
 #song.two-col .section { break-inside: avoid-column; }
 #song.two-col .song-header { column-span: all; }
@@ -3534,6 +3882,8 @@ function parse(text) {
       if (k==='end_of_tab'||k==='eot')      { next('verse','',false); continue; }
       if (k==='start_of_grid'||k==='sog')   { next('grid',v||'Grid',true); continue; }
       if (k==='end_of_grid'||k==='eog')     { next('verse','',false); continue; }
+      if (k==='x_start_section')                  { next('x-section',v||'Section',true); continue; }
+      if (k==='x_end_section')              { next('verse','',false); continue; }
       if (k==='x_columns_on')  { flush(); sections.push({type:'col-zone-start',lines:[],label:'',nav:false}); cur={type:'verse',label:'',lines:[],nav:false}; continue; }
       if (k==='x_columns_off') { flush(); sections.push({type:'col-zone-end',  lines:[],label:'',nav:false}); cur={type:'verse',label:'',lines:[],nav:false}; continue; }
       if (k==='comment'||k==='c'||k==='highlight') { cur.lines.push({type:'comment',text:v}); continue; }
@@ -3600,7 +3950,8 @@ function render({ meta, sections }, transpose) {
           out.push('<div class="chord-line">');
           for (var s of l.segs) {
             var dc = transposeChordName(s.chord||'', transpose||0);
-            out.push('<span class="pair"><span class="chord"' + (dc?' data-chord="'+esc(dc)+'"':'') + '>' + (dc?esc(dc):'&nbsp;') + '</span><span class="lyric">' + esc(s.lyric||' ') + '</span></span>');
+            var tight = s.lyric && s.lyric.length > 0 && s.lyric[s.lyric.length - 1] !== ' ';
+            out.push('<span class="pair' + (tight?' tight':'') + '"><span class="chord"' + (dc?' data-chord="'+esc(dc)+'"':'') + '>' + (dc?esc(dc):'&nbsp;') + '</span><span class="lyric">' + esc(s.lyric||' ') + '</span></span>');
           }
           out.push('</div>');
         } else if (l.type==='lyric')        out.push('<div class="lyric-line">'  + safeFmt(l.text) + '</div>');
@@ -4219,7 +4570,13 @@ if(SONGS.length) loadSong(0);
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
-            if (/\{(?:define|chord):?\s/i.test(line)) continue; // skip define lines
+
+            // {chord: NAME} counts as usage even though it's not an inline [chord]
+            const chordDirRe = /\{chord:\s+([^\s}]+)/gi;
+            let cdm;
+            while ((cdm = chordDirRe.exec(line)) !== null) usedChords.add(cdm[1]);
+
+            if (/\{(?:define|chord):?\s/i.test(line)) continue; // skip define/chord-dir lines for inline scan
 
             const re = /\[([A-G][b#]?[^\]]*)\]/g;
             let m;
