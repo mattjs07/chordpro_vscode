@@ -339,7 +339,7 @@ function parseDocumentDefines(document) {
 
 function generateChordSvg(frets, chordName) {
     const W = 110, H = 130;
-    const PL = 10, PR = 16, PT = 22, PB = 8;
+    const PL = 10, PR = 22, PT = 22, PB = 8;
     const NS = 6, NF = 5;
     const SW = (W - PL - PR) / (NS - 1); // string spacing
     const FH = (H - PT - PB) / NF;       // fret slot height
@@ -419,7 +419,7 @@ function generateChordSvg(frets, chordName) {
 
     // Fret number label for non-open-position chords
     if (!showNut) {
-        parts.push(`<text x="${sx(NS-1)+5}" y="${fy(1)+3}" font-size="9" fill="#555" font-family="sans-serif">${startFret}fr</text>`);
+        parts.push(`<text x="${sx(NS-1)+5}" y="${dy(1)+4}" font-size="11" font-weight="bold" fill="#555" font-family="sans-serif" text-anchor="start">${startFret}</text>`);
     }
 
     parts.push('</svg>');
@@ -1074,9 +1074,11 @@ let fingersOverride = Array(NUM_STRINGS).fill(null);
 let fingeringActive = false;
 let isDragging = false, dragFret = 0;
 let builderUndoStack = [];
+let builderRedoStack = [];
 function builderPushUndo() {
     builderUndoStack.push({ f: fretsArray.slice(), g: fingersOverride.slice() });
     if (builderUndoStack.length > 50) builderUndoStack.shift();
+    builderRedoStack = [];
 }
 const fretboardDiv = document.getElementById('fretboard');
 const fretNumbersDiv = document.getElementById('fret-numbers');
@@ -1146,7 +1148,7 @@ for (let f = 1; f <= NUM_FRETS; f++) {
 
 function updateMiniDiagram() {
     const playedFrets = fretsArray.filter(f => f > 0);
-    const W = 138, ML = 22, MR = 9, MT = 26, MB = 12;
+    const W = 138, ML = 28, MR = 9, MT = 26, MB = 12;
     const SHOW = 4, NS = NUM_STRINGS;
     const gW = W - ML - MR, gH = 140;
     const ss = gW / (NS - 1), fs = gH / SHOW;
@@ -1161,7 +1163,7 @@ function updateMiniDiagram() {
     if (baseFret === 1) {
         svg += '<rect class="m-nut" x="' + sx(0) + '" y="' + (MT-6) + '" width="' + gW + '" height="8" rx="3"/>';
     } else {
-        svg += '<text class="m-label" x="' + (ML-3) + '" y="' + (cy(0)+5) + '" font-size="14" text-anchor="end">' + baseFret + 'fr</text>';
+        svg += '<text class="m-label" x="' + (ML-3) + '" y="' + (cy(0)+6) + '" font-size="17" font-weight="bold" text-anchor="end">' + baseFret + '</text>';
     }
     for (let r = (baseFret === 1 ? 1 : 0); r <= SHOW; r++) {
         svg += '<line class="m-grid" x1="' + sx(0) + '" y1="' + fy(r) + '" x2="' + sx(NS-1) + '" y2="' + fy(r) + '" stroke-width="1.2"/>';
@@ -1315,9 +1317,15 @@ document.getElementById('shiftDownBtn').addEventListener('click', () => {
     updateDisplay();
 });
 document.addEventListener('keydown', e => {
-    if (e.ctrlKey && e.key === 'z' && builderUndoStack.length) {
+    if (e.ctrlKey && !e.shiftKey && e.key === 'z' && builderUndoStack.length) {
+        builderRedoStack.push({ f: fretsArray.slice(), g: fingersOverride.slice() });
         const prev = builderUndoStack.pop();
         fretsArray = prev.f; fingersOverride = prev.g;
+        updateDisplay(); e.preventDefault();
+    } else if (e.ctrlKey && e.shiftKey && (e.key === 'z' || e.key === 'Z') && builderRedoStack.length) {
+        builderUndoStack.push({ f: fretsArray.slice(), g: fingersOverride.slice() });
+        const next = builderRedoStack.pop();
+        fretsArray = next.f; fingersOverride = next.g;
         updateDisplay(); e.preventDefault();
     }
 });
@@ -1806,7 +1814,7 @@ let tab = 'file', fileChords = [], myChords = [], q = '', sortAlpha = false;
 const voicingIdx = {}; // name → current index in voicings array
 
 function drawSvg(frets, fingers) {
-    var W=64,H=72,NS=6,NF=4,PL=8,PR=10,PT=16,PB=4;
+    var W=64,H=72,NS=6,NF=4,PL=8,PR=15,PT=16,PB=4;
     var SW=(W-PL-PR)/(NS-1), FH=(H-PT-PB)/NF;
     var sx=function(i){return PL+i*SW;};
     var fy=function(i){return PT+i*FH;};
@@ -1828,7 +1836,7 @@ function drawSvg(frets, fingers) {
     if(showNut){
         s+='<rect class="cd-nut" x="'+sx(0)+'" y="'+(fy(0)-3)+'" width="'+(sx(NS-1)-sx(0))+'" height="3"/>';
     } else {
-        s+='<text class="cd-label" x="'+(W-2)+'" y="'+(fy(1)-1)+'" font-size="7" text-anchor="end">'+startF+'fr</text>';
+        s+='<text class="cd-label" x="'+(W-2)+'" y="'+(cy(1)+3)+'" font-size="10" font-weight="bold" text-anchor="end">'+startF+'</text>';
     }
     for(var i=showNut?1:0;i<=NF;i++){
         s+='<line class="cd-grid" x1="'+sx(0)+'" y1="'+fy(i)+'" x2="'+sx(NS-1)+'" y2="'+fy(i)+'" stroke-width="0.8"/>';
@@ -2649,8 +2657,10 @@ function activate(context) {
                     if (err) vscode.window.showErrorMessage('Failed to save HTML: ' + err.message);
                     else vscode.window.showInformationMessage('Saved: ' + path.basename(outPath));
                 });
-            } else if (msg.command === 'toggleFullscreen') {
+            } else if (msg.command === 'enterFullscreen') {
                 vscode.commands.executeCommand('workbench.action.maximizeEditorHideSidebar');
+            } else if (msg.command === 'exitFullscreen') {
+                vscode.commands.executeCommand('workbench.action.toggleSidebarVisibility');
             }
         });
         scrollPanel.onDidDispose(() => { scrollPanel = null; scrollDocUri = null; });
@@ -2833,10 +2843,16 @@ body {
 #song.two-col { column-count: 2; column-gap: 3em; column-rule: 1px solid var(--border); }
 #song.two-col .section { break-inside: avoid-column; }
 #song.two-col .song-header { column-span: all; }
+#song.three-col { column-count: 3; column-gap: 2em; column-rule: 1px solid var(--border); }
+#song.three-col .section { break-inside: avoid-column; }
+#song.three-col .song-header { column-span: all; }
 /* Column zones: when {x_columns_on}/{x_columns_off} are used, only the marked zone gets columns */
 #song.has-col-zones.two-col { column-count: 1; column-rule: none; }
 #song.has-col-zones.two-col .col-zone { column-count: 2; column-gap: 3em; column-rule: 1px solid var(--border); }
 #song.has-col-zones.two-col .col-zone .section { break-inside: avoid-column; }
+#song.has-col-zones.three-col { column-count: 1; column-rule: none; }
+#song.has-col-zones.three-col .col-zone { column-count: 3; column-gap: 2em; column-rule: 1px solid var(--border); }
+#song.has-col-zones.three-col .col-zone .section { break-inside: avoid-column; }
 /* ── Additional button styles ────────────────────────────────────────────── */
 #settings-btn { font-size: 20px; opacity: 0.7; }
 #settings-btn:hover, #settings-btn.open { opacity: 1; }
@@ -2958,6 +2974,7 @@ body.legend-side-on { padding-right: 210px; }
     <div class="set-radios">
       <label><input type="radio" name="col-mode" value="1" checked> Single</label>
       <label><input type="radio" name="col-mode" value="2"> Two</label>
+      <label><input type="radio" name="col-mode" value="3"> Three</label>
     </div>
   </div>
 </div>
@@ -2992,7 +3009,7 @@ body.legend-side-on { padding-right: 210px; }
   <button id="font-smaller" title="Smaller text (A−)">A−</button>
   <button id="font-larger"  title="Larger text (A+)">A+</button>
   <button id="lyrics-btn"   title="Lyrics only — hide chords (L)">Ly</button>
-  <button id="fs-btn"       title="Full screen (F)">⤢</button>
+  <button id="fs-btn"       title="Full screen (F)"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5V1h4M9 1h4v4M1 9v4h4M9 13h4V9"/></svg></button>
   <button id="export-btn"   title="Save / Export">💾</button>
   <button id="settings-btn" title="Settings">⚙</button>
 </div>
@@ -3356,7 +3373,9 @@ document.body.style.setProperty('--song-svg-w', songSzSlider.value + 'px');
 // Columns radios
 document.querySelectorAll('input[name="col-mode"]').forEach(function(r) {
   r.addEventListener('change', function() {
-    document.getElementById('song').classList.toggle('two-col', this.value === '2');
+    var song = document.getElementById('song');
+    song.classList.toggle('two-col',   this.value === '2');
+    song.classList.toggle('three-col', this.value === '3');
   });
 });
 
@@ -3529,11 +3548,13 @@ lyricsBtn.addEventListener('click', function() {
 // ── Full-screen (VSCode: maximise editor + hide sidebar) ──────────────────
 var fsBtn = document.getElementById('fs-btn');
 var _fsActive = false;
+var _svgEnterFs = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5V1h4M9 1h4v4M1 9v4h4M9 13h4V9"/></svg>';
+var _svgExitFs  = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 1v4H1M13 5h-4V1M5 13v-4H1M13 9h-4v4"/></svg>';
 fsBtn.addEventListener('click', function() {
   _fsActive = !_fsActive;
-  fsBtn.textContent = _fsActive ? '⤡' : '⤢';
+  fsBtn.innerHTML = _fsActive ? _svgExitFs : _svgEnterFs;
   fsBtn.title = _fsActive ? 'Exit full screen (F)' : 'Full screen (F)';
-  vscodeApi.postMessage({ command: 'toggleFullscreen' });
+  vscodeApi.postMessage({ command: _fsActive ? 'enterFullscreen' : 'exitFullscreen' });
 });
 
 // ── Metronome ─────────────────────────────────────────────────────────────
@@ -4990,7 +5011,8 @@ const NS = 6;
 let cols = [];    // { type: 'notes', values: string[NS] } | { type: 'bar' }
 let selC = -1, selS = -1, inputBuf = '';
 let tabUndoStack = [];
-function tabPushUndo() { tabUndoStack.push(JSON.parse(JSON.stringify(cols))); if (tabUndoStack.length > 50) tabUndoStack.shift(); }
+let tabRedoStack = [];
+function tabPushUndo() { tabUndoStack.push(JSON.parse(JSON.stringify(cols))); if (tabUndoStack.length > 50) tabUndoStack.shift(); tabRedoStack = []; }
 
 // Start with 8 columns, bar, 8 columns
 for (let i = 0; i < 8; i++) addNote();
@@ -5074,8 +5096,12 @@ document.getElementById('grid').addEventListener('click', e => {
 });
 
 document.addEventListener('keydown', e => {
-  if (e.ctrlKey && e.key === 'z') {
-    if (tabUndoStack.length) { cols = tabUndoStack.pop(); selC = -1; selS = -1; inputBuf = ''; render(); }
+  if (e.ctrlKey && !e.shiftKey && e.key === 'z') {
+    if (tabUndoStack.length) { tabRedoStack.push(JSON.parse(JSON.stringify(cols))); cols = tabUndoStack.pop(); selC = -1; selS = -1; inputBuf = ''; render(); }
+    e.preventDefault(); return;
+  }
+  if (e.ctrlKey && e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+    if (tabRedoStack.length) { tabUndoStack.push(JSON.parse(JSON.stringify(cols))); cols = tabRedoStack.pop(); selC = -1; selS = -1; inputBuf = ''; render(); }
     e.preventDefault(); return;
   }
   if (selC < 0) return;
