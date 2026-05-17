@@ -51,7 +51,7 @@
     },
 
     "section-directive": {
-      "match": "(\\{)(start_of_chorus|end_of_chorus|start_of_verse|end_of_verse|start_of_bridge|end_of_bridge|start_of_tab|end_of_tab|start_of_textblock|end_of_textblock|start_of_abc|end_of_abc|start_of_ly|end_of_ly|start_of_svg|end_of_svg|soc|eoc|sov|eov|sob|eob|sot|eot|chorus|x_start_section|x_end_section)([^}]*)(\\})",
+      "match": "(\\{)(start_of_chorus|end_of_chorus|start_of_verse|end_of_verse|start_of_bridge|end_of_bridge|start_of_tab|end_of_tab|start_of_textblock|end_of_textblock|start_of_abc|end_of_abc|start_of_ly|end_of_ly|start_of_svg|end_of_svg|soc|eoc|sov|eov|sob|eob|sot|eot|chorus|x_start_section|x_end_section|x_start_side_panel|x_end_side_panel|x_panel_section_title)([^}]*)(\\})",
       "captures": {
         "1": { "name": "punctuation.definition.directive.chordpro" },
         "2": { "name": "keyword.control.section.chordpro" },

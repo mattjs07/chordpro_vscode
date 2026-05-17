@@ -1388,6 +1388,9 @@ const DIRECTIVES = [
     { label: 'x_columns_off',        detail: 'End two-column zone (extension)',  snippet: 'x_columns_off}'                                },
     { label: 'x_start_section',            detail: 'Labeled section with badge (extension)', snippet: 'x_start_section: $1}\n$2\n{x_end_section}'   },
     { label: 'x_end_section',        detail: 'End labeled section (extension)',  snippet: 'x_end_section}'                               },
+    { label: 'x_start_side_panel',    detail: 'Start custom side panel block (extension)', snippet: 'x_start_side_panel}\n{x_panel_section_title: $1}\n{chord: $2}\n{x_end_side_panel}' },
+    { label: 'x_end_side_panel',      detail: 'End custom side panel block (extension)',   snippet: 'x_end_side_panel}'                  },
+    { label: 'x_panel_section_title', detail: 'Section title inside side panel (extension)', snippet: 'x_panel_section_title: $1}'      },
     { label: 'start_of_textblock',   detail: 'Start raw text block',             snippet: 'start_of_textblock}\n$1\n{end_of_textblock}'   },
     { label: 'end_of_textblock',     detail: 'End raw text block',               snippet: 'end_of_textblock}'                             },
     { label: 'start_of_abc',         detail: 'Start ABC music notation block',   snippet: 'start_of_abc}\n$1\n{end_of_abc}'  },
@@ -2629,7 +2632,7 @@ function activate(context) {
 
         if (scrollPanel) {
             scrollDocUri = editor.document.uri.toString(); // keep uri in sync for save-reload
-            scrollPanel.reveal(scrollPanel.viewColumn ?? vscode.ViewColumn.Beside, true);
+            scrollPanel.reveal(scrollPanel.viewColumn ?? vscode.ViewColumn.Two, true);
             scrollPanel.webview.postMessage({ command: 'reload', source, chordSvgs });
             return;
         }
@@ -2691,6 +2694,7 @@ function activate(context) {
   --tab-bg: #f4f4f0; --tab-border: #bbb;
   --tip-bg: #fff; --tip-border: #ccc; --tip-fg: #333;
   --capo-bg: #ffe8b0; --capo-fg: #7a4000;
+  --panel-bg: rgba(245,245,243,0.97); --panel-border: #ccc;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -2704,6 +2708,7 @@ function activate(context) {
     --tab-bg: #252525; --tab-border: #555;
     --tip-bg: #2d2d2d; --tip-border: #555; --tip-fg: #ccc;
     --capo-bg: #4a3010; --capo-fg: #ffcc60;
+    --panel-bg: rgba(20,20,20,0.93); --panel-border: #444;
   }
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -2832,6 +2837,7 @@ body {
   --tab-bg: #f4f4f0; --tab-border: #bbb;
   --tip-bg: #fff; --tip-border: #ccc; --tip-fg: #333;
   --capo-bg: #ffe8b0; --capo-fg: #7a4000;
+  --panel-bg: rgba(245,245,243,0.97); --panel-border: #ccc;
 }
 :root[data-theme="dark"] {
   --bg: #1e1e1e; --fg: #d4d4d4; --fg-dim: #999; --fg-muted: #666;
@@ -2843,21 +2849,16 @@ body {
   --tab-bg: #252525; --tab-border: #555;
   --tip-bg: #2d2d2d; --tip-border: #555; --tip-fg: #ccc;
   --capo-bg: #4a3010; --capo-fg: #ffcc60;
+  --panel-bg: rgba(20,20,20,0.93); --panel-border: #444;
 }
-/* ── Two-column layout ────────────────────────────────────────────────────── */
-#song.two-col { column-count: 2; column-gap: 3em; column-rule: 1px solid var(--border); }
-#song.two-col .section { break-inside: avoid-column; }
-#song.two-col .song-header { column-span: all; }
-#song.three-col { column-count: 3; column-gap: 2em; column-rule: 1px solid var(--border); }
-#song.three-col .section { break-inside: avoid-column; }
-#song.three-col .song-header { column-span: all; }
+/* ── Multi-column layout ──────────────────────────────────────────────────── */
+#song.multi-col { column-count: var(--col-count,2); column-gap: 2em; column-rule: 1px solid var(--border); }
+#song.multi-col .section { break-inside: avoid-column; }
+#song.multi-col .song-header { column-span: all; }
 /* Column zones: when {x_columns_on}/{x_columns_off} are used, only the marked zone gets columns */
-#song.has-col-zones.two-col { column-count: 1; column-rule: none; }
-#song.has-col-zones.two-col .col-zone { column-count: 2; column-gap: 3em; column-rule: 1px solid var(--border); }
-#song.has-col-zones.two-col .col-zone .section { break-inside: avoid-column; }
-#song.has-col-zones.three-col { column-count: 1; column-rule: none; }
-#song.has-col-zones.three-col .col-zone { column-count: 3; column-gap: 2em; column-rule: 1px solid var(--border); }
-#song.has-col-zones.three-col .col-zone .section { break-inside: avoid-column; }
+#song.has-col-zones.multi-col { column-count: 1; column-rule: none; }
+#song.has-col-zones.multi-col .col-zone { column-count: var(--col-count,2); column-gap: 2em; column-rule: 1px solid var(--border); }
+#song.has-col-zones.multi-col .col-zone .section { break-inside: avoid-column; }
 /* ── Additional button styles ────────────────────────────────────────────── */
 #settings-btn { font-size: 20px; opacity: 0.7; }
 #settings-btn:hover, #settings-btn.open { opacity: 1; }
@@ -2892,13 +2893,43 @@ body {
 #legend-end { display: none; margin-top: 48px; padding-top: 24px; border-top: 2px solid var(--border); }
 #legend-end.active { display: block; }
 #legend-side {
-  display: none; position: fixed; right: 0; top: 0; bottom: 0; width: 200px;
+  display: none; position: fixed; right: 0; top: 0; bottom: 0; width: var(--panel-w, 200px);
   overflow-y: auto; padding: 16px 12px 80px; z-index: 9990;
-  background: rgba(20,20,20,0.93); border-left: 1px solid #444;
+  background: var(--panel-bg); border-left: 1px solid var(--panel-border);
   font-family: sans-serif;
 }
 #legend-side.active { display: flex; flex-direction: column; }
-body.legend-side-on { padding-right: 210px; }
+body.legend-side-on { padding-right: calc(var(--panel-w, 200px) + 10px); }
+/* ── Custom side panel ──────────────────────────────────────────────────────── */
+#custom-side-panel {
+  display: none; position: fixed; right: 0; top: 0; bottom: 0; width: var(--panel-w, 200px);
+  overflow-y: auto; padding: 16px 12px 80px; z-index: 9989;
+  background: var(--panel-bg); border-left: 1px solid var(--panel-border);
+  font-family: sans-serif; color: var(--fg);
+}
+#custom-side-panel.active { display: flex; flex-direction: column; gap: 16px; }
+body.csp-side-on { padding-right: calc(var(--panel-w, 200px) + 10px); }
+body.csp-side-on .section-side-panel { display: none; }
+.csp-group { display: flex; flex-direction: column; gap: 8px; }
+.csp-section-badge {
+  font-size: 11px; font-weight: bold; color: #9d8ef5; text-transform: uppercase;
+  letter-spacing: 0.8px; padding: 3px 10px; background: rgba(124,109,240,0.18);
+  border-radius: 5px; align-self: flex-start; border: 1px solid rgba(124,109,240,0.35);
+}
+.csp-chord-grid { display: flex; flex-wrap: wrap; gap: 8px 6px; }
+.section-side-panel {
+  background: rgba(128,128,128,0.1); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 14px; margin-bottom: 10px;
+}
+.section-side-panel .csp-group {
+  flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 6px 12px;
+}
+.section-side-panel .csp-section-badge {
+  writing-mode: vertical-rl; transform: rotate(180deg); margin-right: 6px;
+  align-self: stretch; display: flex; align-items: center; justify-content: center;
+  border-radius: 4px; padding: 6px 4px; letter-spacing: 1px;
+}
+.section-side-panel .csp-chord-grid { flex: 1; }
 .legend-title { font-size: 11px; font-weight: bold; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
 .legend-grid { display: flex; flex-wrap: wrap; gap: 10px 8px; }
 /* ── Settings popup ───────────────────────────────────────────────────────── */
@@ -2919,7 +2950,9 @@ body.legend-side-on { padding-right: 210px; }
 .set-slider { flex: 1; accent-color: #7c6df0; cursor: pointer; min-width: 80px; }
 .set-val { font-size: 11px; color: #888; min-width: 34px; text-align: right; }
 /* Diagram size CSS variables */
-#legend-end .legend-grid svg, #legend-side .legend-grid svg { width: var(--legend-svg-w, 80px); height: auto; }
+#legend-end .legend-grid svg, #legend-side .legend-grid svg,
+#custom-side-panel .chord-diagram-cell svg,
+.section-side-panel .chord-diagram-cell svg { width: var(--legend-svg-w, 80px); height: auto; }
 #song .chord-diagram-cell svg { width: var(--song-svg-w, 110px); height: auto; }
 /* ── Print ────────────────────────────────────────────────────────────────── */
 @media print {
@@ -2943,6 +2976,7 @@ body.legend-side-on { padding-right: 210px; }
 <div id="song"></div>
 <div id="legend-end"><div class="legend-title">Chords used</div><div class="legend-grid"></div></div>
 <div id="legend-side"><div class="legend-title">Chords</div><div class="legend-grid"></div></div>
+<div id="custom-side-panel"></div>
 <div id="export-popup">
   <button class="exp-item" id="exp-html">💾 Save as HTML</button>
   <button class="exp-item" id="exp-pdf">🖨 Print / PDF</button>
@@ -2959,12 +2993,12 @@ body.legend-side-on { padding-right: 210px; }
   </div>
   <div class="set-row">
     <span class="set-label">Legend diagram size</span>
-    <input type="range" class="set-slider" id="legend-sz" min="40" max="110" step="10" value="80">
+    <input type="range" class="set-slider" id="legend-sz" min="40" max="200" step="10" value="80">
     <span class="set-val" id="legend-sz-val">80px</span>
   </div>
   <div class="set-row">
     <span class="set-label">Song diagram size</span>
-    <input type="range" class="set-slider" id="song-sz" min="40" max="110" step="10" value="110">
+    <input type="range" class="set-slider" id="song-sz" min="40" max="200" step="10" value="110">
     <span class="set-val" id="song-sz-val">110px</span>
   </div>
   <div class="set-row">
@@ -2976,11 +3010,20 @@ body.legend-side-on { padding-right: 210px; }
   </div>
   <div class="set-row">
     <span class="set-label">Columns</span>
+    <input type="range" class="set-slider" id="col-slider" min="1" max="6" step="1" value="1">
+    <span class="set-val" id="col-val">1</span>
+  </div>
+  <div class="set-row" id="panel-mode-row" style="display:none">
+    <span class="set-label">Side panel</span>
     <div class="set-radios">
-      <label><input type="radio" name="col-mode" value="1" checked> Single</label>
-      <label><input type="radio" name="col-mode" value="2"> Two</label>
-      <label><input type="radio" name="col-mode" value="3"> Three</label>
+      <label><input type="radio" name="panel-mode" value="side" checked> Side</label>
+      <label><input type="radio" name="panel-mode" value="inline"> Inline</label>
     </div>
+  </div>
+  <div class="set-row">
+    <span class="set-label">Panel width</span>
+    <input type="range" class="set-slider" id="panel-w-slider" min="120" max="600" step="10" value="200">
+    <span class="set-val" id="panel-w-val">200px</span>
   </div>
 </div>
 <div id="scroll-bar">
@@ -3058,6 +3101,7 @@ function parse(text) {
   const meta = { title: '', subtitle: '', artist: '', key: '', capo: '', tempo: '' };
   const sections = [];
   let cur = { type: 'verse', label: '', lines: [], nav: false };
+  let inSidePanel = null; // points to the active side-panel section while inside the block
 
   function flush() { if (cur.lines.length) { sections.push(cur); } }
   function next(type, label, nav) { flush(); cur = { type, label, lines: [], nav: !!nav }; }
@@ -3091,15 +3135,22 @@ function parse(text) {
       if (k === 'x_end_section')              { next('verse',      '',           false); continue; }
       if (k === 'x_columns_on')  { flush(); sections.push({ type: 'col-zone-start', lines: [], label: '', nav: false }); cur = { type: 'verse', label: '', lines: [], nav: false }; continue; }
       if (k === 'x_columns_off') { flush(); sections.push({ type: 'col-zone-end',   lines: [], label: '', nav: false }); cur = { type: 'verse', label: '', lines: [], nav: false }; continue; }
-      if (k === 'comment'||k==='c'||k==='highlight') { cur.lines.push({ type:'comment',     text:v }); continue; }
-      if (k === 'comment_italic' ||k==='ci')          { cur.lines.push({ type:'comment',     text:v }); continue; }
-      if (k === 'comment_box'    ||k==='cb')          { cur.lines.push({ type:'comment-box', text:v }); continue; }
-      if (k === 'chorus')                             { cur.lines.push({ type:'chorus-ref'         }); continue; }
-      if (k === 'new_page'||k==='np'||k==='new_physical_page'||k==='npp') { cur.lines.push({ type:'page-break' }); continue; }
-      if (k === 'chord' && v && !v.includes('frets')) { cur.lines.push({ type:'chord-diagram', name:v.trim() }); continue; }
+      if (k === 'x_start_side_panel') { flush(); const _sp = { type: 'side-panel', items: [], label: '', nav: false, lines: [] }; sections.push(_sp); inSidePanel = _sp; cur = { type: 'verse', label: '', lines: [], nav: false }; continue; }
+      if (k === 'x_end_side_panel')   { inSidePanel = null; cur = { type: 'verse', label: '', lines: [], nav: false }; continue; }
+      if (k === 'x_panel_section_title') { if (inSidePanel) inSidePanel.items.push({ type: 'title', label: v }); continue; }
+      if (k === 'comment'||k==='c'||k==='highlight') { if (!inSidePanel) cur.lines.push({ type:'comment',     text:v }); continue; }
+      if (k === 'comment_italic' ||k==='ci')          { if (!inSidePanel) cur.lines.push({ type:'comment',     text:v }); continue; }
+      if (k === 'comment_box'    ||k==='cb')          { if (!inSidePanel) cur.lines.push({ type:'comment-box', text:v }); continue; }
+      if (k === 'chorus')                             { if (!inSidePanel) cur.lines.push({ type:'chorus-ref'         }); continue; }
+      if (k === 'new_page'||k==='np'||k==='new_physical_page'||k==='npp') { if (!inSidePanel) cur.lines.push({ type:'page-break' }); continue; }
+      if (k === 'chord' && v && !v.includes('frets')) {
+        if (inSidePanel) { inSidePanel.items.push({ type: 'chord', name: v.trim() }); continue; }
+        cur.lines.push({ type:'chord-diagram', name:v.trim() }); continue;
+      }
       continue;   // define, column_break, image, …
     }
 
+    if (inSidePanel) continue; // skip non-directive lines inside side panel block
     if (cur.type === 'tab')  { cur.lines.push({ type:'tab',       text:line }); continue; }
     if (cur.type === 'grid') { cur.lines.push({ type:'grid-line', text:line }); continue; }
     if (!line.trim())        { cur.lines.push({ type:'empty' });                continue; }
@@ -3116,6 +3167,27 @@ function esc(s) {
 }
 function safeFmt(s) {
   return esc(s).replace(new RegExp('&lt;(\\/?(b|i|em|strong|u|s))&gt;', 'gi'), '\x3c$1\x3e');
+}
+function _spGroupsHtml(items, transpose) {
+  var groups = [];
+  var grp = { label: '', chords: [] };
+  (items || []).forEach(function(item) {
+    if (item.type === 'title') {
+      if (grp.chords.length || grp.label) groups.push(grp);
+      grp = { label: item.label, chords: [] };
+    } else if (item.type === 'chord') {
+      grp.chords.push(item.name);
+    }
+  });
+  if (grp.chords.length || grp.label) groups.push(grp);
+  return groups.map(function(g) {
+    var cells = g.chords.map(function(n) {
+      var tn = transposeChordName(n, transpose || 0);
+      return '<div class="chord-diagram-cell" data-chord="' + esc(tn) + '"></div>';
+    }).join('');
+    var badge = g.label ? '<div class="csp-section-badge">' + esc(g.label) + '</div>' : '';
+    return '<div class="csp-group">' + badge + '<div class="csp-chord-grid">' + cells + '</div></div>';
+  }).join('');
 }
 function renderGridLine(text, transpose) {
   return text.split(' ').map(function(tok) {
@@ -3152,6 +3224,12 @@ function render({ meta, sections }, transpose) {
   for (const sec of effSections) {
     if (sec.type === 'col-zone-start') { out.push('<div class="col-zone">'); inColZone = true; continue; }
     if (sec.type === 'col-zone-end')   { out.push('</div>'); inColZone = false; continue; }
+    if (sec.type === 'side-panel') {
+      out.push('<div class="section section-side-panel">');
+      out.push(_spGroupsHtml(sec.items || [], transpose));
+      out.push('</div>');
+      continue;
+    }
     out.push('<div class="section section-' + sec.type + '" id="sec-' + (secIdx++) + '"' + (sec.nav ? ' data-nav="1"' : '') + '>');
     if (sec.label) out.push('<div class="section-label">' + esc(sec.label) + '</div>');
 
@@ -3310,6 +3388,42 @@ function updateLegend() {
   legendSideEl.classList.toggle('active', legendMode === 2);
   document.body.classList.toggle('legend-side-on', legendMode === 2);
 }
+// ── Custom side panel ─────────────────────────────────────────────────────────
+var customPanelEl = document.getElementById('custom-side-panel');
+var panelMode = 'side';
+
+function renderCustomPanel() {
+  var sp = PARSED.sections.find(function(s) { return s.type === 'side-panel'; });
+  if (!sp) { customPanelEl.innerHTML = ''; return; }
+  customPanelEl.innerHTML = _spGroupsHtml(sp.items || [], previewTranspose);
+  customPanelEl.querySelectorAll('.chord-diagram-cell[data-chord]').forEach(function(cell) {
+    var svg = _getChordSvg(cell.dataset.chord);
+    if (svg) cell.innerHTML = svg + '<div class="cd-label">' + esc(cell.dataset.chord) + '</div>';
+  });
+}
+
+function applyCustomPanel() {
+  var hasSP = PARSED.sections.some(function(s) { return s.type === 'side-panel'; });
+  var pmRow = document.getElementById('panel-mode-row');
+  if (pmRow) pmRow.style.display = hasSP ? '' : 'none';
+  var legendSideRadio = document.querySelector('input[name="legend-mode"][value="2"]');
+  if (legendSideRadio) {
+    legendSideRadio.disabled = hasSP;
+    var lsLabel = legendSideRadio.closest('label');
+    if (lsLabel) lsLabel.title = hasSP ? 'Disabled: custom side panel is active' : '';
+    if (hasSP && legendMode === 2) { legendMode = 0; updateLegend(); }
+  }
+  if (!hasSP) {
+    customPanelEl.classList.remove('active');
+    document.body.classList.remove('csp-side-on');
+    return;
+  }
+  var isSide = panelMode === 'side';
+  customPanelEl.classList.toggle('active', isSide);
+  document.body.classList.toggle('csp-side-on', isSide);
+  if (isSide) renderCustomPanel();
+}
+
 // ── Rerender (called when transpose or any display param changes) ─────────
 function rerender() {
   document.getElementById('song').innerHTML = render(PARSED, previewTranspose);
@@ -3317,6 +3431,7 @@ function rerender() {
   bindTooltips();
   populateChordDiagrams();
   updateLegend();
+  applyCustomPanel();
   if (tempoSpeed) setTimeout(function() { applyTempoSpeed(PARSED.meta, false, true); }, 100);
 }
 
@@ -3380,15 +3495,40 @@ document.body.style.setProperty('--song-svg-w', songSzSlider.value + 'px');
   });
 })();
 
-// Columns radios
-document.querySelectorAll('input[name="col-mode"]').forEach(function(r) {
+// Columns slider
+var colSlider = document.getElementById('col-slider');
+var colVal    = document.getElementById('col-val');
+function applyColCount(n) {
+  var song = document.getElementById('song');
+  song.classList.remove('multi-col');
+  song.style.removeProperty('--col-count');
+  if (n >= 2) { song.style.setProperty('--col-count', n); song.classList.add('multi-col'); }
+}
+colSlider.addEventListener('input', function() {
+  var n = parseInt(this.value, 10);
+  colVal.textContent = n;
+  applyColCount(n);
+  savePerfSettings();
+});
+
+// Panel mode radios
+document.querySelectorAll('input[name="panel-mode"]').forEach(function(r) {
   r.addEventListener('change', function() {
-    var song = document.getElementById('song');
-    song.classList.toggle('two-col',   this.value === '2');
-    song.classList.toggle('three-col', this.value === '3');
+    panelMode = this.value;
+    applyCustomPanel();
     savePerfSettings();
   });
 });
+
+// Panel width slider
+var panelWSlider = document.getElementById('panel-w-slider');
+var panelWVal    = document.getElementById('panel-w-val');
+panelWSlider.addEventListener('input', function() {
+  document.body.style.setProperty('--panel-w', this.value + 'px');
+  panelWVal.textContent = this.value + 'px';
+  savePerfSettings();
+});
+document.body.style.setProperty('--panel-w', panelWSlider.value + 'px');
 
 // ── Live transpose ────────────────────────────────────────────────────────
 var transLabel = document.getElementById('trans-label');
@@ -3417,15 +3557,16 @@ updateLegend();
 
 // ── Saved settings ───────────────────────────────────────────────────────────
 function savePerfSettings() {
-  var colChecked = document.querySelector('input[name="col-mode"]:checked');
   vscodeApi.postMessage({ command: 'saveSettings', settings: {
     theme:      document.documentElement.dataset.theme || (_sysDark ? 'dark' : 'light'),
-    cols:       colChecked ? colChecked.value : '1',
+    cols:       colSlider.value,
     fontSize:   fontSize,
     legendMode: legendMode,
     legendSz:   parseInt(legendSzSlider.value, 10),
     songSz:     parseInt(songSzSlider.value, 10),
-    bpm:        (activeBpm > 0 && !PARSED.meta.tempo) ? activeBpm : null
+    bpm:        (activeBpm > 0 && !PARSED.meta.tempo) ? activeBpm : null,
+    panelMode:  panelMode,
+    panelW:     parseInt(panelWSlider.value, 10)
   }});
 }
 (function applyPerfSettings() {
@@ -3435,11 +3576,9 @@ function savePerfSettings() {
     document.documentElement.dataset.theme = s.theme;
     document.querySelectorAll('input[name="theme-mode"]').forEach(function(r) { r.checked = r.value === s.theme; });
   }
-  if (s.cols && s.cols !== '1') {
-    var song = document.getElementById('song');
-    song.classList.toggle('two-col',   s.cols === '2');
-    song.classList.toggle('three-col', s.cols === '3');
-    document.querySelectorAll('input[name="col-mode"]').forEach(function(r) { r.checked = r.value === String(s.cols); });
+  if (s.cols) {
+    var n = parseInt(s.cols, 10) || 1;
+    colSlider.value = n; colVal.textContent = n; applyColCount(n);
   }
   if (s.fontSize) {
     fontSize = s.fontSize;
@@ -3461,7 +3600,17 @@ function savePerfSettings() {
     songSzVal.textContent = s.songSz + 'px';
     document.body.style.setProperty('--song-svg-w', s.songSz + 'px');
   }
+  if (s.panelMode) {
+    panelMode = s.panelMode;
+    document.querySelectorAll('input[name="panel-mode"]').forEach(function(r) { r.checked = r.value === panelMode; });
+  }
+  if (s.panelW) {
+    panelWSlider.value = s.panelW;
+    panelWVal.textContent = s.panelW + 'px';
+    document.body.style.setProperty('--panel-w', s.panelW + 'px');
+  }
 })();
+applyCustomPanel();
 
 // ── Auto-scroll ──────────────────────────────────────────────────────────────
 let speed = 30, playing = false, lastTs = null, accum = 0;
@@ -3693,6 +3842,7 @@ window.addEventListener('message', function(e) {
     bindTooltips();
     populateChordDiagrams();
     updateLegend();
+    applyCustomPanel();
     window.scrollTo(0, savedY);
     setTimeout(function() { applyTempoSpeed(PARSED.meta); }, 200);
   }
@@ -3735,6 +3885,7 @@ setTimeout(function() {
   --tab-bg: #252525; --tab-border: #555;
   --tip-bg: #2d2d2d; --tip-border: #555; --tip-fg: #ccc;
   --capo-bg: #4a3010; --capo-fg: #ffcc60;
+  --panel-bg: rgba(20,20,20,0.93); --panel-border: #444;
 }
 @media (prefers-color-scheme: light) {
   :root {
@@ -3747,6 +3898,7 @@ setTimeout(function() {
     --tab-bg: #f4f4f0; --tab-border: #bbb;
     --tip-bg: #fff; --tip-border: #ccc; --tip-fg: #333;
     --capo-bg: #ffe8b0; --capo-fg: #7a4000;
+    --panel-bg: rgba(245,245,243,0.97); --panel-border: #ccc;
   }
 }
 :root[data-theme="light"] {
@@ -3760,6 +3912,7 @@ setTimeout(function() {
   --tab-bg: #f4f4f0; --tab-border: #bbb;
   --tip-bg: #fff; --tip-border: #ccc; --tip-fg: #333;
   --capo-bg: #ffe8b0; --capo-fg: #7a4000;
+  --panel-bg: rgba(245,245,243,0.97); --panel-border: #ccc;
 }
 :root[data-theme="dark"] {
   --bg: #1e1e1e; --fg: #d4d4d4; --fg-dim: #999; --fg-muted: #666;
@@ -3772,6 +3925,7 @@ setTimeout(function() {
   --tab-bg: #252525; --tab-border: #555;
   --tip-bg: #2d2d2d; --tip-border: #555; --tip-fg: #ccc;
   --capo-bg: #4a3010; --capo-fg: #ffcc60;
+  --panel-bg: rgba(20,20,20,0.93); --panel-border: #444;
 }
 html, body { background: var(--bg); color: var(--fg); font-family: Georgia, serif; font-size: 17px; }
 body { padding-top: 52px; padding-bottom: 80px; }
@@ -3864,6 +4018,27 @@ body { padding-top: 52px; padding-bottom: 80px; }
 #twocol-btn { font-size: 14px; }
 #twocol-btn.active { color: #ffd700; border-color: #ffd700; }
 #auto-btn.active { color: #ffd700; border-color: #ffd700; }
+/* ── Custom side panel (inline mode only in setlist) ─────────────────────── */
+.csp-group { display: flex; flex-direction: column; gap: 8px; }
+.csp-section-badge {
+  font-size: 11px; font-weight: bold; color: #9d8ef5; text-transform: uppercase;
+  letter-spacing: 0.8px; padding: 3px 10px; background: rgba(124,109,240,0.18);
+  border-radius: 5px; align-self: flex-start; border: 1px solid rgba(124,109,240,0.35);
+}
+.csp-chord-grid { display: flex; flex-wrap: wrap; gap: 8px 6px; }
+.section-side-panel {
+  background: rgba(128,128,128,0.1); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 14px; margin-bottom: 10px;
+}
+.section-side-panel .csp-group {
+  flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 6px 12px;
+}
+.section-side-panel .csp-section-badge {
+  writing-mode: vertical-rl; transform: rotate(180deg); margin-right: 6px;
+  align-self: stretch; display: flex; align-items: center; justify-content: center;
+  border-radius: 4px; padding: 6px 4px; letter-spacing: 1px;
+}
+.section-side-panel .csp-chord-grid { flex: 1; }
 </style>
 </head>
 <body>
@@ -3941,6 +4116,7 @@ function parse(text) {
   var meta = { title: '', subtitle: '', artist: '', key: '', capo: '', tempo: '' };
   var sections = [];
   var cur = { type: 'verse', label: '', lines: [], nav: false };
+  var inSidePanel = null;
   function flush() { if (cur.lines.length) sections.push(cur); }
   function next(type, label, nav) { flush(); cur = { type, label, lines: [], nav: !!nav }; }
   for (var raw of text.split(/\\r?\\n/)) {
@@ -3971,14 +4147,21 @@ function parse(text) {
       if (k==='x_end_section')              { next('verse','',false); continue; }
       if (k==='x_columns_on')  { flush(); sections.push({type:'col-zone-start',lines:[],label:'',nav:false}); cur={type:'verse',label:'',lines:[],nav:false}; continue; }
       if (k==='x_columns_off') { flush(); sections.push({type:'col-zone-end',  lines:[],label:'',nav:false}); cur={type:'verse',label:'',lines:[],nav:false}; continue; }
-      if (k==='comment'||k==='c'||k==='highlight') { cur.lines.push({type:'comment',text:v}); continue; }
-      if (k==='comment_italic'||k==='ci')           { cur.lines.push({type:'comment',text:v}); continue; }
-      if (k==='comment_box'||k==='cb')              { cur.lines.push({type:'comment-box',text:v}); continue; }
-      if (k==='chorus')                             { cur.lines.push({type:'chorus-ref'}); continue; }
-      if (k==='new_page'||k==='np')                 { cur.lines.push({type:'page-break'}); continue; }
-      if (k==='chord' && v && !v.includes('frets')) { cur.lines.push({type:'chord-diagram',name:v.trim()}); continue; }
+      if (k==='x_start_side_panel') { flush(); var _sp2={type:'side-panel',items:[],label:'',nav:false,lines:[]}; sections.push(_sp2); inSidePanel=_sp2; cur={type:'verse',label:'',lines:[],nav:false}; continue; }
+      if (k==='x_end_side_panel')   { inSidePanel=null; cur={type:'verse',label:'',lines:[],nav:false}; continue; }
+      if (k==='x_panel_section_title') { if (inSidePanel) inSidePanel.items.push({type:'title',label:v}); continue; }
+      if (k==='comment'||k==='c'||k==='highlight') { if (!inSidePanel) cur.lines.push({type:'comment',text:v}); continue; }
+      if (k==='comment_italic'||k==='ci')           { if (!inSidePanel) cur.lines.push({type:'comment',text:v}); continue; }
+      if (k==='comment_box'||k==='cb')              { if (!inSidePanel) cur.lines.push({type:'comment-box',text:v}); continue; }
+      if (k==='chorus')                             { if (!inSidePanel) cur.lines.push({type:'chorus-ref'}); continue; }
+      if (k==='new_page'||k==='np')                 { if (!inSidePanel) cur.lines.push({type:'page-break'}); continue; }
+      if (k==='chord' && v && !v.includes('frets')) {
+        if (inSidePanel) { inSidePanel.items.push({type:'chord',name:v.trim()}); continue; }
+        cur.lines.push({type:'chord-diagram',name:v.trim()}); continue;
+      }
       continue;
     }
+    if (inSidePanel) continue; // skip non-directive lines inside side panel block
     if (cur.type==='tab')  { cur.lines.push({type:'tab',       text:line}); continue; }
     if (cur.type==='grid') { cur.lines.push({type:'grid-line', text:line}); continue; }
     if (!line.trim())      { cur.lines.push({type:'empty'}); continue; }
@@ -3991,6 +4174,22 @@ function parse(text) {
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function safeFmt(s) { return esc(s).replace(new RegExp('&lt;(\\/?(b|i|em|strong|u|s))&gt;', 'gi'), '\x3c$1\x3e'); }
+function _spGroupsHtml(items, transpose) {
+  var groups = [], grp = { label: '', chords: [] };
+  (items || []).forEach(function(item) {
+    if (item.type === 'title') { if (grp.chords.length || grp.label) groups.push(grp); grp = { label: item.label, chords: [] }; }
+    else if (item.type === 'chord') grp.chords.push(item.name);
+  });
+  if (grp.chords.length || grp.label) groups.push(grp);
+  return groups.map(function(g) {
+    var cells = g.chords.map(function(n) {
+      var tn = transposeChordName(n, transpose || 0);
+      return '<div class="chord-diagram-cell" data-chord="' + esc(tn) + '"></div>';
+    }).join('');
+    var badge = g.label ? '<div class="csp-section-badge">' + esc(g.label) + '</div>' : '';
+    return '<div class="csp-group">' + badge + '<div class="csp-chord-grid">' + cells + '</div></div>';
+  }).join('');
+}
 function renderGridLine(text, transpose) {
   return text.split(' ').map(function(tok) {
     if (tok && /^[A-G][b#]?[^|.]*$/.test(tok) && tok !== '.') {
@@ -4019,6 +4218,12 @@ function render({ meta, sections }, transpose) {
   for (var sec of effSections2) {
     if (sec.type === 'col-zone-start') { out.push('<div class="col-zone">'); _inColZone = true; continue; }
     if (sec.type === 'col-zone-end')   { out.push('</div>'); _inColZone = false; continue; }
+    if (sec.type === 'side-panel') {
+      out.push('<div class="section section-side-panel">');
+      out.push(_spGroupsHtml(sec.items || [], transpose));
+      out.push('</div>');
+      continue;
+    }
     out.push('<div class="section section-' + sec.type + '">');
     if (sec.label) out.push('<div class="section-label">' + esc(sec.label) + '</div>');
     if (sec.type === 'tab') {
