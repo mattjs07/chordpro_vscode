@@ -2,7 +2,7 @@ const vscode = require('vscode');
 const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const { Note, Chord } = require('tonal');
+const { Note, Chord, ChordType } = require('tonal');
 
 
 // Function to open a ChordPro template
@@ -687,6 +687,89 @@ function detectChord(frets) {
         }, []);
 }
 
+// ── Custom shape name memory ──────────────────────────────────────────────────
+// globalState key 'customShapeNames' → [{ shape, rootName, suffix, savedMinFret }]
+// shape: normalized fret string (barre: minFret→1; open: exact)
+// savedMinFret: 0 for open shapes (no transposition), else the minFret at save time
+
+function _levenshtein(a, b) {
+    const m = a.length, n = b.length;
+    const dp = Array.from({length: m+1}, (_, i) => Array.from({length: n+1}, (_, j) => i||j));
+    for (let i = 1; i <= m; i++)
+        for (let j = 1; j <= n; j++)
+            dp[i][j] = a[i-1]===b[j-1] ? dp[i-1][j-1] : 1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]);
+    return dp[m][n];
+}
+
+function _normalizeShape(frets) {
+    const played = frets.filter(f => f > 0);
+    const isOpen = frets.some(f => f === 0);
+    if (isOpen || !played.length) return frets.map(f => f === -1 ? 'x' : String(f)).join('-');
+    const min = Math.min(...played);
+    return frets.map(f => f === -1 ? 'x' : String(f - min + 1)).join('-');
+}
+
+function validateChordName(name, frets) {
+    const chord = Chord.get(name);
+    if (chord.empty) {
+        const m = name.match(/^([A-G][b#]?)(.*)/);
+        const root = m ? m[1] : name;
+        const inputSuffix = (m ? m[2] : name).toLowerCase();
+        const suggestions = ChordType.all()
+            .filter(ct => ct.aliases.length > 0)
+            .map(ct => ({ label: root + ct.aliases[0], dist: Math.min(...ct.aliases.map(a => _levenshtein(inputSuffix, a.toLowerCase()))) }))
+            .sort((a, b) => a.dist - b.dist)
+            .slice(0, 5).map(s => s.label);
+        return { status: 'unknown', suggestions };
+    }
+    const voicingPcs = new Set(frets.map((f, i) => f === -1 ? null : (OPEN_MIDI[i] + f) % 12).filter(n => n !== null));
+    const chordPcs = chord.notes.map(n => Note.midi(n + '4') % 12);
+    const tonicPc = Note.midi(chord.tonic + '4') % 12;
+    const fifthPc = chord.intervals.includes('5P') ? (tonicPc + 7) % 12 : -1;
+    const missing = chordPcs.filter(pc => pc !== fifthPc && !voicingPcs.has(pc));
+    if (missing.length) {
+        const SH = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+        return { status: 'mismatch', chordNotes: chord.notes, missingNotes: missing.map(pc => SH[pc]), voicingNotes: [...voicingPcs].map(pc => SH[pc]) };
+    }
+    return { status: 'ok' };
+}
+
+function saveCustomShapeMemory(context, name, frets) {
+    const m = name.match(/^([A-G][b#]?)(.*)/);
+    const rootName = m ? m[1] : name;
+    const suffix = m ? m[2] : '';
+    const played = frets.filter(f => f > 0);
+    const isOpen = frets.some(f => f === 0);
+    const savedMinFret = (!isOpen && played.length) ? Math.min(...played) : 0;
+    const shape = _normalizeShape(frets);
+    const saved = (context.globalState.get('customShapeNames') || []).filter(e => e.shape !== shape);
+    saved.push({ shape, rootName, suffix, savedMinFret });
+    context.globalState.update('customShapeNames', saved);
+}
+
+function removeCustomShapeMemory(context, frets) {
+    const shape = _normalizeShape(frets);
+    const saved = (context.globalState.get('customShapeNames') || []).filter(e => e.shape !== shape);
+    context.globalState.update('customShapeNames', saved);
+}
+
+function lookupCustomShape(context, frets) {
+    const saved = context.globalState.get('customShapeNames') || [];
+    if (!saved.length) return null;
+    const entry = saved.find(e => e.shape === _normalizeShape(frets));
+    if (!entry) return null;
+    if (!entry.savedMinFret) return entry.rootName + entry.suffix;
+    const played = frets.filter(f => f > 0);
+    const offset = Math.min(...played) - entry.savedMinFret;
+    if (!offset) return entry.rootName + entry.suffix;
+    const SH = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    const FL = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+    const origST = Note.midi(entry.rootName + '4') % 12;
+    const newST = ((origST + offset) % 12 + 12) % 12;
+    const useFlat = FL.includes(entry.rootName) && !SH.includes(entry.rootName);
+    return (useFlat ? FL[newST] : SH[newST]) + entry.suffix;
+}
+
 function toChordProDefine(chord) {
     const cpFrets = [...chord.frets].reverse(); // low E first
     const frettedPositions = cpFrets.filter(f => f > 0);
@@ -927,7 +1010,21 @@ class ChordBuilderViewProvider {
 
             if (message.command === 'detectChord') {
                 const groups = detectChord(message.frets);
-                webviewView.webview.postMessage({ command: 'chordSuggestions', groups });
+                const customName = lookupCustomShape(this.context, message.frets);
+                webviewView.webview.postMessage({ command: 'chordSuggestions', groups, customName: customName || null });
+            }
+            if (message.command === 'validateShape') {
+                const result = validateChordName(message.name, message.frets);
+                webviewView.webview.postMessage({ command: 'shapeValidationResult', ...result });
+            }
+            if (message.command === 'saveCustomShape') {
+                saveCustomShapeMemory(this.context, message.name, message.frets);
+                webviewView.webview.postMessage({ command: 'shapeSaved' });
+            }
+            if (message.command === 'removeCustomShape') {
+                removeCustomShapeMemory(this.context, message.frets);
+                const groups = detectChord(message.frets);
+                webviewView.webview.postMessage({ command: 'chordSuggestions', groups, customName: null });
             }
         });
     }
@@ -996,6 +1093,17 @@ body { margin: 0; padding: 8px; background: var(--bg); color: var(--text); font-
 .fret-num { width: 40px; text-align: center; font-size: 10px; color: var(--muted); flex-shrink: 0; }
 #suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; min-height: 22px; align-items: center; }
 #suggestions > span { font-size: 11px; color: var(--muted); }
+.custom-suggestion { background: var(--accent-soft) !important; border-color: var(--accent) !important; color: var(--accent) !important; }
+.custom-suggestion:hover { background: var(--accent) !important; color: #fff !important; }
+.remove-shape { cursor: pointer; color: var(--muted); font-size: 14px; line-height: 1; padding: 0 3px; user-select: none; }
+.remove-shape:hover { color: var(--danger); }
+#rememberBtn { padding: 4px 8px; font-size: 11px; cursor: pointer; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 5px; transition: all 0.12s ease; width: 100%; font-family: inherit; }
+#rememberBtn:hover { border-color: var(--accent); color: var(--accent); }
+#shape-msg { display: none; font-size: 11px; margin-top: 8px; padding: 7px 10px; border-radius: 5px; line-height: 1.6; }
+#shape-msg.ok   { background: rgba(50,200,100,0.1); color: #4caf50; border: 1px solid #4caf50; }
+#shape-msg.warn { background: rgba(255,180,0,0.08); color: var(--text); border: 1px solid var(--muted); }
+#shape-msg button { font-size: 10px; padding: 2px 8px; margin: 4px 4px 0 0; cursor: pointer; background: var(--surf); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-family: inherit; }
+#shape-msg button:hover { border-color: var(--accent); color: var(--accent); }
 .suggestion { padding: 3px 10px; font-size: 12px; cursor: pointer; background: var(--surf); color: var(--text); border: 1px solid var(--border); border-radius: 12px; user-select: none; transition: all 0.12s ease; }
 .suggestion:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 #outer-row { display: flex; gap: 16px; align-items: flex-start; }
@@ -1028,9 +1136,11 @@ body { margin: 0; padding: 8px; background: var(--bg); color: var(--text); font-
     <div id="fretboard"></div>
     <div id="fret-numbers"></div>
     <div id="suggestions"><span>play some strings...</span></div>
+    <div id="shape-msg"></div>
   </div>
   <div id="right-col">
     <div id="mini-diagram"></div>
+    <button id="rememberBtn" title="Remember this shape under the current chord name">★ Remember</button>
     <div id="fingeringToggle">Fingering <span class="toggle-track"><span class="toggle-thumb"></span></span></div>
     <div id="fingering-hint" style="display:none;font-size:10px;text-align:center;line-height:1.5;max-width:100px;color:var(--muted);">Click a dot to cycle finger (1–4)</div>
     <div id="dot-mode-wrap">
@@ -1226,26 +1336,46 @@ function updateDisplay() {
     vscode.postMessage({ command: 'detectChord', frets: [...fretsArray] });
 }
 
+function pickName(name) {
+    document.getElementById('chordName').value = name;
+    manualChordName = true;
+    updateDisplay();
+}
+
 window.addEventListener('message', e => {
     const msg = e.data;
     if (msg.command !== 'chordSuggestions') { return; }
     const div = document.getElementById('suggestions');
     div.innerHTML = '';
-    if (!msg.groups.length) { div.innerHTML = '<span>no chord found</span>'; return; }
-    // Auto-fill best guess unless user has typed a custom name
+
+    // Custom remembered name — shown first with star + forget button
+    if (msg.customName) {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex;align-items:center;gap:3px;';
+        const btn = document.createElement('div');
+        btn.className = 'suggestion custom-suggestion';
+        btn.textContent = '★ ' + msg.customName;
+        btn.addEventListener('click', () => pickName(msg.customName));
+        const rem = document.createElement('span');
+        rem.className = 'remove-shape';
+        rem.title = 'Forget this shape';
+        rem.textContent = '×';
+        rem.addEventListener('click', () => vscode.postMessage({ command: 'removeCustomShape', frets: fretsArray.slice() }));
+        wrap.appendChild(btn);
+        wrap.appendChild(rem);
+        div.appendChild(wrap);
+    }
+
+    // Auto-fill: custom name takes priority over tonal.js best guess
     if (!manualChordName) {
-        const bestGuess = msg.groups[0][0];
-        const nameField = document.getElementById('chordName');
-        if (nameField.value !== bestGuess) {
-            nameField.value = bestGuess;
-            updateDisplay(); // refresh interval labels with new root
+        const bestGuess = msg.customName || (msg.groups.length ? msg.groups[0][0] : null);
+        if (bestGuess) {
+            const nameField = document.getElementById('chordName');
+            if (nameField.value !== bestGuess) { nameField.value = bestGuess; updateDisplay(); }
         }
     }
-    const pickName = name => {
-        document.getElementById('chordName').value = name;
-        manualChordName = true;
-        updateDisplay();
-    };
+
+    if (!msg.groups.length && !msg.customName) { div.innerHTML = '<span>no chord found</span>'; return; }
     msg.groups.forEach(group => {
         if (group.length > 1) {
             const stack = document.createElement('div');
@@ -1377,6 +1507,72 @@ document.getElementById('playBtn').addEventListener('click', playChord);
 document.addEventListener('keydown', e => {
     if (document.activeElement.tagName === 'INPUT') return;
     if (e.key === 'p' || e.key === 'P') { playChord(); e.preventDefault(); }
+});
+
+// ── Shape memory ─────────────────────────────────────────────────────────────
+var _pendingShapeSave = null;
+
+function _showShapeMsg(html, type) {
+    const el = document.getElementById('shape-msg');
+    el.className = 'shape-msg ' + type;
+    el.innerHTML = html;
+    el.style.display = 'block';
+    const sa = el.querySelector('.save-anyway-btn');
+    if (sa) sa.addEventListener('click', _forceSaveShape);
+    const cn = el.querySelector('.cancel-btn');
+    if (cn) cn.addEventListener('click', _hideShapeMsg);
+    el.querySelectorAll('.shape-sugg').forEach(s =>
+        s.addEventListener('click', () => { pickName(s.dataset.name); _hideShapeMsg(); })
+    );
+}
+
+function _hideShapeMsg() {
+    const el = document.getElementById('shape-msg');
+    el.style.display = 'none';
+    el.innerHTML = '';
+}
+
+function _forceSaveShape() {
+    if (!_pendingShapeSave) return;
+    vscode.postMessage({ command: 'saveCustomShape', name: _pendingShapeSave.name, frets: _pendingShapeSave.frets });
+}
+
+document.getElementById('rememberBtn').addEventListener('click', function() {
+    const name = document.getElementById('chordName').value.trim();
+    if (!name) { _showShapeMsg('Enter a chord name first.', 'warn'); return; }
+    _pendingShapeSave = { name, frets: fretsArray.slice() };
+    vscode.postMessage({ command: 'validateShape', name, frets: fretsArray.slice() });
+});
+
+window.addEventListener('message', e => {
+    const msg = e.data;
+    if (msg.command === 'shapeValidationResult') {
+        if (msg.status === 'ok') {
+            _forceSaveShape();
+        } else if (msg.status === 'unknown') {
+            const suggsHtml = msg.suggestions.map(s =>
+                \`<span class="suggestion shape-sugg" data-name="\${s}">\${s}</span>\`
+            ).join(' ');
+            _showShapeMsg(
+                \`<b>Unknown chord name.</b> Did you mean: \${suggsHtml}<br>\` +
+                \`<button class="save-anyway-btn">Save anyway</button> <button class="cancel-btn">Cancel</button>\`,
+                'warn'
+            );
+        } else if (msg.status === 'mismatch') {
+            _showShapeMsg(
+                \`<b>\${_pendingShapeSave.name}</b> needs \${msg.chordNotes.join(' ')} — voicing has \${msg.voicingNotes.join(' ')}\` +
+                (msg.missingNotes.length ? \` (missing: \${msg.missingNotes.join(' ')})\` : '') + \`.<br>\` +
+                \`<button class="save-anyway-btn">Save anyway</button> <button class="cancel-btn">Cancel</button>\`,
+                'warn'
+            );
+        }
+    }
+    if (msg.command === 'shapeSaved') {
+        _pendingShapeSave = null;
+        _showShapeMsg('✓ Shape remembered', 'ok');
+        setTimeout(_hideShapeMsg, 2000);
+        vscode.postMessage({ command: 'detectChord', frets: fretsArray.slice() });
+    }
 });
 
 window.addEventListener('message', e => {
