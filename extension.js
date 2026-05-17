@@ -2629,7 +2629,7 @@ function activate(context) {
 
         if (scrollPanel) {
             scrollDocUri = editor.document.uri.toString(); // keep uri in sync for save-reload
-            scrollPanel.reveal(vscode.ViewColumn.Beside);
+            scrollPanel.reveal(scrollPanel.viewColumn ?? vscode.ViewColumn.Beside, true);
             scrollPanel.webview.postMessage({ command: 'reload', source, chordSvgs });
             return;
         }
@@ -2638,7 +2638,7 @@ function activate(context) {
         scrollPanel  = vscode.window.createWebviewPanel(
             'chordproScrollPreview',
             title + ' — Preview',
-            vscode.ViewColumn.Beside,
+            { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
             { enableScripts: true, retainContextWhenHidden: true }
         );
         scrollPanel.webview.html = getScrollWebviewContent(source, chordSvgs);
