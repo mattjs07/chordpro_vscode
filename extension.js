@@ -2301,6 +2301,60 @@ body.csp-side-on .section-side-panel { display: none; }
 `;
 
 // ─────────────────────────────────────────────
+// Shared HTML: legend panels, custom side panel, chord-tip, and settings popup.
+// Injected into both performance view and setlist webviews.
+// ─────────────────────────────────────────────
+const SHARED_SONG_HTML = `
+<div id="legend-end"><div class="legend-title">Chords used</div><div class="legend-grid"></div></div>
+<div id="legend-side"><div class="legend-title">Chords</div><div class="legend-grid"></div></div>
+<div id="custom-side-panel"></div>
+<div id="settings-popup">
+  <div class="set-title">⚙ Settings</div>
+  <div class="set-row">
+    <span class="set-label">Chord legend</span>
+    <div class="set-radios">
+      <label><input type="radio" name="legend-mode" value="0" checked> Off</label>
+      <label><input type="radio" name="legend-mode" value="1"> End of page</label>
+      <label><input type="radio" name="legend-mode" value="2"> Side panel</label>
+    </div>
+  </div>
+  <div class="set-row">
+    <span class="set-label">Legend diagram size</span>
+    <input type="range" class="set-slider" id="legend-sz" min="40" max="200" step="10" value="80">
+    <span class="set-val" id="legend-sz-val">80px</span>
+  </div>
+  <div class="set-row">
+    <span class="set-label">Song diagram size</span>
+    <input type="range" class="set-slider" id="song-sz" min="40" max="200" step="10" value="110">
+    <span class="set-val" id="song-sz-val">110px</span>
+  </div>
+  <div class="set-row">
+    <span class="set-label">Theme</span>
+    <div class="set-radios" id="theme-radios">
+      <label><input type="radio" name="theme-mode" value="dark"> Dark</label>
+      <label><input type="radio" name="theme-mode" value="light"> Light</label>
+    </div>
+  </div>
+  <div class="set-row">
+    <span class="set-label">Columns</span>
+    <input type="range" class="set-slider" id="col-slider" min="1" max="6" step="1" value="1">
+    <span class="set-val" id="col-val">1</span>
+  </div>
+  <div class="set-row" id="panel-mode-row" style="display:none">
+    <span class="set-label">Side panel</span>
+    <div class="set-radios">
+      <label><input type="radio" name="panel-mode" value="side" checked> Side</label>
+      <label><input type="radio" name="panel-mode" value="inline"> Inline</label>
+    </div>
+  </div>
+  <div class="set-row">
+    <span class="set-label">Panel width</span>
+    <input type="range" class="set-slider" id="panel-w-slider" min="120" max="600" step="10" value="200">
+    <span class="set-val" id="panel-w-val">200px</span>
+  </div>
+</div>`;
+
+// ─────────────────────────────────────────────
 
 function activate(context) {
     // Register the renderChordPro command
@@ -2982,57 +3036,10 @@ body {
 <body>
 <div id="progress-bar"></div>
 <div id="song"></div>
-<div id="legend-end"><div class="legend-title">Chords used</div><div class="legend-grid"></div></div>
-<div id="legend-side"><div class="legend-title">Chords</div><div class="legend-grid"></div></div>
-<div id="custom-side-panel"></div>
+${SHARED_SONG_HTML}
 <div id="export-popup">
   <button class="exp-item" id="exp-html">💾 Save as HTML</button>
   <button class="exp-item" id="exp-pdf">🖨 Print / PDF</button>
-</div>
-<div id="settings-popup">
-  <div class="set-title">⚙ Settings</div>
-  <div class="set-row">
-    <span class="set-label">Chord legend</span>
-    <div class="set-radios">
-      <label><input type="radio" name="legend-mode" value="0" checked> Off</label>
-      <label><input type="radio" name="legend-mode" value="1"> End of page</label>
-      <label><input type="radio" name="legend-mode" value="2"> Side panel</label>
-    </div>
-  </div>
-  <div class="set-row">
-    <span class="set-label">Legend diagram size</span>
-    <input type="range" class="set-slider" id="legend-sz" min="40" max="200" step="10" value="80">
-    <span class="set-val" id="legend-sz-val">80px</span>
-  </div>
-  <div class="set-row">
-    <span class="set-label">Song diagram size</span>
-    <input type="range" class="set-slider" id="song-sz" min="40" max="200" step="10" value="110">
-    <span class="set-val" id="song-sz-val">110px</span>
-  </div>
-  <div class="set-row">
-    <span class="set-label">Theme</span>
-    <div class="set-radios" id="theme-radios">
-      <label><input type="radio" name="theme-mode" value="dark"> Dark</label>
-      <label><input type="radio" name="theme-mode" value="light"> Light</label>
-    </div>
-  </div>
-  <div class="set-row">
-    <span class="set-label">Columns</span>
-    <input type="range" class="set-slider" id="col-slider" min="1" max="6" step="1" value="1">
-    <span class="set-val" id="col-val">1</span>
-  </div>
-  <div class="set-row" id="panel-mode-row" style="display:none">
-    <span class="set-label">Side panel</span>
-    <div class="set-radios">
-      <label><input type="radio" name="panel-mode" value="side" checked> Side</label>
-      <label><input type="radio" name="panel-mode" value="inline"> Inline</label>
-    </div>
-  </div>
-  <div class="set-row">
-    <span class="set-label">Panel width</span>
-    <input type="range" class="set-slider" id="panel-w-slider" min="120" max="600" step="10" value="200">
-    <span class="set-val" id="panel-w-val">200px</span>
-  </div>
 </div>
 <div id="scroll-bar">
   <div class="ctrl-group">
@@ -3981,7 +3988,7 @@ body { padding-top: 52px; padding-bottom: 80px; }
 </div>
 <div id="progress-bar"></div>
 <div id="song"></div>
-<div id="chord-tip"></div>
+${SHARED_SONG_HTML}
 <div id="scroll-bar">
   <button id="trans-down"   title="Transpose down (♭)">♭</button>
   <span   id="trans-label">0</span>
@@ -3995,7 +4002,7 @@ body { padding-top: 52px; padding-bottom: 80px; }
   <button id="font-smaller" title="Smaller text">A−</button>
   <button id="font-larger"  title="Larger text">A+</button>
   <button id="lyrics-btn"   title="Lyrics only">Ly</button>
-  <button id="twocol-btn"   title="Toggle two-column layout">⊞</button>
+  <button id="settings-btn" title="Settings">⚙</button>
 </div>
 <script>
 const vscodeApi = acquireVsCodeApi();
