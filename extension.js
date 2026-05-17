@@ -3882,59 +3882,9 @@ setTimeout(function() {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
 <meta name="color-scheme" content="dark light">
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
-  --bg: #1e1e1e; --fg: #d4d4d4; --fg-dim: #999; --fg-muted: #666;
-  --border: #444; --chord: #79b8ff;
-  --sec-chorus-bg: #1e2a4a; --sec-chorus-fg: #79b8ff;
-  --sec-verse-bg: #2a2a2a;  --sec-verse-fg: #aaa;
-  --sec-bridge-bg: #3a2a10; --sec-bridge-fg: #e8a050;
-  --sec-tab-bg: #1e2a14;    --sec-tab-fg: #90c040;
-  --tab-bg: #252525; --tab-border: #555;
-  --tip-bg: #2d2d2d; --tip-border: #555; --tip-fg: #ccc;
-  --capo-bg: #4a3010; --capo-fg: #ffcc60;
-  --panel-bg: rgba(20,20,20,0.93); --panel-border: #444;
-}
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #fafaf8; --fg: #1a1a1a; --fg-dim: #555; --fg-muted: #888;
-    --border: #ddd; --chord: #1a5fb4;
-    --sec-chorus-bg: #e8f0fe; --sec-chorus-fg: #2a5bbf;
-    --sec-verse-bg: #f0f0f0;  --sec-verse-fg: #555;
-    --sec-bridge-bg: #fef0d0; --sec-bridge-fg: #a05000;
-    --sec-tab-bg: #f0f4e8;    --sec-tab-fg: #4a6a20;
-    --tab-bg: #f4f4f0; --tab-border: #bbb;
-    --tip-bg: #fff; --tip-border: #ccc; --tip-fg: #333;
-    --capo-bg: #ffe8b0; --capo-fg: #7a4000;
-    --panel-bg: rgba(245,245,243,0.97); --panel-border: #ccc;
-  }
-}
-:root[data-theme="light"] {
-  --bg: #fafaf8; --fg: #1a1a1a; --fg-dim: #555; --fg-muted: #888;
-  --border: #ddd; --chord: #1a5fb4;
-  --sec-chorus-bg: #e8f0fe; --sec-chorus-fg: #2a5bbf;
-  --sec-verse-bg: #f0f0f0;  --sec-verse-fg: #555;
-  --sec-bridge-bg: #fef0d0; --sec-bridge-fg: #a05000;
-  --sec-tab-bg: #f0f4e8;    --sec-tab-fg: #4a6a20;
-  --sec-xsec-bg: #e0f4f4;   --sec-xsec-fg: #1a7a7a;
-  --tab-bg: #f4f4f0; --tab-border: #bbb;
-  --tip-bg: #fff; --tip-border: #ccc; --tip-fg: #333;
-  --capo-bg: #ffe8b0; --capo-fg: #7a4000;
-  --panel-bg: rgba(245,245,243,0.97); --panel-border: #ccc;
-}
-:root[data-theme="dark"] {
-  --bg: #1e1e1e; --fg: #d4d4d4; --fg-dim: #999; --fg-muted: #666;
-  --border: #444; --chord: #79b8ff;
-  --sec-chorus-bg: #1e2a4a; --sec-chorus-fg: #79b8ff;
-  --sec-verse-bg: #2a2a2a;  --sec-verse-fg: #aaa;
-  --sec-bridge-bg: #3a2a10; --sec-bridge-fg: #e8a050;
-  --sec-tab-bg: #1e2a14;    --sec-tab-fg: #90c040;
-  --sec-xsec-bg: #0e2a2a;   --sec-xsec-fg: #5cc8c8;
-  --tab-bg: #252525; --tab-border: #555;
-  --tip-bg: #2d2d2d; --tip-border: #555; --tip-fg: #ccc;
-  --capo-bg: #4a3010; --capo-fg: #ffcc60;
-  --panel-bg: rgba(20,20,20,0.93); --panel-border: #444;
-}
+${SHARED_SONG_CSS}
+/* ── Setlist overrides: panels start below nav bar ───────────────────────── */
+#legend-side, #custom-side-panel { top: 52px; bottom: 70px; }
 html, body { background: var(--bg); color: var(--fg); font-family: Georgia, serif; font-size: 17px; }
 body { padding-top: 52px; padding-bottom: 80px; }
 #nav-bar {
@@ -3985,13 +3935,6 @@ body { padding-top: 52px; padding-bottom: 80px; }
 .chord-diagram-cell { display: inline-flex; flex-direction: column; align-items: center; }
 .chord-diagram-cell svg { display: block; }
 .chord-diagram-cell .cd-label { font-size: 0.78em; font-weight: bold; color: var(--chord); margin-top: 2px; }
-#song.lyrics-only .chord { opacity: 0; height: 0; min-height: 0; overflow: hidden; }
-#song.two-col { column-count: 2; column-gap: 3em; column-rule: 1px solid var(--border); }
-#song.two-col .section { break-inside: avoid-column; }
-#song.two-col .song-header { column-span: all; }
-#song.has-col-zones.two-col { column-count: 1; column-rule: none; }
-#song.has-col-zones.two-col .col-zone { column-count: 2; column-gap: 3em; column-rule: 1px solid var(--border); }
-#song.has-col-zones.two-col .col-zone .section { break-inside: avoid-column; }
 #chord-tip { position: fixed; display: none; background: var(--tip-bg); border: 1px solid var(--tip-border); border-radius: 8px; padding: 8px; z-index: 99999; pointer-events: none; text-align: center; color: var(--tip-fg); font-family: sans-serif; font-size: 12px; }
 #scroll-bar {
   position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
@@ -4023,30 +3966,7 @@ body { padding-top: 52px; padding-bottom: 80px; }
 #save-btn:hover { opacity: 1; }
 #lyrics-btn { font-size: 11px; font-family: sans-serif; border-radius: 6px !important; width: auto !important; padding: 0 7px !important; }
 #lyrics-btn.active { color: #ffd700; border-color: #ffd700; }
-#twocol-btn { font-size: 14px; }
-#twocol-btn.active { color: #ffd700; border-color: #ffd700; }
 #auto-btn.active { color: #ffd700; border-color: #ffd700; }
-/* ── Custom side panel (inline mode only in setlist) ─────────────────────── */
-.csp-group { display: flex; flex-direction: column; gap: 8px; }
-.csp-section-badge {
-  font-size: 11px; font-weight: bold; color: #9d8ef5; text-transform: uppercase;
-  letter-spacing: 0.8px; padding: 3px 10px; background: rgba(124,109,240,0.18);
-  border-radius: 5px; align-self: flex-start; border: 1px solid rgba(124,109,240,0.35);
-}
-.csp-chord-grid { display: flex; flex-wrap: wrap; gap: 8px 6px; }
-.section-side-panel {
-  background: rgba(128,128,128,0.1); border: 1px solid var(--border);
-  border-radius: 8px; padding: 12px 14px; margin-bottom: 10px;
-}
-.section-side-panel .csp-group {
-  flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 6px 12px;
-}
-.section-side-panel .csp-section-badge {
-  writing-mode: vertical-rl; transform: rotate(180deg); margin-right: 6px;
-  align-self: stretch; display: flex; align-items: center; justify-content: center;
-  border-radius: 4px; padding: 6px 4px; letter-spacing: 1px;
-}
-.section-side-panel .csp-chord-grid { flex: 1; }
 </style>
 </head>
 <body>
