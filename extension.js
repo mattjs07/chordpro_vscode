@@ -2660,7 +2660,7 @@ function activate(context) {
             } else if (msg.command === 'enterFullscreen') {
                 vscode.commands.executeCommand('workbench.action.maximizeEditorHideSidebar');
             } else if (msg.command === 'exitFullscreen') {
-                vscode.commands.executeCommand('workbench.action.minimizeOtherEditors');
+                vscode.commands.executeCommand('workbench.action.evenEditorWidths');
                 vscode.commands.executeCommand('workbench.action.toggleSidebarVisibility');
             }
         });
