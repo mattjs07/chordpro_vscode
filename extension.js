@@ -4005,6 +4005,7 @@ ${SHARED_SONG_HTML}
   <button id="font-smaller" title="Smaller text">A−</button>
   <button id="font-larger"  title="Larger text">A+</button>
   <button id="lyrics-btn"   title="Lyrics only">Ly</button>
+  <button id="fs-btn"       title="Full screen (F)"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5V1h4M9 1h4v4M1 9v4h4M9 13h4V9"/></svg></button>
   <button id="settings-btn" title="Settings">⚙</button>
 </div>
 <script>
@@ -4093,6 +4094,18 @@ function stopMetronome(){_metroActive=false;clearTimeout(_metroTimer);_updateMet
 function _updateMetroBtn(){metroBtn.disabled=activeBpm===0;metroBtn.style.opacity=activeBpm===0?'0.3':'';metroBtn.classList.toggle('active',_metroActive);}
 metroBtn.addEventListener('click',function(){if(_metroActive)stopMetronome();else startMetronome();});
 
+// Full-screen (setlist-specific — same as performance view)
+var fsBtn = document.getElementById('fs-btn');
+var _fsActive = false;
+var _svgEnterFs = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5V1h4M9 1h4v4M1 9v4h4M9 13h4V9"/></svg>';
+var _svgExitFs  = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 1v4H1M13 5h-4V1M5 13v-4H1M13 9h-4v4"/></svg>';
+fsBtn.addEventListener('click', function() {
+  _fsActive = !_fsActive;
+  fsBtn.innerHTML = _fsActive ? _svgExitFs : _svgEnterFs;
+  fsBtn.title = _fsActive ? 'Exit full screen (F)' : 'Full screen (F)';
+  vscodeApi.postMessage({ command: _fsActive ? 'enterFullscreen' : 'exitFullscreen' });
+});
+
 // Theme (nav bar toggle — setlist-specific; settings popup theme is in shared JS)
 var themeNavBtn = document.getElementById('theme-nav-btn');
 function _updateThemeNavBtn(){
@@ -4152,6 +4165,7 @@ document.addEventListener('keydown',function(e){
   if(e.code==='PageDown') {if(SONG_IDX<SONGS.length-1)loadSong(SONG_IDX+1);e.preventDefault();}
   if(e.key==='m'||e.key==='M'){metroBtn.click();e.preventDefault();}
   if(e.key==='l'||e.key==='L'){lyricsBtn.click();e.preventDefault();}
+  if(e.key==='f'||e.key==='F'){fsBtn.click();e.preventDefault();}
 });
 
 // Boot
@@ -4760,7 +4774,12 @@ if(SONGS.length) loadSong(0);
         );
         panel.webview.html = getSetlistWebviewContent(songData, sharedSvgs);
         panel.webview.onDidReceiveMessage(msg => {
-            if (msg.command === 'saveSetlistHtml') {
+            if (msg.command === 'enterFullscreen') {
+                vscode.commands.executeCommand('workbench.action.maximizeEditorHideSidebar');
+            } else if (msg.command === 'exitFullscreen') {
+                vscode.commands.executeCommand('workbench.action.evenEditorWidths');
+                vscode.commands.executeCommand('workbench.action.toggleSidebarVisibility');
+            } else if (msg.command === 'saveSetlistHtml') {
                 const folder = songLibraryProvider.getFolder();
                 const outPath = path.join(folder || require('os').homedir(), 'setlist_preview.html');
                 const standalone = getSetlistWebviewContent(songData, sharedSvgs)
