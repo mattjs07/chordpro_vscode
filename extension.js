@@ -975,6 +975,8 @@ body { margin: 0; padding: 8px; background: var(--bg); color: var(--text); font-
 .dm-btn.active { background: var(--accent); color: #fff; font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,0.25); }
 #resetBtn { margin-left: 6px; padding: 4px 9px; font-size: 14px; line-height: 1; cursor: pointer; background: transparent; color: var(--danger); border: 1px solid var(--danger); border-radius: 5px; transition: all 0.12s ease; }
 #resetBtn:hover { background: var(--danger); color: var(--bg); }
+#playBtn { padding: 5px 10px; font-size: 11px; cursor: pointer; background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 5px; white-space: nowrap; font-family: inherit; transition: all 0.12s ease; }
+#playBtn:hover { background: var(--accent); color: #fff; }
 #fretboard { display: inline-flex; flex-direction: column; position: relative; background: var(--surf); border: 1px solid var(--border); border-radius: 6px; padding: 4px; margin-top: 4px; }
 .string-row { display: flex; align-items: center; height: 32px; position: relative; }
 .string-line { position: absolute; right: 0; top: 50%; transform: translateY(-50%); pointer-events: none; z-index: 2; background: var(--string); }
@@ -1014,6 +1016,7 @@ body { margin: 0; padding: 8px; background: var(--bg); color: var(--text); font-
   <div id="wrapper">
     <div id="top">
       <input id="chordName" placeholder="Chord name" />
+      <button id="playBtn" title="Play chord (P)">▶</button>
       <span class="insert-label">Insert:</span>
       <button id="saveBtn" title="Insert [CHORD] inline at cursor">Inline</button>
       <button id="saveDefineBtn" title="Insert {chord: CHORD} at cursor and add {define:} to file">{chord:}</button>
@@ -1328,6 +1331,52 @@ document.addEventListener('keydown', e => {
         fretsArray = next.f; fingersOverride = next.g;
         updateDisplay(); e.preventDefault();
     }
+});
+
+// ── Chord audio playback (Karplus-Strong plucked string) ─────────────────────
+var _audioCtx = null;
+const OPEN_MIDI = [64, 59, 55, 50, 45, 40]; // highE→lowE, matches fretsArray index
+
+function _pluckString(midi, ctx, when) {
+    const freq = 440 * Math.pow(2, (midi - 69) / 12);
+    const sr = ctx.sampleRate;
+    const N = Math.max(2, Math.round(sr / freq));
+    const totalSamples = Math.ceil(sr * 3.0);
+    const buffer = ctx.createBuffer(1, totalSamples, sr);
+    const data = buffer.getChannelData(0);
+    const ring = new Float32Array(N);
+    for (let i = 0; i < N; i++) ring[i] = Math.random() * 2 - 1;
+    for (let i = 0; i < totalSamples; i++) {
+        const pos = i % N;
+        data[i] = ring[pos];
+        ring[pos] = 0.498 * (ring[pos] + ring[(pos + 1) % N]);
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.45, when);
+    src.connect(gain);
+    gain.connect(ctx.destination);
+    src.start(when);
+    src.stop(when + 3.0);
+}
+
+function playChord() {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const t0 = _audioCtx.currentTime + 0.02;
+    let offset = 0;
+    for (let s = NUM_STRINGS - 1; s >= 0; s--) { // low E → high E
+        const fret = fretsArray[s];
+        if (fret === -1) continue;
+        _pluckString(OPEN_MIDI[s] + fret, _audioCtx, t0 + offset);
+        offset += 0.05;
+    }
+}
+
+document.getElementById('playBtn').addEventListener('click', playChord);
+document.addEventListener('keydown', e => {
+    if (document.activeElement.tagName === 'INPUT') return;
+    if (e.key === 'p' || e.key === 'P') { playChord(); e.preventDefault(); }
 });
 
 window.addEventListener('message', e => {
@@ -3347,8 +3396,10 @@ function activate(context) {
                     else vscode.window.showInformationMessage('Saved: ' + path.basename(outPath));
                 });
             } else if (msg.command === 'enterFullscreen') {
+                scrollPanel.reveal(scrollPanel.viewColumn, false);
                 vscode.commands.executeCommand('workbench.action.maximizeEditorHideSidebar');
             } else if (msg.command === 'exitFullscreen') {
+                scrollPanel.reveal(scrollPanel.viewColumn, false);
                 vscode.commands.executeCommand('workbench.action.evenEditorWidths');
                 vscode.commands.executeCommand('workbench.action.toggleSidebarVisibility');
             }
@@ -4775,10 +4826,9 @@ if(SONGS.length) loadSong(0);
         panel.webview.html = getSetlistWebviewContent(songData, sharedSvgs);
         panel.webview.onDidReceiveMessage(msg => {
             if (msg.command === 'enterFullscreen') {
-                vscode.commands.executeCommand('workbench.action.maximizeEditorHideSidebar');
+                vscode.commands.executeCommand('workbench.action.toggleZenMode');
             } else if (msg.command === 'exitFullscreen') {
-                vscode.commands.executeCommand('workbench.action.evenEditorWidths');
-                vscode.commands.executeCommand('workbench.action.toggleSidebarVisibility');
+                vscode.commands.executeCommand('workbench.action.toggleZenMode');
             } else if (msg.command === 'saveSetlistHtml') {
                 const folder = songLibraryProvider.getFolder();
                 const outPath = path.join(folder || require('os').homedir(), 'setlist_preview.html');
