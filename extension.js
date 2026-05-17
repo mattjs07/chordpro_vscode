@@ -2635,15 +2635,18 @@ function activate(context) {
         }
 
         scrollDocUri = editor.document.uri.toString();
+        const savedSettings = context.globalState.get('perfSettings:' + scrollDocUri) || {};
         scrollPanel  = vscode.window.createWebviewPanel(
             'chordproScrollPreview',
             title + ' — Preview',
             { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
             { enableScripts: true, retainContextWhenHidden: true }
         );
-        scrollPanel.webview.html = getScrollWebviewContent(source, chordSvgs);
+        scrollPanel.webview.html = getScrollWebviewContent(source, chordSvgs, savedSettings);
         scrollPanel.webview.onDidReceiveMessage(msg => {
-            if (msg.command === 'saveHtml') {
+            if (msg.command === 'saveSettings') {
+                context.globalState.update('perfSettings:' + scrollDocUri, msg.settings);
+            } else if (msg.command === 'saveHtml') {
                 const srcPath = editor.document.uri.fsPath;
                 const outPath = srcPath.replace(/\.[^.]+$/, '') + '_preview.html';
                 const standalone = getScrollWebviewContent(
@@ -2667,9 +2670,10 @@ function activate(context) {
         scrollPanel.onDidDispose(() => { scrollPanel = null; scrollDocUri = null; });
     });
 
-    function getScrollWebviewContent(source, chordSvgs) {
+    function getScrollWebviewContent(source, chordSvgs, savedSettings) {
         const safeSource = JSON.stringify(source);
         const safeChordSvgs = JSON.stringify(chordSvgs || {});
+        const safeSavedSettings = JSON.stringify(savedSettings || {});
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -3260,6 +3264,7 @@ function changeFontSize(delta) {
   document.body.style.fontSize = fontSize + 'px';
   document.body.style.setProperty('--section-gap', Math.round(22 * fontSize / 17) + 'px');
   if (tempoSpeed) setTimeout(function() { applyTempoSpeed(PARSED.meta, false, true); }, 100);
+  savePerfSettings();
 }
 document.getElementById('font-smaller').addEventListener('click', function() { changeFontSize(-1); });
 document.getElementById('font-larger').addEventListener('click',  function() { changeFontSize(+1); });
@@ -3338,6 +3343,7 @@ document.querySelectorAll('input[name="legend-mode"]').forEach(function(r) {
   r.addEventListener('change', function() {
     legendMode = parseInt(this.value, 10);
     updateLegend();
+    savePerfSettings();
   });
 });
 
@@ -3347,6 +3353,7 @@ var legendSzVal    = document.getElementById('legend-sz-val');
 legendSzSlider.addEventListener('input', function() {
   document.body.style.setProperty('--legend-svg-w', this.value + 'px');
   legendSzVal.textContent = this.value + 'px';
+  savePerfSettings();
 });
 document.body.style.setProperty('--legend-svg-w', legendSzSlider.value + 'px');
 
@@ -3356,6 +3363,7 @@ var songSzVal    = document.getElementById('song-sz-val');
 songSzSlider.addEventListener('input', function() {
   document.body.style.setProperty('--song-svg-w', this.value + 'px');
   songSzVal.textContent = this.value + 'px';
+  savePerfSettings();
 });
 document.body.style.setProperty('--song-svg-w', songSzSlider.value + 'px');
 
@@ -3367,6 +3375,7 @@ document.body.style.setProperty('--song-svg-w', songSzSlider.value + 'px');
   radios.forEach(function(r) {
     r.addEventListener('change', function() {
       document.documentElement.dataset.theme = this.value;
+      savePerfSettings();
     });
   });
 })();
@@ -3377,6 +3386,7 @@ document.querySelectorAll('input[name="col-mode"]').forEach(function(r) {
     var song = document.getElementById('song');
     song.classList.toggle('two-col',   this.value === '2');
     song.classList.toggle('three-col', this.value === '3');
+    savePerfSettings();
   });
 });
 
@@ -3397,12 +3407,61 @@ document.getElementById('trans-up').addEventListener('click', function() {
 // ── Boot ─────────────────────────────────────────────────────────────────────
 const vscodeApi = acquireVsCodeApi();
 const SOURCE = ${safeSource};
+const SAVED_SETTINGS = ${safeSavedSettings};
 var PARSED = parse(SOURCE);
 document.getElementById('song').innerHTML = render(PARSED);
 applyColZones();
 bindTooltips();
 populateChordDiagrams();
 updateLegend();
+
+// ── Saved settings ───────────────────────────────────────────────────────────
+function savePerfSettings() {
+  var colChecked = document.querySelector('input[name="col-mode"]:checked');
+  vscodeApi.postMessage({ command: 'saveSettings', settings: {
+    theme:      document.documentElement.dataset.theme || (_sysDark ? 'dark' : 'light'),
+    cols:       colChecked ? colChecked.value : '1',
+    fontSize:   fontSize,
+    legendMode: legendMode,
+    legendSz:   parseInt(legendSzSlider.value, 10),
+    songSz:     parseInt(songSzSlider.value, 10),
+    bpm:        (activeBpm > 0 && !PARSED.meta.tempo) ? activeBpm : null
+  }});
+}
+(function applyPerfSettings() {
+  var s = SAVED_SETTINGS;
+  if (!s || !Object.keys(s).length) return;
+  if (s.theme) {
+    document.documentElement.dataset.theme = s.theme;
+    document.querySelectorAll('input[name="theme-mode"]').forEach(function(r) { r.checked = r.value === s.theme; });
+  }
+  if (s.cols && s.cols !== '1') {
+    var song = document.getElementById('song');
+    song.classList.toggle('two-col',   s.cols === '2');
+    song.classList.toggle('three-col', s.cols === '3');
+    document.querySelectorAll('input[name="col-mode"]').forEach(function(r) { r.checked = r.value === String(s.cols); });
+  }
+  if (s.fontSize) {
+    fontSize = s.fontSize;
+    document.body.style.fontSize = fontSize + 'px';
+    document.body.style.setProperty('--section-gap', Math.round(22 * fontSize / 17) + 'px');
+  }
+  if (s.legendMode) {
+    legendMode = s.legendMode;
+    document.querySelectorAll('input[name="legend-mode"]').forEach(function(r) { r.checked = parseInt(r.value, 10) === legendMode; });
+    updateLegend();
+  }
+  if (s.legendSz) {
+    legendSzSlider.value = s.legendSz;
+    legendSzVal.textContent = s.legendSz + 'px';
+    document.body.style.setProperty('--legend-svg-w', s.legendSz + 'px');
+  }
+  if (s.songSz) {
+    songSzSlider.value = s.songSz;
+    songSzVal.textContent = s.songSz + 'px';
+    document.body.style.setProperty('--song-svg-w', s.songSz + 'px');
+  }
+})();
 
 // ── Auto-scroll ──────────────────────────────────────────────────────────────
 let speed = 30, playing = false, lastTs = null, accum = 0;
@@ -3427,7 +3486,7 @@ function updateUI() {
   _updateTempoBtns();
 }
 
-// Central BPM setter — used by tap tempo, manual input, and {tempo:} directive
+// Central BPM setter — used by tap tempo and manual input (not directive)
 function setBpm(bpm) {
   if (!bpm || bpm < 20 || bpm > 300) return;
   activeBpm = bpm;
@@ -3437,6 +3496,7 @@ function setBpm(bpm) {
   var computed = computeScrollSpeed(bpm);
   if (computed > 0) { tempoSpeed = computed; speed = tempoSpeed; updateUI(); }
   else { _updateTempoBtns(); }
+  savePerfSettings();
 }
 
 // Returns computed px/s for a given BPM, or 0 if layout isn't ready
@@ -3639,7 +3699,10 @@ window.addEventListener('message', function(e) {
 });
 
 updateUI();
-setTimeout(function() { applyTempoSpeed(PARSED.meta); }, 200);
+setTimeout(function() {
+  applyTempoSpeed(PARSED.meta);
+  if (SAVED_SETTINGS.bpm && !PARSED.meta.tempo) setBpm(SAVED_SETTINGS.bpm);
+}, 250);
 </script>
 </body>
 </html>`;
