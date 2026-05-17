@@ -975,6 +975,8 @@ body { margin: 0; padding: 8px; background: var(--bg); color: var(--text); font-
 .dm-btn.active { background: var(--accent); color: #fff; font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,0.25); }
 #resetBtn { margin-left: 6px; padding: 4px 9px; font-size: 14px; line-height: 1; cursor: pointer; background: transparent; color: var(--danger); border: 1px solid var(--danger); border-radius: 5px; transition: all 0.12s ease; }
 #resetBtn:hover { background: var(--danger); color: var(--bg); }
+#playBtn { padding: 5px 10px; font-size: 11px; cursor: pointer; background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 5px; white-space: nowrap; font-family: inherit; transition: all 0.12s ease; }
+#playBtn:hover { background: var(--accent); color: #fff; }
 #fretboard { display: inline-flex; flex-direction: column; position: relative; background: var(--surf); border: 1px solid var(--border); border-radius: 6px; padding: 4px; margin-top: 4px; }
 .string-row { display: flex; align-items: center; height: 32px; position: relative; }
 .string-line { position: absolute; right: 0; top: 50%; transform: translateY(-50%); pointer-events: none; z-index: 2; background: var(--string); }
@@ -1014,6 +1016,7 @@ body { margin: 0; padding: 8px; background: var(--bg); color: var(--text); font-
   <div id="wrapper">
     <div id="top">
       <input id="chordName" placeholder="Chord name" />
+      <button id="playBtn" title="Play chord (P)">▶</button>
       <span class="insert-label">Insert:</span>
       <button id="saveBtn" title="Insert [CHORD] inline at cursor">Inline</button>
       <button id="saveDefineBtn" title="Insert {chord: CHORD} at cursor and add {define:} to file">{chord:}</button>
@@ -1328,6 +1331,52 @@ document.addEventListener('keydown', e => {
         fretsArray = next.f; fingersOverride = next.g;
         updateDisplay(); e.preventDefault();
     }
+});
+
+// ── Chord audio playback (Karplus-Strong plucked string) ─────────────────────
+var _audioCtx = null;
+const OPEN_MIDI = [64, 59, 55, 50, 45, 40]; // highE→lowE, matches fretsArray index
+
+function _pluckString(midi, ctx, when) {
+    const freq = 440 * Math.pow(2, (midi - 69) / 12);
+    const sr = ctx.sampleRate;
+    const N = Math.max(2, Math.round(sr / freq));
+    const totalSamples = Math.ceil(sr * 3.0);
+    const buffer = ctx.createBuffer(1, totalSamples, sr);
+    const data = buffer.getChannelData(0);
+    const ring = new Float32Array(N);
+    for (let i = 0; i < N; i++) ring[i] = Math.random() * 2 - 1;
+    for (let i = 0; i < totalSamples; i++) {
+        const pos = i % N;
+        data[i] = ring[pos];
+        ring[pos] = 0.498 * (ring[pos] + ring[(pos + 1) % N]);
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.45, when);
+    src.connect(gain);
+    gain.connect(ctx.destination);
+    src.start(when);
+    src.stop(when + 3.0);
+}
+
+function playChord() {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const t0 = _audioCtx.currentTime + 0.02;
+    let offset = 0;
+    for (let s = NUM_STRINGS - 1; s >= 0; s--) { // low E → high E
+        const fret = fretsArray[s];
+        if (fret === -1) continue;
+        _pluckString(OPEN_MIDI[s] + fret, _audioCtx, t0 + offset);
+        offset += 0.05;
+    }
+}
+
+document.getElementById('playBtn').addEventListener('click', playChord);
+document.addEventListener('keydown', e => {
+    if (document.activeElement.tagName === 'INPUT') return;
+    if (e.key === 'p' || e.key === 'P') { playChord(); e.preventDefault(); }
 });
 
 window.addEventListener('message', e => {
@@ -2162,6 +2211,689 @@ function listBundledConfigs(context) {
 }
 
 // ─────────────────────────────────────────────
+// Shared CSS: injected into both performance view and setlist webviews.
+// Contains: theme tokens, multi-col, lyrics-only, legend, custom side panel,
+// settings popup, diagram size vars. View-specific layout/control-bar CSS stays
+// in each generator function.
+// ─────────────────────────────────────────────
+const SHARED_SONG_CSS = `
+:root {
+  --bg: #fafaf8; --fg: #1a1a1a; --fg-dim: #555; --fg-muted: #888;
+  --border: #ddd; --chord: #1a5fb4;
+  --sec-chorus-bg: #e8f0fe; --sec-chorus-fg: #2a5bbf;
+  --sec-verse-bg: #f0f0f0;  --sec-verse-fg: #555;
+  --sec-bridge-bg: #fef0d0; --sec-bridge-fg: #a05000;
+  --sec-tab-bg: #f0f4e8;    --sec-tab-fg: #4a6a20;
+  --sec-xsec-bg: #e0f4f4;   --sec-xsec-fg: #1a7a7a;
+  --tab-bg: #f4f4f0; --tab-border: #bbb;
+  --tip-bg: #fff; --tip-border: #ccc; --tip-fg: #333;
+  --capo-bg: #ffe8b0; --capo-fg: #7a4000;
+  --panel-bg: rgba(245,245,243,0.97); --panel-border: #ccc;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1e1e1e; --fg: #d4d4d4; --fg-dim: #999; --fg-muted: #666;
+    --border: #444; --chord: #79b8ff;
+    --sec-chorus-bg: #1e2a4a; --sec-chorus-fg: #79b8ff;
+    --sec-verse-bg: #2a2a2a;  --sec-verse-fg: #aaa;
+    --sec-bridge-bg: #3a2a10; --sec-bridge-fg: #e8a050;
+    --sec-tab-bg: #1e2a14;    --sec-tab-fg: #90c040;
+    --sec-xsec-bg: #0e2a2a;   --sec-xsec-fg: #5cc8c8;
+    --tab-bg: #252525; --tab-border: #555;
+    --tip-bg: #2d2d2d; --tip-border: #555; --tip-fg: #ccc;
+    --capo-bg: #4a3010; --capo-fg: #ffcc60;
+    --panel-bg: rgba(20,20,20,0.93); --panel-border: #444;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #fafaf8; --fg: #1a1a1a; --fg-dim: #555; --fg-muted: #888;
+  --border: #ddd; --chord: #1a5fb4;
+  --sec-chorus-bg: #e8f0fe; --sec-chorus-fg: #2a5bbf;
+  --sec-verse-bg: #f0f0f0;  --sec-verse-fg: #555;
+  --sec-bridge-bg: #fef0d0; --sec-bridge-fg: #a05000;
+  --sec-tab-bg: #f0f4e8;    --sec-tab-fg: #4a6a20;
+  --tab-bg: #f4f4f0; --tab-border: #bbb;
+  --tip-bg: #fff; --tip-border: #ccc; --tip-fg: #333;
+  --capo-bg: #ffe8b0; --capo-fg: #7a4000;
+  --panel-bg: rgba(245,245,243,0.97); --panel-border: #ccc;
+}
+:root[data-theme="dark"] {
+  --bg: #1e1e1e; --fg: #d4d4d4; --fg-dim: #999; --fg-muted: #666;
+  --border: #444; --chord: #79b8ff;
+  --sec-chorus-bg: #1e2a4a; --sec-chorus-fg: #79b8ff;
+  --sec-verse-bg: #2a2a2a;  --sec-verse-fg: #aaa;
+  --sec-bridge-bg: #3a2a10; --sec-bridge-fg: #e8a050;
+  --sec-tab-bg: #1e2a14;    --sec-tab-fg: #90c040;
+  --tab-bg: #252525; --tab-border: #555;
+  --tip-bg: #2d2d2d; --tip-border: #555; --tip-fg: #ccc;
+  --capo-bg: #4a3010; --capo-fg: #ffcc60;
+  --panel-bg: rgba(20,20,20,0.93); --panel-border: #444;
+}
+/* ── Multi-column layout ──────────────────────────────────────────────────── */
+#song.multi-col { column-count: var(--col-count,2); column-gap: 2em; column-rule: 1px solid var(--border); }
+#song.multi-col .section { break-inside: avoid-column; }
+#song.multi-col .song-header { column-span: all; }
+#song.has-col-zones.multi-col { column-count: 1; column-rule: none; }
+#song.has-col-zones.multi-col .col-zone { column-count: var(--col-count,2); column-gap: 2em; column-rule: 1px solid var(--border); }
+#song.has-col-zones.multi-col .col-zone .section { break-inside: avoid-column; }
+/* ── Lyrics-only mode ────────────────────────────────────────────────────── */
+.chord { transition: opacity 0.2s, height 0.2s, min-height 0.2s; }
+#song.lyrics-only .chord { opacity: 0; height: 0; min-height: 0; overflow: hidden; }
+#song.lyrics-only .chord-line { margin-bottom: 2px; line-height: inherit; }
+/* ── Chord legend ─────────────────────────────────────────────────────────── */
+#legend-end { display: none; margin-top: 48px; padding-top: 24px; border-top: 2px solid var(--border); }
+#legend-end.active { display: block; }
+#legend-side {
+  display: none; position: fixed; right: 0; top: 0; bottom: 0; width: var(--panel-w, 200px);
+  overflow-y: auto; padding: 16px 12px 80px; z-index: 9990;
+  background: var(--panel-bg); border-left: 1px solid var(--panel-border);
+  font-family: sans-serif;
+}
+#legend-side.active { display: flex; flex-direction: column; }
+body.legend-side-on { padding-right: calc(var(--panel-w, 200px) + 10px); }
+/* ── Custom side panel ────────────────────────────────────────────────────── */
+#custom-side-panel {
+  display: none; position: fixed; right: 0; top: 0; bottom: 0; width: var(--panel-w, 200px);
+  overflow-y: auto; padding: 16px 12px 80px; z-index: 9989;
+  background: var(--panel-bg); border-left: 1px solid var(--panel-border);
+  font-family: sans-serif; color: var(--fg);
+}
+#custom-side-panel.active { display: flex; flex-direction: column; gap: 16px; }
+body.csp-side-on { padding-right: calc(var(--panel-w, 200px) + 10px); }
+body.csp-side-on .section-side-panel { display: none; }
+.csp-group { display: flex; flex-direction: column; gap: 8px; }
+.csp-section-badge {
+  font-size: 11px; font-weight: bold; color: #9d8ef5; text-transform: uppercase;
+  letter-spacing: 0.8px; padding: 3px 10px; background: rgba(124,109,240,0.18);
+  border-radius: 5px; align-self: flex-start; border: 1px solid rgba(124,109,240,0.35);
+}
+.csp-chord-grid { display: flex; flex-wrap: wrap; gap: 8px 6px; }
+.section-side-panel {
+  background: rgba(128,128,128,0.1); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 14px; margin-bottom: 10px;
+}
+.section-side-panel .csp-group {
+  flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 6px 12px;
+}
+.section-side-panel .csp-section-badge {
+  writing-mode: vertical-rl; transform: rotate(180deg); margin-right: 6px;
+  align-self: stretch; display: flex; align-items: center; justify-content: center;
+  border-radius: 4px; padding: 6px 4px; letter-spacing: 1px;
+}
+.section-side-panel .csp-chord-grid { flex: 1; }
+.legend-title { font-size: 11px; font-weight: bold; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+.legend-grid { display: flex; flex-wrap: wrap; gap: 10px 8px; }
+/* ── Settings popup ───────────────────────────────────────────────────────── */
+#settings-popup {
+  display: none; position: fixed; bottom: 100px; right: 24px;
+  background: rgba(20,20,20,0.97); border: 1px solid #555; border-radius: 10px;
+  padding: 14px 16px; z-index: 9997; min-width: 260px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5); font-family: sans-serif;
+}
+#settings-popup.open { display: block; }
+.set-title { font-size: 11px; font-weight: bold; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+.set-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.set-row:last-child { margin-bottom: 0; }
+.set-label { font-size: 12px; color: #aaa; flex-shrink: 0; width: 118px; }
+.set-radios { display: flex; gap: 10px; flex-wrap: wrap; }
+.set-radios label { font-size: 12px; color: #eee; display: flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap; }
+.set-radios input[type="radio"] { cursor: pointer; accent-color: #7c6df0; }
+.set-slider { flex: 1; accent-color: #7c6df0; cursor: pointer; min-width: 80px; }
+.set-val { font-size: 11px; color: #888; min-width: 34px; text-align: right; }
+#settings-btn { font-size: 20px; opacity: 0.7; }
+#settings-btn:hover, #settings-btn.open { opacity: 1; }
+/* ── Diagram size CSS variables ───────────────────────────────────────────── */
+#legend-end .legend-grid svg, #legend-side .legend-grid svg,
+#custom-side-panel .chord-diagram-cell svg,
+.section-side-panel .chord-diagram-cell svg { width: var(--legend-svg-w, 80px); height: auto; }
+#song .chord-diagram-cell svg { width: var(--song-svg-w, 110px); height: auto; }
+`;
+
+// ─────────────────────────────────────────────
+// Shared HTML: legend panels, custom side panel, chord-tip, and settings popup.
+// Injected into both performance view and setlist webviews.
+// ─────────────────────────────────────────────
+const SHARED_SONG_HTML = `
+<div id="legend-end"><div class="legend-title">Chords used</div><div class="legend-grid"></div></div>
+<div id="legend-side"><div class="legend-title">Chords</div><div class="legend-grid"></div></div>
+<div id="custom-side-panel"></div>
+<div id="settings-popup">
+  <div class="set-title">⚙ Settings</div>
+  <div class="set-row">
+    <span class="set-label">Chord legend</span>
+    <div class="set-radios">
+      <label><input type="radio" name="legend-mode" value="0" checked> Off</label>
+      <label><input type="radio" name="legend-mode" value="1"> End of page</label>
+      <label><input type="radio" name="legend-mode" value="2"> Side panel</label>
+    </div>
+  </div>
+  <div class="set-row">
+    <span class="set-label">Legend diagram size</span>
+    <input type="range" class="set-slider" id="legend-sz" min="40" max="200" step="10" value="80">
+    <span class="set-val" id="legend-sz-val">80px</span>
+  </div>
+  <div class="set-row">
+    <span class="set-label">Song diagram size</span>
+    <input type="range" class="set-slider" id="song-sz" min="40" max="200" step="10" value="110">
+    <span class="set-val" id="song-sz-val">110px</span>
+  </div>
+  <div class="set-row">
+    <span class="set-label">Theme</span>
+    <div class="set-radios" id="theme-radios">
+      <label><input type="radio" name="theme-mode" value="dark"> Dark</label>
+      <label><input type="radio" name="theme-mode" value="light"> Light</label>
+    </div>
+  </div>
+  <div class="set-row">
+    <span class="set-label">Columns</span>
+    <input type="range" class="set-slider" id="col-slider" min="1" max="6" step="1" value="1">
+    <span class="set-val" id="col-val">1</span>
+  </div>
+  <div class="set-row" id="panel-mode-row" style="display:none">
+    <span class="set-label">Side panel</span>
+    <div class="set-radios">
+      <label><input type="radio" name="panel-mode" value="side" checked> Side</label>
+      <label><input type="radio" name="panel-mode" value="inline"> Inline</label>
+    </div>
+  </div>
+  <div class="set-row">
+    <span class="set-label">Panel width</span>
+    <input type="range" class="set-slider" id="panel-w-slider" min="120" max="600" step="10" value="200">
+    <span class="set-val" id="panel-w-val">200px</span>
+  </div>
+</div>`;
+
+// ─────────────────────────────────────────────
+// Shared JS: injected into both performance view and setlist webviews.
+// Requires these variables to be declared in the view's preamble (before injection):
+//   CHORD_SVGS  — object mapping chord name → SVG string
+//   savePerfSettings — function (no-op in setlist, real in perf view)
+// ─────────────────────────────────────────────
+const SHARED_SONG_JS = `
+// ── Shared state ─────────────────────────────────────────────────────────────
+var previewTranspose = 0;
+var fontSize = 17;
+var legendMode = 0;  // 0=none 1=end 2=side
+var panelMode = 'side';
+var PARSED = null;
+
+// ── Browser transpose helpers ─────────────────────────────────────────────
+var _SH = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+var _FL = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+function _tn(root, n) {
+  var fi = _FL.indexOf(root), si = _SH.indexOf(root);
+  var pf = fi !== -1 && si === -1;
+  var idx = si !== -1 ? si : fi;
+  if (idx < 0) return root;
+  return (pf ? _FL : _SH)[((idx + n) % 12 + 12) % 12];
+}
+function transposeChordName(chord, n) {
+  if (!n) return chord;
+  var sl = chord.indexOf('/');
+  var main = sl >= 0 ? chord.slice(0, sl) : chord;
+  var bass = sl >= 0 ? chord.slice(sl + 1) : null;
+  var rm   = main.match(/^([A-G][b#]?)(.*)/);
+  if (!rm) return chord;
+  return _tn(rm[1], n) + rm[2] + (bass ? '/' + _tn(bass, n) : '');
+}
+
+// ── ChordPro parser ──────────────────────────────────────────────────────────
+function parseChordLine(line) {
+  const segs = [], re = /\\[([^\\]]*)\\]/g;
+  let last = 0, pending = null, m;
+  while ((m = re.exec(line)) !== null) {
+    const before = line.slice(last, m.index);
+    if (pending !== null || before) segs.push({ chord: pending || '', lyric: before });
+    pending = m[1]; last = m.index + m[0].length;
+  }
+  const tail = line.slice(last);
+  if (pending !== null || tail) segs.push({ chord: pending || '', lyric: tail });
+  return segs;
+}
+
+function parse(text) {
+  const meta = { title: '', subtitle: '', artist: '', key: '', capo: '', tempo: '' };
+  const sections = [];
+  let cur = { type: 'verse', label: '', lines: [], nav: false };
+  let inSidePanel = null;
+
+  function flush() { if (cur.lines.length) { sections.push(cur); } }
+  function next(type, label, nav) { flush(); cur = { type, label, lines: [], nav: !!nav }; }
+
+  for (const raw of text.split(/\\r?\\n/)) {
+    const line = raw.trimEnd();
+    if (/^\\s*#/.test(line)) continue;
+
+    const dir = line.trim().match(/^\\{([^}]+)\\}$/);
+    if (dir) {
+      const ci = dir[1].indexOf(':');
+      const k = (ci >= 0 ? dir[1].slice(0, ci) : dir[1]).trim().toLowerCase();
+      const v = ci >= 0 ? dir[1].slice(ci + 1).trim() : '';
+      if (k === 'title'  || k === 't')   { meta.title    = v; continue; }
+      if (k === 'subtitle'||k === 'st')  { meta.subtitle = v; continue; }
+      if (k === 'artist')                { meta.artist   = v; continue; }
+      if (k === 'key')                   { meta.key      = v; continue; }
+      if (k === 'capo')                  { meta.capo     = v; continue; }
+      if (k === 'tempo')                 { meta.tempo    = v; continue; }
+      if (k === 'start_of_chorus'||k==='soc') { next('chorus',     v||'Chorus',  true);  continue; }
+      if (k === 'end_of_chorus'  ||k==='eoc') { next('verse',      '',           false); continue; }
+      if (k === 'start_of_verse' ||k==='sov') { next('verse',      v||'Verse',   true);  continue; }
+      if (k === 'end_of_verse'   ||k==='eov') { next('verse',      '',           false); continue; }
+      if (k === 'start_of_bridge'||k==='sob') { next('bridge',     v||'Bridge',  true);  continue; }
+      if (k === 'end_of_bridge'  ||k==='eob') { next('verse',      '',           false); continue; }
+      if (k === 'start_of_tab'   ||k==='sot') { next('tab',        v||'Tab',     true);  continue; }
+      if (k === 'end_of_tab'     ||k==='eot') { next('verse',      '',           false); continue; }
+      if (k === 'start_of_grid'  ||k==='sog') { next('grid',       v||'Grid',    true);  continue; }
+      if (k === 'end_of_grid'    ||k==='eog') { next('verse',      '',           false); continue; }
+      if (k === 'x_start_section')            { next('x-section',  v||'Section', true);  continue; }
+      if (k === 'x_end_section')              { next('verse',      '',           false); continue; }
+      if (k === 'x_columns_on')  { flush(); sections.push({ type: 'col-zone-start', lines: [], label: '', nav: false }); cur = { type: 'verse', label: '', lines: [], nav: false }; continue; }
+      if (k === 'x_columns_off') { flush(); sections.push({ type: 'col-zone-end',   lines: [], label: '', nav: false }); cur = { type: 'verse', label: '', lines: [], nav: false }; continue; }
+      if (k === 'x_start_side_panel') { flush(); const _sp = { type: 'side-panel', items: [], label: '', nav: false, lines: [] }; sections.push(_sp); inSidePanel = _sp; cur = { type: 'verse', label: '', lines: [], nav: false }; continue; }
+      if (k === 'x_end_side_panel')   { inSidePanel = null; cur = { type: 'verse', label: '', lines: [], nav: false }; continue; }
+      if (k === 'x_panel_section_title') { if (inSidePanel) inSidePanel.items.push({ type: 'title', label: v }); continue; }
+      if (k === 'comment'||k==='c'||k==='highlight') { if (!inSidePanel) cur.lines.push({ type:'comment',     text:v }); continue; }
+      if (k === 'comment_italic' ||k==='ci')          { if (!inSidePanel) cur.lines.push({ type:'comment',     text:v }); continue; }
+      if (k === 'comment_box'    ||k==='cb')          { if (!inSidePanel) cur.lines.push({ type:'comment-box', text:v }); continue; }
+      if (k === 'chorus')                             { if (!inSidePanel) cur.lines.push({ type:'chorus-ref'         }); continue; }
+      if (k === 'new_page'||k==='np'||k==='new_physical_page'||k==='npp') { if (!inSidePanel) cur.lines.push({ type:'page-break' }); continue; }
+      if (k === 'chord' && v && !v.includes('frets')) {
+        if (inSidePanel) { inSidePanel.items.push({ type: 'chord', name: v.trim() }); continue; }
+        cur.lines.push({ type:'chord-diagram', name:v.trim() }); continue;
+      }
+      continue;
+    }
+
+    if (inSidePanel) continue;
+    if (cur.type === 'tab')  { cur.lines.push({ type:'tab',       text:line }); continue; }
+    if (cur.type === 'grid') { cur.lines.push({ type:'grid-line', text:line }); continue; }
+    if (!line.trim())        { cur.lines.push({ type:'empty' });                continue; }
+    if (line.includes('['))  { cur.lines.push({ type:'chord-line', segs: parseChordLine(line) }); }
+    else                     { cur.lines.push({ type:'lyric', text:line }); }
+  }
+  flush();
+  return { meta, sections };
+}
+
+// ── HTML renderer ────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function safeFmt(s) {
+  return esc(s).replace(new RegExp('&lt;(\\/?(b|i|em|strong|u|s))&gt;', 'gi'), '\x3c$1\x3e');
+}
+function _spGroupsHtml(items, transpose) {
+  var groups = [];
+  var grp = { label: '', chords: [] };
+  (items || []).forEach(function(item) {
+    if (item.type === 'title') {
+      if (grp.chords.length || grp.label) groups.push(grp);
+      grp = { label: item.label, chords: [] };
+    } else if (item.type === 'chord') {
+      grp.chords.push(item.name);
+    }
+  });
+  if (grp.chords.length || grp.label) groups.push(grp);
+  return groups.map(function(g) {
+    var cells = g.chords.map(function(n) {
+      var tn = transposeChordName(n, transpose || 0);
+      return '<div class="chord-diagram-cell" data-chord="' + esc(tn) + '"></div>';
+    }).join('');
+    var badge = g.label ? '<div class="csp-section-badge">' + esc(g.label) + '</div>' : '';
+    return '<div class="csp-group">' + badge + '<div class="csp-chord-grid">' + cells + '</div></div>';
+  }).join('');
+}
+function renderGridLine(text, transpose) {
+  return text.split(' ').map(function(tok) {
+    if (tok && /^[A-G][b#]?[^|.]*$/.test(tok) && tok !== '.') {
+      var dc = transposeChordName(tok, transpose || 0);
+      return '\x3cspan class="chord" data-chord="' + esc(dc) + '"\x3e' + esc(dc) + '\x3c/span\x3e';
+    }
+    return esc(tok);
+  }).join(' ');
+}
+
+function render({ meta, sections }, transpose) {
+  const out = ['<div class="song-header">'];
+  if (meta.title)    out.push('<div class="song-title">'    + esc(meta.title)    + '</div>');
+  if (meta.subtitle) out.push('<div class="song-subtitle">' + esc(meta.subtitle) + '</div>');
+  const mp = [];
+  if (meta.artist) mp.push(esc(meta.artist));
+  if (meta.key)    mp.push('Key: ' + esc(meta.key));
+  if (meta.tempo)  mp.push(esc(meta.tempo) + ' BPM');
+  const metaLine = mp.join(' &nbsp;·&nbsp; ');
+  const capoBadge = meta.capo ? '<span class="capo-badge">Capo ' + esc(meta.capo) + '</span>' : '';
+  if (metaLine || capoBadge) out.push('<div class="song-meta">' + metaLine + capoBadge + '</div>');
+  out.push('</div>');
+
+  var _hasCZS = sections.some(function(s) { return s.type === 'col-zone-start'; });
+  var _hasCZE = sections.some(function(s) { return s.type === 'col-zone-end'; });
+  var effSections = (_hasCZE && !_hasCZS)
+    ? [{ type: 'col-zone-start', lines: [], label: '', nav: false }].concat(sections)
+    : sections;
+
+  var secIdx = 0;
+  var inColZone = false;
+  for (const sec of effSections) {
+    if (sec.type === 'col-zone-start') { out.push('<div class="col-zone">'); inColZone = true; continue; }
+    if (sec.type === 'col-zone-end')   { out.push('</div>'); inColZone = false; continue; }
+    if (sec.type === 'side-panel') {
+      out.push('<div class="section section-side-panel">');
+      out.push(_spGroupsHtml(sec.items || [], transpose));
+      out.push('</div>');
+      continue;
+    }
+    out.push('<div class="section section-' + sec.type + '" id="sec-' + (secIdx++) + '"' + (sec.nav ? ' data-nav="1"' : '') + '>');
+    if (sec.label) out.push('<div class="section-label">' + esc(sec.label) + '</div>');
+
+    if (sec.type === 'tab') {
+      out.push('<pre class="tab-block">');
+      for (const l of sec.lines) if (l.type === 'tab') out.push(esc(l.text));
+      out.push('</pre>');
+    } else if (sec.type === 'grid') {
+      out.push('<pre class="grid-block">');
+      for (const l of sec.lines) if (l.type === 'grid-line') out.push(renderGridLine(l.text, transpose));
+      out.push('</pre>');
+    } else {
+      for (const l of sec.lines) {
+        if (l.type === 'chord-line') {
+          out.push('<div class="chord-line">');
+          for (const s of l.segs) {
+            var dc = transposeChordName(s.chord || '', transpose || 0);
+            var tight = s.lyric && s.lyric.length > 0 && s.lyric[s.lyric.length - 1] !== ' ';
+            out.push('<span class="pair' + (tight ? ' tight' : '') + '">'
+              + '<span class="chord"' + (dc ? ' data-chord="' + esc(dc) + '"' : '') + '>'
+              + (dc ? esc(dc) : '&nbsp;') + '</span>'
+              + '<span class="lyric">'  + esc(s.lyric || ' ') + '</span>'
+              + '</span>');
+          }
+          out.push('</div>');
+        } else if (l.type === 'lyric')        out.push('<div class="lyric-line">'  + safeFmt(l.text) + '</div>');
+        else if   (l.type === 'comment')      out.push('<div class="comment">'      + safeFmt(l.text) + '</div>');
+        else if   (l.type === 'comment-box')  out.push('<div class="comment comment-box">' + safeFmt(l.text) + '</div>');
+        else if   (l.type === 'chorus-ref')   out.push('<div class="chorus-ref">[ Chorus ]</div>');
+        else if   (l.type === 'empty')        out.push('<div class="empty-line"></div>');
+        else if   (l.type === 'page-break')   out.push('<hr class="page-break">');
+        else if   (l.type === 'chord-diagram')out.push('<div class="chord-diagram-cell" data-chord="' + esc(transposeChordName(l.name, transpose || 0)) + '"></div>');
+      }
+    }
+    out.push('</div>');
+  }
+  if (inColZone) out.push('</div>');
+  return out.join('\\n');
+}
+
+// ── Chord diagram tooltips ────────────────────────────────────────────────────
+var tip = document.createElement('div');
+tip.id = 'chord-tip';
+document.body.appendChild(tip);
+
+function showTip(el, e) {
+  var name = el.dataset.chord;
+  var svg  = CHORD_SVGS[name];
+  if (!svg) {
+    var rm = name && name.match(/^([A-G][b#]?)(.*)/);
+    if (rm) {
+      var si = _SH.indexOf(rm[1]), fi = _FL.indexOf(rm[1]);
+      if (si >= 0) svg = CHORD_SVGS[_FL[si] + rm[2]];
+      if (!svg && fi >= 0) svg = CHORD_SVGS[_SH[fi] + rm[2]];
+    }
+  }
+  if (!svg) return;
+  tip.innerHTML = svg + '<div>' + name + '</div>';
+  tip.style.display = 'block';
+  positionTip(e);
+}
+function positionTip(e) {
+  var x = e.clientX + 12, y = e.clientY + 16;
+  if (x + 130 > window.innerWidth)  x = e.clientX - 130;
+  if (y + 160 > window.innerHeight) y = e.clientY - 160;
+  tip.style.left = x + 'px';
+  tip.style.top  = y + 'px';
+}
+function hideTip() { tip.style.display = 'none'; }
+
+function bindTooltips() {
+  document.querySelectorAll('.chord[data-chord]').forEach(function(el) {
+    el.addEventListener('mouseenter', function(e) { showTip(el, e); });
+    el.addEventListener('mousemove',  function(e) { positionTip(e); });
+    el.addEventListener('mouseleave', hideTip);
+  });
+}
+
+function populateChordDiagrams() {
+  document.querySelectorAll('.chord-diagram-cell[data-chord]').forEach(function(cell) {
+    var name = cell.dataset.chord;
+    var svg = CHORD_SVGS[name];
+    if (!svg) {
+      var rm = name && name.match(/^([A-G][b#]?)(.*)/);
+      if (rm) {
+        var si = _SH.indexOf(rm[1]), fi = _FL.indexOf(rm[1]);
+        if (si >= 0) svg = CHORD_SVGS[_FL[si] + rm[2]];
+        if (!svg && fi >= 0) svg = CHORD_SVGS[_SH[fi] + rm[2]];
+      }
+    }
+    if (svg) cell.innerHTML = svg + '<div class="cd-label">' + name + '</div>';
+  });
+}
+
+// ── Progress bar ─────────────────────────────────────────────────────────────
+var progressBar = document.getElementById('progress-bar');
+function updateProgress() {
+  var scrollable = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+  progressBar.style.width = Math.min(100, (window.scrollY / scrollable) * 100) + '%';
+}
+window.addEventListener('scroll', updateProgress, { passive: true });
+
+// ── Col-zone class sync ───────────────────────────────────────────────────
+function applyColZones() {
+  var hasCZ = PARSED.sections.some(function(s) { return s.type === 'col-zone-start' || s.type === 'col-zone-end'; });
+  document.getElementById('song').classList.toggle('has-col-zones', hasCZ);
+}
+
+// ── Chord Legend ──────────────────────────────────────────────────────────
+var legendEndEl  = document.getElementById('legend-end');
+var legendSideEl = document.getElementById('legend-side');
+function _getChordSvg(name) {
+  var svg = CHORD_SVGS[name];
+  if (!svg) {
+    var rm = name && name.match(/^([A-G][b#]?)(.*)/);
+    if (rm) {
+      var si = _SH.indexOf(rm[1]), fi = _FL.indexOf(rm[1]);
+      if (si >= 0) svg = CHORD_SVGS[_FL[si] + rm[2]];
+      if (!svg && fi >= 0) svg = CHORD_SVGS[_SH[fi] + rm[2]];
+    }
+  }
+  return svg || '';
+}
+function updateLegend() {
+  var seen = {}, names = [];
+  document.querySelectorAll('.chord[data-chord]').forEach(function(el) {
+    if (!seen[el.dataset.chord]) { seen[el.dataset.chord] = true; names.push(el.dataset.chord); }
+  });
+  document.querySelectorAll('.chord-diagram-cell[data-chord]').forEach(function(el) {
+    if (!seen[el.dataset.chord]) { seen[el.dataset.chord] = true; names.push(el.dataset.chord); }
+  });
+  names.sort();
+  var html = names.map(function(n) {
+    var svg = _getChordSvg(n);
+    return svg ? '<div class="chord-diagram-cell">' + svg + '<div class="cd-label">' + esc(n) + '</div></div>' : '';
+  }).join('');
+  legendEndEl.querySelector('.legend-grid').innerHTML  = html;
+  legendSideEl.querySelector('.legend-grid').innerHTML = html;
+  legendEndEl.classList.toggle('active', legendMode === 1);
+  legendSideEl.classList.toggle('active', legendMode === 2);
+  document.body.classList.toggle('legend-side-on', legendMode === 2);
+}
+
+// ── Custom side panel ─────────────────────────────────────────────────────────
+var customPanelEl = document.getElementById('custom-side-panel');
+function renderCustomPanel() {
+  var sp = PARSED.sections.find(function(s) { return s.type === 'side-panel'; });
+  if (!sp) { customPanelEl.innerHTML = ''; return; }
+  customPanelEl.innerHTML = _spGroupsHtml(sp.items || [], previewTranspose);
+  customPanelEl.querySelectorAll('.chord-diagram-cell[data-chord]').forEach(function(cell) {
+    var svg = _getChordSvg(cell.dataset.chord);
+    if (svg) cell.innerHTML = svg + '<div class="cd-label">' + esc(cell.dataset.chord) + '</div>';
+  });
+}
+function applyCustomPanel() {
+  var hasSP = PARSED.sections.some(function(s) { return s.type === 'side-panel'; });
+  var pmRow = document.getElementById('panel-mode-row');
+  if (pmRow) pmRow.style.display = hasSP ? '' : 'none';
+  var legendSideRadio = document.querySelector('input[name="legend-mode"][value="2"]');
+  if (legendSideRadio) {
+    legendSideRadio.disabled = hasSP;
+    var lsLabel = legendSideRadio.closest('label');
+    if (lsLabel) lsLabel.title = hasSP ? 'Disabled: custom side panel is active' : '';
+    if (hasSP && legendMode === 2) { legendMode = 0; updateLegend(); }
+  }
+  if (!hasSP) {
+    customPanelEl.classList.remove('active');
+    document.body.classList.remove('csp-side-on');
+    return;
+  }
+  var isSide = panelMode === 'side';
+  customPanelEl.classList.toggle('active', isSide);
+  document.body.classList.toggle('csp-side-on', isSide);
+  if (isSide) renderCustomPanel();
+}
+
+// ── Rerender ──────────────────────────────────────────────────────────────────
+function rerender() {
+  document.getElementById('song').innerHTML = render(PARSED, previewTranspose);
+  applyColZones();
+  bindTooltips();
+  populateChordDiagrams();
+  updateLegend();
+  applyCustomPanel();
+  if (typeof tempoSpeed !== 'undefined' && tempoSpeed)
+    setTimeout(function() { applyTempoSpeed(PARSED.meta, false, true); }, 100);
+}
+
+// ── Settings panel ────────────────────────────────────────────────────────
+var _sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+var settingsPopup = document.getElementById('settings-popup');
+var settingsBtn   = document.getElementById('settings-btn');
+
+settingsBtn.addEventListener('click', function(e) {
+  e.stopPropagation();
+  if (typeof exportPopup !== 'undefined') exportPopup.classList.remove('open');
+  var open = settingsPopup.classList.toggle('open');
+  settingsBtn.classList.toggle('open', open);
+});
+document.addEventListener('click', function(e) {
+  if (!settingsBtn.contains(e.target) && !settingsPopup.contains(e.target)) {
+    settingsPopup.classList.remove('open');
+    settingsBtn.classList.remove('open');
+  }
+});
+
+document.querySelectorAll('input[name="legend-mode"]').forEach(function(r) {
+  r.addEventListener('change', function() {
+    legendMode = parseInt(this.value, 10);
+    updateLegend();
+    savePerfSettings();
+  });
+});
+
+var legendSzSlider = document.getElementById('legend-sz');
+var legendSzVal    = document.getElementById('legend-sz-val');
+legendSzSlider.addEventListener('input', function() {
+  document.body.style.setProperty('--legend-svg-w', this.value + 'px');
+  legendSzVal.textContent = this.value + 'px';
+  savePerfSettings();
+});
+document.body.style.setProperty('--legend-svg-w', legendSzSlider.value + 'px');
+
+var songSzSlider = document.getElementById('song-sz');
+var songSzVal    = document.getElementById('song-sz-val');
+songSzSlider.addEventListener('input', function() {
+  document.body.style.setProperty('--song-svg-w', this.value + 'px');
+  songSzVal.textContent = this.value + 'px';
+  savePerfSettings();
+});
+document.body.style.setProperty('--song-svg-w', songSzSlider.value + 'px');
+
+(function() {
+  var cur = _sysDark ? 'dark' : 'light';
+  var radios = document.querySelectorAll('input[name="theme-mode"]');
+  radios.forEach(function(r) { if (r.value === cur) r.checked = true; });
+  radios.forEach(function(r) {
+    r.addEventListener('change', function() {
+      document.documentElement.dataset.theme = this.value;
+      savePerfSettings();
+    });
+  });
+})();
+
+var colSlider = document.getElementById('col-slider');
+var colVal    = document.getElementById('col-val');
+function applyColCount(n) {
+  var song = document.getElementById('song');
+  song.classList.remove('multi-col');
+  song.style.removeProperty('--col-count');
+  if (n >= 2) { song.style.setProperty('--col-count', n); song.classList.add('multi-col'); }
+}
+colSlider.addEventListener('input', function() {
+  var n = parseInt(this.value, 10);
+  colVal.textContent = n;
+  applyColCount(n);
+  savePerfSettings();
+});
+
+document.querySelectorAll('input[name="panel-mode"]').forEach(function(r) {
+  r.addEventListener('change', function() {
+    panelMode = this.value;
+    applyCustomPanel();
+    savePerfSettings();
+  });
+});
+
+var panelWSlider = document.getElementById('panel-w-slider');
+var panelWVal    = document.getElementById('panel-w-val');
+panelWSlider.addEventListener('input', function() {
+  document.body.style.setProperty('--panel-w', this.value + 'px');
+  panelWVal.textContent = this.value + 'px';
+  savePerfSettings();
+});
+document.body.style.setProperty('--panel-w', panelWSlider.value + 'px');
+
+// ── Font size ─────────────────────────────────────────────────────────────────
+function changeFontSize(delta) {
+  fontSize = Math.max(11, Math.min(28, fontSize + delta));
+  document.body.style.fontSize = fontSize + 'px';
+  document.body.style.setProperty('--section-gap', Math.round(22 * fontSize / 17) + 'px');
+  if (typeof tempoSpeed !== 'undefined' && tempoSpeed)
+    setTimeout(function() { applyTempoSpeed(PARSED.meta, false, true); }, 100);
+  savePerfSettings();
+}
+document.getElementById('font-smaller').addEventListener('click', function() { changeFontSize(-1); });
+document.getElementById('font-larger').addEventListener('click',  function() { changeFontSize(+1); });
+
+// ── Lyrics only ───────────────────────────────────────────────────────────────
+var lyricsBtn = document.getElementById('lyrics-btn');
+lyricsBtn.addEventListener('click', function() {
+  var on = document.getElementById('song').classList.toggle('lyrics-only');
+  lyricsBtn.classList.toggle('active', on);
+});
+
+// ── Live transpose ─────────────────────────────────────────────────────────────
+var transLabel = document.getElementById('trans-label');
+function _updateTransLabel() {
+  transLabel.textContent = previewTranspose > 0 ? '+' + previewTranspose
+                         : previewTranspose < 0 ? String(previewTranspose) : '0';
+  transLabel.classList.toggle('active', previewTranspose !== 0);
+}
+document.getElementById('trans-down').addEventListener('click', function() {
+  previewTranspose--; _updateTransLabel(); rerender();
+});
+document.getElementById('trans-up').addEventListener('click', function() {
+  previewTranspose++; _updateTransLabel(); rerender();
+});
+`;
+
+// ─────────────────────────────────────────────
 
 function activate(context) {
     // Register the renderChordPro command
@@ -2664,8 +3396,10 @@ function activate(context) {
                     else vscode.window.showInformationMessage('Saved: ' + path.basename(outPath));
                 });
             } else if (msg.command === 'enterFullscreen') {
+                scrollPanel.reveal(scrollPanel.viewColumn, false);
                 vscode.commands.executeCommand('workbench.action.maximizeEditorHideSidebar');
             } else if (msg.command === 'exitFullscreen') {
+                scrollPanel.reveal(scrollPanel.viewColumn, false);
                 vscode.commands.executeCommand('workbench.action.evenEditorWidths');
                 vscode.commands.executeCommand('workbench.action.toggleSidebarVisibility');
             }
@@ -2683,34 +3417,7 @@ function activate(context) {
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:;">
 <style>
-:root {
-  --bg: #fafaf8; --fg: #1a1a1a; --fg-dim: #555; --fg-muted: #888;
-  --border: #ddd; --chord: #1a5fb4;
-  --sec-chorus-bg: #e8f0fe; --sec-chorus-fg: #2a5bbf;
-  --sec-verse-bg: #f0f0f0;  --sec-verse-fg: #555;
-  --sec-bridge-bg: #fef0d0; --sec-bridge-fg: #a05000;
-  --sec-tab-bg: #f0f4e8;    --sec-tab-fg: #4a6a20;
-  --sec-xsec-bg: #e0f4f4;   --sec-xsec-fg: #1a7a7a;
-  --tab-bg: #f4f4f0; --tab-border: #bbb;
-  --tip-bg: #fff; --tip-border: #ccc; --tip-fg: #333;
-  --capo-bg: #ffe8b0; --capo-fg: #7a4000;
-  --panel-bg: rgba(245,245,243,0.97); --panel-border: #ccc;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1e1e1e; --fg: #d4d4d4; --fg-dim: #999; --fg-muted: #666;
-    --border: #444; --chord: #79b8ff;
-    --sec-chorus-bg: #1e2a4a; --sec-chorus-fg: #79b8ff;
-    --sec-verse-bg: #2a2a2a;  --sec-verse-fg: #aaa;
-    --sec-bridge-bg: #3a2a10; --sec-bridge-fg: #e8a050;
-    --sec-tab-bg: #1e2a14;    --sec-tab-fg: #90c040;
-    --sec-xsec-bg: #0e2a2a;   --sec-xsec-fg: #5cc8c8;
-    --tab-bg: #252525; --tab-border: #555;
-    --tip-bg: #2d2d2d; --tip-border: #555; --tip-fg: #ccc;
-    --capo-bg: #4a3010; --capo-fg: #ffcc60;
-    --panel-bg: rgba(20,20,20,0.93); --panel-border: #444;
-  }
-}
+${SHARED_SONG_CSS}
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   font-family: Georgia, serif; font-size: 17px; line-height: 1.6;
@@ -2826,42 +3533,7 @@ body {
 #metro-btn:not(:disabled):hover { opacity: 1; }
 #metro-btn.active { opacity: 1; color: #ffd700; border-color: #ffd700; }
 #font-smaller, #font-larger { font-size: 11px; font-family: sans-serif; letter-spacing: -0.5px; border-radius: 6px !important; width: auto !important; padding: 0 7px !important; }
-/* ── Theme manual override (takes precedence over prefers-color-scheme) ───── */
-:root[data-theme="light"] {
-  --bg: #fafaf8; --fg: #1a1a1a; --fg-dim: #555; --fg-muted: #888;
-  --border: #ddd; --chord: #1a5fb4;
-  --sec-chorus-bg: #e8f0fe; --sec-chorus-fg: #2a5bbf;
-  --sec-verse-bg: #f0f0f0;  --sec-verse-fg: #555;
-  --sec-bridge-bg: #fef0d0; --sec-bridge-fg: #a05000;
-  --sec-tab-bg: #f0f4e8;    --sec-tab-fg: #4a6a20;
-  --tab-bg: #f4f4f0; --tab-border: #bbb;
-  --tip-bg: #fff; --tip-border: #ccc; --tip-fg: #333;
-  --capo-bg: #ffe8b0; --capo-fg: #7a4000;
-  --panel-bg: rgba(245,245,243,0.97); --panel-border: #ccc;
-}
-:root[data-theme="dark"] {
-  --bg: #1e1e1e; --fg: #d4d4d4; --fg-dim: #999; --fg-muted: #666;
-  --border: #444; --chord: #79b8ff;
-  --sec-chorus-bg: #1e2a4a; --sec-chorus-fg: #79b8ff;
-  --sec-verse-bg: #2a2a2a;  --sec-verse-fg: #aaa;
-  --sec-bridge-bg: #3a2a10; --sec-bridge-fg: #e8a050;
-  --sec-tab-bg: #1e2a14;    --sec-tab-fg: #90c040;
-  --tab-bg: #252525; --tab-border: #555;
-  --tip-bg: #2d2d2d; --tip-border: #555; --tip-fg: #ccc;
-  --capo-bg: #4a3010; --capo-fg: #ffcc60;
-  --panel-bg: rgba(20,20,20,0.93); --panel-border: #444;
-}
-/* ── Multi-column layout ──────────────────────────────────────────────────── */
-#song.multi-col { column-count: var(--col-count,2); column-gap: 2em; column-rule: 1px solid var(--border); }
-#song.multi-col .section { break-inside: avoid-column; }
-#song.multi-col .song-header { column-span: all; }
-/* Column zones: when {x_columns_on}/{x_columns_off} are used, only the marked zone gets columns */
-#song.has-col-zones.multi-col { column-count: 1; column-rule: none; }
-#song.has-col-zones.multi-col .col-zone { column-count: var(--col-count,2); column-gap: 2em; column-rule: 1px solid var(--border); }
-#song.has-col-zones.multi-col .col-zone .section { break-inside: avoid-column; }
-/* ── Additional button styles ────────────────────────────────────────────── */
-#settings-btn { font-size: 20px; opacity: 0.7; }
-#settings-btn:hover, #settings-btn.open { opacity: 1; }
+/* ── Performance view button styles ──────────────────────────────────────── */
 #trans-down, #trans-up { font-size: 13px; }
 #trans-label { min-width: 28px; text-align: center; font-size: 12px; color: #aaa; padding: 0 2px; }
 #trans-label.active { color: #ffd700; }
@@ -2869,10 +3541,6 @@ body {
 #lyrics-btn { font-size: 11px; font-family: sans-serif; border-radius: 6px !important; width: auto !important; padding: 0 7px !important; }
 #lyrics-btn.active { color: #ffd700; border-color: #ffd700; }
 #fs-btn     { font-size: 14px; }
-/* ── Lyrics-only mode ────────────────────────────────────────────────────── */
-.chord { transition: opacity 0.2s, height 0.2s, min-height 0.2s; }
-#song.lyrics-only .chord { opacity: 0; height: 0; min-height: 0; overflow: hidden; }
-#song.lyrics-only .chord-line { margin-bottom: 2px; line-height: inherit; }
 /* ── Export popup ────────────────────────────────────────────────────────── */
 #export-popup {
   display: none; position: fixed; bottom: 100px; right: 24px;
@@ -2889,71 +3557,6 @@ body {
 .exp-item:hover { background: #3a3a3a; }
 #export-btn { font-size: 14px; opacity: 0.7; }
 #export-btn:hover { opacity: 1; }
-/* ── Chord Legend ─────────────────────────────────────────────────────────── */
-#legend-end { display: none; margin-top: 48px; padding-top: 24px; border-top: 2px solid var(--border); }
-#legend-end.active { display: block; }
-#legend-side {
-  display: none; position: fixed; right: 0; top: 0; bottom: 0; width: var(--panel-w, 200px);
-  overflow-y: auto; padding: 16px 12px 80px; z-index: 9990;
-  background: var(--panel-bg); border-left: 1px solid var(--panel-border);
-  font-family: sans-serif;
-}
-#legend-side.active { display: flex; flex-direction: column; }
-body.legend-side-on { padding-right: calc(var(--panel-w, 200px) + 10px); }
-/* ── Custom side panel ──────────────────────────────────────────────────────── */
-#custom-side-panel {
-  display: none; position: fixed; right: 0; top: 0; bottom: 0; width: var(--panel-w, 200px);
-  overflow-y: auto; padding: 16px 12px 80px; z-index: 9989;
-  background: var(--panel-bg); border-left: 1px solid var(--panel-border);
-  font-family: sans-serif; color: var(--fg);
-}
-#custom-side-panel.active { display: flex; flex-direction: column; gap: 16px; }
-body.csp-side-on { padding-right: calc(var(--panel-w, 200px) + 10px); }
-body.csp-side-on .section-side-panel { display: none; }
-.csp-group { display: flex; flex-direction: column; gap: 8px; }
-.csp-section-badge {
-  font-size: 11px; font-weight: bold; color: #9d8ef5; text-transform: uppercase;
-  letter-spacing: 0.8px; padding: 3px 10px; background: rgba(124,109,240,0.18);
-  border-radius: 5px; align-self: flex-start; border: 1px solid rgba(124,109,240,0.35);
-}
-.csp-chord-grid { display: flex; flex-wrap: wrap; gap: 8px 6px; }
-.section-side-panel {
-  background: rgba(128,128,128,0.1); border: 1px solid var(--border);
-  border-radius: 8px; padding: 12px 14px; margin-bottom: 10px;
-}
-.section-side-panel .csp-group {
-  flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 6px 12px;
-}
-.section-side-panel .csp-section-badge {
-  writing-mode: vertical-rl; transform: rotate(180deg); margin-right: 6px;
-  align-self: stretch; display: flex; align-items: center; justify-content: center;
-  border-radius: 4px; padding: 6px 4px; letter-spacing: 1px;
-}
-.section-side-panel .csp-chord-grid { flex: 1; }
-.legend-title { font-size: 11px; font-weight: bold; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
-.legend-grid { display: flex; flex-wrap: wrap; gap: 10px 8px; }
-/* ── Settings popup ───────────────────────────────────────────────────────── */
-#settings-popup {
-  display: none; position: fixed; bottom: 100px; right: 24px;
-  background: rgba(20,20,20,0.97); border: 1px solid #555; border-radius: 10px;
-  padding: 14px 16px; z-index: 9997; min-width: 260px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.5); font-family: sans-serif;
-}
-#settings-popup.open { display: block; }
-.set-title { font-size: 11px; font-weight: bold; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
-.set-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.set-row:last-child { margin-bottom: 0; }
-.set-label { font-size: 12px; color: #aaa; flex-shrink: 0; width: 118px; }
-.set-radios { display: flex; gap: 10px; flex-wrap: wrap; }
-.set-radios label { font-size: 12px; color: #eee; display: flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap; }
-.set-radios input[type="radio"] { cursor: pointer; accent-color: #7c6df0; }
-.set-slider { flex: 1; accent-color: #7c6df0; cursor: pointer; min-width: 80px; }
-.set-val { font-size: 11px; color: #888; min-width: 34px; text-align: right; }
-/* Diagram size CSS variables */
-#legend-end .legend-grid svg, #legend-side .legend-grid svg,
-#custom-side-panel .chord-diagram-cell svg,
-.section-side-panel .chord-diagram-cell svg { width: var(--legend-svg-w, 80px); height: auto; }
-#song .chord-diagram-cell svg { width: var(--song-svg-w, 110px); height: auto; }
 /* ── Print ────────────────────────────────────────────────────────────────── */
 @media print {
   #scroll-bar, #progress-bar, #legend-side, #settings-popup { display: none !important; }
@@ -2974,57 +3577,10 @@ body.csp-side-on .section-side-panel { display: none; }
 <body>
 <div id="progress-bar"></div>
 <div id="song"></div>
-<div id="legend-end"><div class="legend-title">Chords used</div><div class="legend-grid"></div></div>
-<div id="legend-side"><div class="legend-title">Chords</div><div class="legend-grid"></div></div>
-<div id="custom-side-panel"></div>
+${SHARED_SONG_HTML}
 <div id="export-popup">
   <button class="exp-item" id="exp-html">💾 Save as HTML</button>
   <button class="exp-item" id="exp-pdf">🖨 Print / PDF</button>
-</div>
-<div id="settings-popup">
-  <div class="set-title">⚙ Settings</div>
-  <div class="set-row">
-    <span class="set-label">Chord legend</span>
-    <div class="set-radios">
-      <label><input type="radio" name="legend-mode" value="0" checked> Off</label>
-      <label><input type="radio" name="legend-mode" value="1"> End of page</label>
-      <label><input type="radio" name="legend-mode" value="2"> Side panel</label>
-    </div>
-  </div>
-  <div class="set-row">
-    <span class="set-label">Legend diagram size</span>
-    <input type="range" class="set-slider" id="legend-sz" min="40" max="200" step="10" value="80">
-    <span class="set-val" id="legend-sz-val">80px</span>
-  </div>
-  <div class="set-row">
-    <span class="set-label">Song diagram size</span>
-    <input type="range" class="set-slider" id="song-sz" min="40" max="200" step="10" value="110">
-    <span class="set-val" id="song-sz-val">110px</span>
-  </div>
-  <div class="set-row">
-    <span class="set-label">Theme</span>
-    <div class="set-radios" id="theme-radios">
-      <label><input type="radio" name="theme-mode" value="dark"> Dark</label>
-      <label><input type="radio" name="theme-mode" value="light"> Light</label>
-    </div>
-  </div>
-  <div class="set-row">
-    <span class="set-label">Columns</span>
-    <input type="range" class="set-slider" id="col-slider" min="1" max="6" step="1" value="1">
-    <span class="set-val" id="col-val">1</span>
-  </div>
-  <div class="set-row" id="panel-mode-row" style="display:none">
-    <span class="set-label">Side panel</span>
-    <div class="set-radios">
-      <label><input type="radio" name="panel-mode" value="side" checked> Side</label>
-      <label><input type="radio" name="panel-mode" value="inline"> Inline</label>
-    </div>
-  </div>
-  <div class="set-row">
-    <span class="set-label">Panel width</span>
-    <input type="range" class="set-slider" id="panel-w-slider" min="120" max="600" step="10" value="200">
-    <span class="set-val" id="panel-w-val">200px</span>
-  </div>
 </div>
 <div id="scroll-bar">
   <div class="ctrl-group">
@@ -3062,487 +3618,8 @@ body.csp-side-on .section-side-panel { display: none; }
   <button id="settings-btn" title="Settings">⚙</button>
 </div>
 <script>
-// ── Browser transpose helpers ─────────────────────────────────────────────
-var _SH = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-var _FL = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
-function _tn(root, n) {
-  var fi = _FL.indexOf(root), si = _SH.indexOf(root);
-  var pf = fi !== -1 && si === -1;
-  var idx = si !== -1 ? si : fi;
-  if (idx < 0) return root;
-  return (pf ? _FL : _SH)[((idx + n) % 12 + 12) % 12];
-}
-function transposeChordName(chord, n) {
-  if (!n) return chord;
-  var sl = chord.indexOf('/');
-  var main = sl >= 0 ? chord.slice(0, sl) : chord;
-  var bass = sl >= 0 ? chord.slice(sl + 1) : null;
-  var rm   = main.match(/^([A-G][b#]?)(.*)/);
-  if (!rm) return chord;
-  return _tn(rm[1], n) + rm[2] + (bass ? '/' + _tn(bass, n) : '');
-}
-var previewTranspose = 0;
-
-// ── ChordPro parser ──────────────────────────────────────────────────────────
-function parseChordLine(line) {
-  const segs = [], re = /\\[([^\\]]*)\\]/g;
-  let last = 0, pending = null, m;
-  while ((m = re.exec(line)) !== null) {
-    const before = line.slice(last, m.index);
-    if (pending !== null || before) segs.push({ chord: pending || '', lyric: before });
-    pending = m[1]; last = m.index + m[0].length;
-  }
-  const tail = line.slice(last);
-  if (pending !== null || tail) segs.push({ chord: pending || '', lyric: tail });
-  return segs;
-}
-
-function parse(text) {
-  const meta = { title: '', subtitle: '', artist: '', key: '', capo: '', tempo: '' };
-  const sections = [];
-  let cur = { type: 'verse', label: '', lines: [], nav: false };
-  let inSidePanel = null; // points to the active side-panel section while inside the block
-
-  function flush() { if (cur.lines.length) { sections.push(cur); } }
-  function next(type, label, nav) { flush(); cur = { type, label, lines: [], nav: !!nav }; }
-
-  for (const raw of text.split(/\\r?\\n/)) {
-    const line = raw.trimEnd();
-    if (/^\\s*#/.test(line)) continue;                          // comment/param line
-
-    const dir = line.trim().match(/^\\{([^}]+)\\}$/);
-    if (dir) {
-      const ci = dir[1].indexOf(':');
-      const k = (ci >= 0 ? dir[1].slice(0, ci) : dir[1]).trim().toLowerCase();
-      const v = ci >= 0 ? dir[1].slice(ci + 1).trim() : '';
-      if (k === 'title'  || k === 't')   { meta.title    = v; continue; }
-      if (k === 'subtitle'||k === 'st')  { meta.subtitle = v; continue; }
-      if (k === 'artist')                { meta.artist   = v; continue; }
-      if (k === 'key')                   { meta.key      = v; continue; }
-      if (k === 'capo')                  { meta.capo     = v; continue; }
-      if (k === 'tempo')                 { meta.tempo    = v; continue; }
-      if (k === 'start_of_chorus'||k==='soc') { next('chorus',     v||'Chorus',  true);  continue; }
-      if (k === 'end_of_chorus'  ||k==='eoc') { next('verse',      '',           false); continue; }
-      if (k === 'start_of_verse' ||k==='sov') { next('verse',      v||'Verse',   true);  continue; }
-      if (k === 'end_of_verse'   ||k==='eov') { next('verse',      '',           false); continue; }
-      if (k === 'start_of_bridge'||k==='sob') { next('bridge',     v||'Bridge',  true);  continue; }
-      if (k === 'end_of_bridge'  ||k==='eob') { next('verse',      '',           false); continue; }
-      if (k === 'start_of_tab'   ||k==='sot') { next('tab',        v||'Tab',     true);  continue; }
-      if (k === 'end_of_tab'     ||k==='eot') { next('verse',      '',           false); continue; }
-      if (k === 'start_of_grid'  ||k==='sog') { next('grid',       v||'Grid',    true);  continue; }
-      if (k === 'end_of_grid'    ||k==='eog') { next('verse',      '',           false); continue; }
-      if (k === 'x_start_section')                  { next('x-section',  v||'Section', true);  continue; }
-      if (k === 'x_end_section')              { next('verse',      '',           false); continue; }
-      if (k === 'x_columns_on')  { flush(); sections.push({ type: 'col-zone-start', lines: [], label: '', nav: false }); cur = { type: 'verse', label: '', lines: [], nav: false }; continue; }
-      if (k === 'x_columns_off') { flush(); sections.push({ type: 'col-zone-end',   lines: [], label: '', nav: false }); cur = { type: 'verse', label: '', lines: [], nav: false }; continue; }
-      if (k === 'x_start_side_panel') { flush(); const _sp = { type: 'side-panel', items: [], label: '', nav: false, lines: [] }; sections.push(_sp); inSidePanel = _sp; cur = { type: 'verse', label: '', lines: [], nav: false }; continue; }
-      if (k === 'x_end_side_panel')   { inSidePanel = null; cur = { type: 'verse', label: '', lines: [], nav: false }; continue; }
-      if (k === 'x_panel_section_title') { if (inSidePanel) inSidePanel.items.push({ type: 'title', label: v }); continue; }
-      if (k === 'comment'||k==='c'||k==='highlight') { if (!inSidePanel) cur.lines.push({ type:'comment',     text:v }); continue; }
-      if (k === 'comment_italic' ||k==='ci')          { if (!inSidePanel) cur.lines.push({ type:'comment',     text:v }); continue; }
-      if (k === 'comment_box'    ||k==='cb')          { if (!inSidePanel) cur.lines.push({ type:'comment-box', text:v }); continue; }
-      if (k === 'chorus')                             { if (!inSidePanel) cur.lines.push({ type:'chorus-ref'         }); continue; }
-      if (k === 'new_page'||k==='np'||k==='new_physical_page'||k==='npp') { if (!inSidePanel) cur.lines.push({ type:'page-break' }); continue; }
-      if (k === 'chord' && v && !v.includes('frets')) {
-        if (inSidePanel) { inSidePanel.items.push({ type: 'chord', name: v.trim() }); continue; }
-        cur.lines.push({ type:'chord-diagram', name:v.trim() }); continue;
-      }
-      continue;   // define, column_break, image, …
-    }
-
-    if (inSidePanel) continue; // skip non-directive lines inside side panel block
-    if (cur.type === 'tab')  { cur.lines.push({ type:'tab',       text:line }); continue; }
-    if (cur.type === 'grid') { cur.lines.push({ type:'grid-line', text:line }); continue; }
-    if (!line.trim())        { cur.lines.push({ type:'empty' });                continue; }
-    if (line.includes('['))  { cur.lines.push({ type:'chord-line', segs: parseChordLine(line) }); }
-    else                     { cur.lines.push({ type:'lyric', text:line }); }
-  }
-  flush();
-  return { meta, sections };
-}
-
-// ── HTML renderer ────────────────────────────────────────────────────────────
-function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-function safeFmt(s) {
-  return esc(s).replace(new RegExp('&lt;(\\/?(b|i|em|strong|u|s))&gt;', 'gi'), '\x3c$1\x3e');
-}
-function _spGroupsHtml(items, transpose) {
-  var groups = [];
-  var grp = { label: '', chords: [] };
-  (items || []).forEach(function(item) {
-    if (item.type === 'title') {
-      if (grp.chords.length || grp.label) groups.push(grp);
-      grp = { label: item.label, chords: [] };
-    } else if (item.type === 'chord') {
-      grp.chords.push(item.name);
-    }
-  });
-  if (grp.chords.length || grp.label) groups.push(grp);
-  return groups.map(function(g) {
-    var cells = g.chords.map(function(n) {
-      var tn = transposeChordName(n, transpose || 0);
-      return '<div class="chord-diagram-cell" data-chord="' + esc(tn) + '"></div>';
-    }).join('');
-    var badge = g.label ? '<div class="csp-section-badge">' + esc(g.label) + '</div>' : '';
-    return '<div class="csp-group">' + badge + '<div class="csp-chord-grid">' + cells + '</div></div>';
-  }).join('');
-}
-function renderGridLine(text, transpose) {
-  return text.split(' ').map(function(tok) {
-    if (tok && /^[A-G][b#]?[^|.]*$/.test(tok) && tok !== '.') {
-      var dc = transposeChordName(tok, transpose || 0);
-      return '\x3cspan class="chord" data-chord="' + esc(dc) + '"\x3e' + esc(dc) + '\x3c/span\x3e';
-    }
-    return esc(tok);
-  }).join(' ');
-}
-
-function render({ meta, sections }, transpose) {
-  const out = ['<div class="song-header">'];
-  if (meta.title)    out.push('<div class="song-title">'    + esc(meta.title)    + '</div>');
-  if (meta.subtitle) out.push('<div class="song-subtitle">' + esc(meta.subtitle) + '</div>');
-  const mp = [];
-  if (meta.artist) mp.push(esc(meta.artist));
-  if (meta.key)    mp.push('Key: ' + esc(meta.key));
-  if (meta.tempo)  mp.push(esc(meta.tempo) + ' BPM');
-  const metaLine = mp.join(' &nbsp;·&nbsp; ');
-  const capoBadge = meta.capo ? '<span class="capo-badge">Capo ' + esc(meta.capo) + '</span>' : '';
-  if (metaLine || capoBadge) out.push('<div class="song-meta">' + metaLine + capoBadge + '</div>');
-  out.push('</div>');
-
-  // Balance col-zones: {x_columns_off} alone → implicit zone from start of song
-  var _hasCZS = sections.some(function(s) { return s.type === 'col-zone-start'; });
-  var _hasCZE = sections.some(function(s) { return s.type === 'col-zone-end'; });
-  var effSections = (_hasCZE && !_hasCZS)
-    ? [{ type: 'col-zone-start', lines: [], label: '', nav: false }].concat(sections)
-    : sections;
-
-  var secIdx = 0;
-  var inColZone = false;
-  for (const sec of effSections) {
-    if (sec.type === 'col-zone-start') { out.push('<div class="col-zone">'); inColZone = true; continue; }
-    if (sec.type === 'col-zone-end')   { out.push('</div>'); inColZone = false; continue; }
-    if (sec.type === 'side-panel') {
-      out.push('<div class="section section-side-panel">');
-      out.push(_spGroupsHtml(sec.items || [], transpose));
-      out.push('</div>');
-      continue;
-    }
-    out.push('<div class="section section-' + sec.type + '" id="sec-' + (secIdx++) + '"' + (sec.nav ? ' data-nav="1"' : '') + '>');
-    if (sec.label) out.push('<div class="section-label">' + esc(sec.label) + '</div>');
-
-    if (sec.type === 'tab') {
-      out.push('<pre class="tab-block">');
-      for (const l of sec.lines) if (l.type === 'tab') out.push(esc(l.text));
-      out.push('</pre>');
-    } else if (sec.type === 'grid') {
-      out.push('<pre class="grid-block">');
-      for (const l of sec.lines) if (l.type === 'grid-line') out.push(renderGridLine(l.text, transpose));
-      out.push('</pre>');
-    } else {
-      for (const l of sec.lines) {
-        if (l.type === 'chord-line') {
-          out.push('<div class="chord-line">');
-          for (const s of l.segs) {
-            var dc = transposeChordName(s.chord || '', transpose || 0);
-            var tight = s.lyric && s.lyric.length > 0 && s.lyric[s.lyric.length - 1] !== ' ';
-            out.push('<span class="pair' + (tight ? ' tight' : '') + '">'
-              + '<span class="chord"' + (dc ? ' data-chord="' + esc(dc) + '"' : '') + '>'
-              + (dc ? esc(dc) : '&nbsp;') + '</span>'
-              + '<span class="lyric">'  + esc(s.lyric || ' ') + '</span>'
-              + '</span>');
-          }
-          out.push('</div>');
-        } else if (l.type === 'lyric')        out.push('<div class="lyric-line">'  + safeFmt(l.text) + '</div>');
-        else if   (l.type === 'comment')      out.push('<div class="comment">'      + safeFmt(l.text) + '</div>');
-        else if   (l.type === 'comment-box')  out.push('<div class="comment comment-box">' + safeFmt(l.text) + '</div>');
-        else if   (l.type === 'chorus-ref')   out.push('<div class="chorus-ref">[ Chorus ]</div>');
-        else if   (l.type === 'empty')        out.push('<div class="empty-line"></div>');
-        else if   (l.type === 'page-break')   out.push('<hr class="page-break">');
-        else if   (l.type === 'chord-diagram')out.push('<div class="chord-diagram-cell" data-chord="' + esc(transposeChordName(l.name, transpose || 0)) + '"></div>');
-      }
-    }
-    out.push('</div>');
-  }
-  if (inColZone) out.push('</div>');
-  return out.join('\\n');
-}
-
-// ── Chord diagram tooltips ────────────────────────────────────────────────────
 var CHORD_SVGS = ${safeChordSvgs};
-
-var tip = document.createElement('div');
-tip.id = 'chord-tip';
-document.body.appendChild(tip);
-
-function showTip(el, e) {
-  var name = el.dataset.chord;
-  var svg  = CHORD_SVGS[name];
-  if (!svg) {
-    // Try enharmonic equivalent (C# ↔ Db, D# ↔ Eb, etc.)
-    var rm = name && name.match(/^([A-G][b#]?)(.*)/);
-    if (rm) {
-      var si = _SH.indexOf(rm[1]), fi = _FL.indexOf(rm[1]);
-      if (si >= 0) svg = CHORD_SVGS[_FL[si] + rm[2]];
-      if (!svg && fi >= 0) svg = CHORD_SVGS[_SH[fi] + rm[2]];
-    }
-  }
-  if (!svg) return;
-  tip.innerHTML = svg + '<div>' + name + '</div>';
-  tip.style.display = 'block';
-  positionTip(e);
-}
-function positionTip(e) {
-  var x = e.clientX + 12, y = e.clientY + 16;
-  if (x + 130 > window.innerWidth)  x = e.clientX - 130;
-  if (y + 160 > window.innerHeight) y = e.clientY - 160;
-  tip.style.left = x + 'px';
-  tip.style.top  = y + 'px';
-}
-function hideTip() { tip.style.display = 'none'; }
-
-function bindTooltips() {
-  document.querySelectorAll('.chord[data-chord]').forEach(function(el) {
-    el.addEventListener('mouseenter', function(e) { showTip(el, e); });
-    el.addEventListener('mousemove',  function(e) { positionTip(e); });
-    el.addEventListener('mouseleave', hideTip);
-  });
-}
-
-function populateChordDiagrams() {
-  document.querySelectorAll('.chord-diagram-cell[data-chord]').forEach(function(cell) {
-    var name = cell.dataset.chord;
-    var svg = CHORD_SVGS[name];
-    if (!svg) {
-      var rm = name && name.match(/^([A-G][b#]?)(.*)/);
-      if (rm) {
-        var si = _SH.indexOf(rm[1]), fi = _FL.indexOf(rm[1]);
-        if (si >= 0) svg = CHORD_SVGS[_FL[si] + rm[2]];
-        if (!svg && fi >= 0) svg = CHORD_SVGS[_SH[fi] + rm[2]];
-      }
-    }
-    if (svg) cell.innerHTML = svg + '<div class="cd-label">' + name + '</div>';
-  });
-}
-
-// ── Progress bar ─────────────────────────────────────────────────────────────
-var progressBar = document.getElementById('progress-bar');
-function updateProgress() {
-  var scrollable = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-  progressBar.style.width = Math.min(100, (window.scrollY / scrollable) * 100) + '%';
-}
-window.addEventListener('scroll', updateProgress, { passive: true });
-
-// ── Font size ─────────────────────────────────────────────────────────────────
-var fontSize = 17;
-function changeFontSize(delta) {
-  fontSize = Math.max(11, Math.min(28, fontSize + delta));
-  document.body.style.fontSize = fontSize + 'px';
-  document.body.style.setProperty('--section-gap', Math.round(22 * fontSize / 17) + 'px');
-  if (tempoSpeed) setTimeout(function() { applyTempoSpeed(PARSED.meta, false, true); }, 100);
-  savePerfSettings();
-}
-document.getElementById('font-smaller').addEventListener('click', function() { changeFontSize(-1); });
-document.getElementById('font-larger').addEventListener('click',  function() { changeFontSize(+1); });
-
-// ── Col-zone class sync ───────────────────────────────────────────────────
-function applyColZones() {
-  var hasCZ = PARSED.sections.some(function(s) { return s.type === 'col-zone-start' || s.type === 'col-zone-end'; });
-  document.getElementById('song').classList.toggle('has-col-zones', hasCZ);
-}
-
-// ── Chord Legend ──────────────────────────────────────────────────────────
-var legendMode = 0; // 0=none 1=end 2=side
-var legendEndEl  = document.getElementById('legend-end');
-var legendSideEl = document.getElementById('legend-side');
-function _getChordSvg(name) {
-  var svg = CHORD_SVGS[name];
-  if (!svg) {
-    var rm = name && name.match(/^([A-G][b#]?)(.*)/);
-    if (rm) {
-      var si = _SH.indexOf(rm[1]), fi = _FL.indexOf(rm[1]);
-      if (si >= 0) svg = CHORD_SVGS[_FL[si] + rm[2]];
-      if (!svg && fi >= 0) svg = CHORD_SVGS[_SH[fi] + rm[2]];
-    }
-  }
-  return svg || '';
-}
-function updateLegend() {
-  var seen = {}, names = [];
-  document.querySelectorAll('.chord[data-chord]').forEach(function(el) {
-    if (!seen[el.dataset.chord]) { seen[el.dataset.chord] = true; names.push(el.dataset.chord); }
-  });
-  document.querySelectorAll('.chord-diagram-cell[data-chord]').forEach(function(el) {
-    if (!seen[el.dataset.chord]) { seen[el.dataset.chord] = true; names.push(el.dataset.chord); }
-  });
-  names.sort();
-  var html = names.map(function(n) {
-    var svg = _getChordSvg(n);
-    return svg ? '<div class="chord-diagram-cell">' + svg + '<div class="cd-label">' + esc(n) + '</div></div>' : '';
-  }).join('');
-  legendEndEl.querySelector('.legend-grid').innerHTML  = html;
-  legendSideEl.querySelector('.legend-grid').innerHTML = html;
-  legendEndEl.classList.toggle('active', legendMode === 1);
-  legendSideEl.classList.toggle('active', legendMode === 2);
-  document.body.classList.toggle('legend-side-on', legendMode === 2);
-}
-// ── Custom side panel ─────────────────────────────────────────────────────────
-var customPanelEl = document.getElementById('custom-side-panel');
-var panelMode = 'side';
-
-function renderCustomPanel() {
-  var sp = PARSED.sections.find(function(s) { return s.type === 'side-panel'; });
-  if (!sp) { customPanelEl.innerHTML = ''; return; }
-  customPanelEl.innerHTML = _spGroupsHtml(sp.items || [], previewTranspose);
-  customPanelEl.querySelectorAll('.chord-diagram-cell[data-chord]').forEach(function(cell) {
-    var svg = _getChordSvg(cell.dataset.chord);
-    if (svg) cell.innerHTML = svg + '<div class="cd-label">' + esc(cell.dataset.chord) + '</div>';
-  });
-}
-
-function applyCustomPanel() {
-  var hasSP = PARSED.sections.some(function(s) { return s.type === 'side-panel'; });
-  var pmRow = document.getElementById('panel-mode-row');
-  if (pmRow) pmRow.style.display = hasSP ? '' : 'none';
-  var legendSideRadio = document.querySelector('input[name="legend-mode"][value="2"]');
-  if (legendSideRadio) {
-    legendSideRadio.disabled = hasSP;
-    var lsLabel = legendSideRadio.closest('label');
-    if (lsLabel) lsLabel.title = hasSP ? 'Disabled: custom side panel is active' : '';
-    if (hasSP && legendMode === 2) { legendMode = 0; updateLegend(); }
-  }
-  if (!hasSP) {
-    customPanelEl.classList.remove('active');
-    document.body.classList.remove('csp-side-on');
-    return;
-  }
-  var isSide = panelMode === 'side';
-  customPanelEl.classList.toggle('active', isSide);
-  document.body.classList.toggle('csp-side-on', isSide);
-  if (isSide) renderCustomPanel();
-}
-
-// ── Rerender (called when transpose or any display param changes) ─────────
-function rerender() {
-  document.getElementById('song').innerHTML = render(PARSED, previewTranspose);
-  applyColZones();
-  bindTooltips();
-  populateChordDiagrams();
-  updateLegend();
-  applyCustomPanel();
-  if (tempoSpeed) setTimeout(function() { applyTempoSpeed(PARSED.meta, false, true); }, 100);
-}
-
-// ── Settings panel ────────────────────────────────────────────────────────
-var _sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-var settingsPopup = document.getElementById('settings-popup');
-var settingsBtn   = document.getElementById('settings-btn');
-
-settingsBtn.addEventListener('click', function(e) {
-  e.stopPropagation();
-  exportPopup.classList.remove('open');
-  var open = settingsPopup.classList.toggle('open');
-  settingsBtn.classList.toggle('open', open);
-});
-document.addEventListener('click', function(e) {
-  if (!settingsBtn.contains(e.target) && !settingsPopup.contains(e.target)) {
-    settingsPopup.classList.remove('open');
-    settingsBtn.classList.remove('open');
-  }
-});
-
-// Legend mode radios
-document.querySelectorAll('input[name="legend-mode"]').forEach(function(r) {
-  r.addEventListener('change', function() {
-    legendMode = parseInt(this.value, 10);
-    updateLegend();
-    savePerfSettings();
-  });
-});
-
-// Legend diagram size slider
-var legendSzSlider = document.getElementById('legend-sz');
-var legendSzVal    = document.getElementById('legend-sz-val');
-legendSzSlider.addEventListener('input', function() {
-  document.body.style.setProperty('--legend-svg-w', this.value + 'px');
-  legendSzVal.textContent = this.value + 'px';
-  savePerfSettings();
-});
-document.body.style.setProperty('--legend-svg-w', legendSzSlider.value + 'px');
-
-// Song diagram size slider
-var songSzSlider = document.getElementById('song-sz');
-var songSzVal    = document.getElementById('song-sz-val');
-songSzSlider.addEventListener('input', function() {
-  document.body.style.setProperty('--song-svg-w', this.value + 'px');
-  songSzVal.textContent = this.value + 'px';
-  savePerfSettings();
-});
-document.body.style.setProperty('--song-svg-w', songSzSlider.value + 'px');
-
-// Theme radios
-(function() {
-  var cur = _sysDark ? 'dark' : 'light';
-  var radios = document.querySelectorAll('input[name="theme-mode"]');
-  radios.forEach(function(r) { if (r.value === cur) r.checked = true; });
-  radios.forEach(function(r) {
-    r.addEventListener('change', function() {
-      document.documentElement.dataset.theme = this.value;
-      savePerfSettings();
-    });
-  });
-})();
-
-// Columns slider
-var colSlider = document.getElementById('col-slider');
-var colVal    = document.getElementById('col-val');
-function applyColCount(n) {
-  var song = document.getElementById('song');
-  song.classList.remove('multi-col');
-  song.style.removeProperty('--col-count');
-  if (n >= 2) { song.style.setProperty('--col-count', n); song.classList.add('multi-col'); }
-}
-colSlider.addEventListener('input', function() {
-  var n = parseInt(this.value, 10);
-  colVal.textContent = n;
-  applyColCount(n);
-  savePerfSettings();
-});
-
-// Panel mode radios
-document.querySelectorAll('input[name="panel-mode"]').forEach(function(r) {
-  r.addEventListener('change', function() {
-    panelMode = this.value;
-    applyCustomPanel();
-    savePerfSettings();
-  });
-});
-
-// Panel width slider
-var panelWSlider = document.getElementById('panel-w-slider');
-var panelWVal    = document.getElementById('panel-w-val');
-panelWSlider.addEventListener('input', function() {
-  document.body.style.setProperty('--panel-w', this.value + 'px');
-  panelWVal.textContent = this.value + 'px';
-  savePerfSettings();
-});
-document.body.style.setProperty('--panel-w', panelWSlider.value + 'px');
-
-// ── Live transpose ────────────────────────────────────────────────────────
-var transLabel = document.getElementById('trans-label');
-function _updateTransLabel() {
-  transLabel.textContent = previewTranspose > 0 ? '+' + previewTranspose
-                         : previewTranspose < 0 ? String(previewTranspose) : '0';
-  transLabel.classList.toggle('active', previewTranspose !== 0);
-}
-document.getElementById('trans-down').addEventListener('click', function() {
-  previewTranspose--; _updateTransLabel(); rerender();
-});
-document.getElementById('trans-up').addEventListener('click', function() {
-  previewTranspose++; _updateTransLabel(); rerender();
-});
+${SHARED_SONG_JS}
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 const vscodeApi = acquireVsCodeApi();
@@ -3747,14 +3824,6 @@ document.getElementById('tap-btn').addEventListener('click', function() {
 });
 
 
-// ── Lyrics-only toggle ────────────────────────────────────────────────────
-var lyricsBtn = document.getElementById('lyrics-btn');
-lyricsBtn.addEventListener('click', function() {
-  var on = document.getElementById('song').classList.toggle('lyrics-only');
-  lyricsBtn.classList.toggle('active', on);
-  lyricsBtn.title = on ? 'Show chords (L)' : 'Lyrics only — hide chords (L)';
-});
-
 // ── Full-screen (VSCode: maximise editor + hide sidebar) ──────────────────
 var fsBtn = document.getElementById('fs-btn');
 var _fsActive = false;
@@ -3874,59 +3943,9 @@ setTimeout(function() {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
 <meta name="color-scheme" content="dark light">
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
-  --bg: #1e1e1e; --fg: #d4d4d4; --fg-dim: #999; --fg-muted: #666;
-  --border: #444; --chord: #79b8ff;
-  --sec-chorus-bg: #1e2a4a; --sec-chorus-fg: #79b8ff;
-  --sec-verse-bg: #2a2a2a;  --sec-verse-fg: #aaa;
-  --sec-bridge-bg: #3a2a10; --sec-bridge-fg: #e8a050;
-  --sec-tab-bg: #1e2a14;    --sec-tab-fg: #90c040;
-  --tab-bg: #252525; --tab-border: #555;
-  --tip-bg: #2d2d2d; --tip-border: #555; --tip-fg: #ccc;
-  --capo-bg: #4a3010; --capo-fg: #ffcc60;
-  --panel-bg: rgba(20,20,20,0.93); --panel-border: #444;
-}
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #fafaf8; --fg: #1a1a1a; --fg-dim: #555; --fg-muted: #888;
-    --border: #ddd; --chord: #1a5fb4;
-    --sec-chorus-bg: #e8f0fe; --sec-chorus-fg: #2a5bbf;
-    --sec-verse-bg: #f0f0f0;  --sec-verse-fg: #555;
-    --sec-bridge-bg: #fef0d0; --sec-bridge-fg: #a05000;
-    --sec-tab-bg: #f0f4e8;    --sec-tab-fg: #4a6a20;
-    --tab-bg: #f4f4f0; --tab-border: #bbb;
-    --tip-bg: #fff; --tip-border: #ccc; --tip-fg: #333;
-    --capo-bg: #ffe8b0; --capo-fg: #7a4000;
-    --panel-bg: rgba(245,245,243,0.97); --panel-border: #ccc;
-  }
-}
-:root[data-theme="light"] {
-  --bg: #fafaf8; --fg: #1a1a1a; --fg-dim: #555; --fg-muted: #888;
-  --border: #ddd; --chord: #1a5fb4;
-  --sec-chorus-bg: #e8f0fe; --sec-chorus-fg: #2a5bbf;
-  --sec-verse-bg: #f0f0f0;  --sec-verse-fg: #555;
-  --sec-bridge-bg: #fef0d0; --sec-bridge-fg: #a05000;
-  --sec-tab-bg: #f0f4e8;    --sec-tab-fg: #4a6a20;
-  --sec-xsec-bg: #e0f4f4;   --sec-xsec-fg: #1a7a7a;
-  --tab-bg: #f4f4f0; --tab-border: #bbb;
-  --tip-bg: #fff; --tip-border: #ccc; --tip-fg: #333;
-  --capo-bg: #ffe8b0; --capo-fg: #7a4000;
-  --panel-bg: rgba(245,245,243,0.97); --panel-border: #ccc;
-}
-:root[data-theme="dark"] {
-  --bg: #1e1e1e; --fg: #d4d4d4; --fg-dim: #999; --fg-muted: #666;
-  --border: #444; --chord: #79b8ff;
-  --sec-chorus-bg: #1e2a4a; --sec-chorus-fg: #79b8ff;
-  --sec-verse-bg: #2a2a2a;  --sec-verse-fg: #aaa;
-  --sec-bridge-bg: #3a2a10; --sec-bridge-fg: #e8a050;
-  --sec-tab-bg: #1e2a14;    --sec-tab-fg: #90c040;
-  --sec-xsec-bg: #0e2a2a;   --sec-xsec-fg: #5cc8c8;
-  --tab-bg: #252525; --tab-border: #555;
-  --tip-bg: #2d2d2d; --tip-border: #555; --tip-fg: #ccc;
-  --capo-bg: #4a3010; --capo-fg: #ffcc60;
-  --panel-bg: rgba(20,20,20,0.93); --panel-border: #444;
-}
+${SHARED_SONG_CSS}
+/* ── Setlist overrides: panels start below nav bar ───────────────────────── */
+#legend-side, #custom-side-panel { top: 52px; bottom: 70px; }
 html, body { background: var(--bg); color: var(--fg); font-family: Georgia, serif; font-size: 17px; }
 body { padding-top: 52px; padding-bottom: 80px; }
 #nav-bar {
@@ -3977,13 +3996,6 @@ body { padding-top: 52px; padding-bottom: 80px; }
 .chord-diagram-cell { display: inline-flex; flex-direction: column; align-items: center; }
 .chord-diagram-cell svg { display: block; }
 .chord-diagram-cell .cd-label { font-size: 0.78em; font-weight: bold; color: var(--chord); margin-top: 2px; }
-#song.lyrics-only .chord { opacity: 0; height: 0; min-height: 0; overflow: hidden; }
-#song.two-col { column-count: 2; column-gap: 3em; column-rule: 1px solid var(--border); }
-#song.two-col .section { break-inside: avoid-column; }
-#song.two-col .song-header { column-span: all; }
-#song.has-col-zones.two-col { column-count: 1; column-rule: none; }
-#song.has-col-zones.two-col .col-zone { column-count: 2; column-gap: 3em; column-rule: 1px solid var(--border); }
-#song.has-col-zones.two-col .col-zone .section { break-inside: avoid-column; }
 #chord-tip { position: fixed; display: none; background: var(--tip-bg); border: 1px solid var(--tip-border); border-radius: 8px; padding: 8px; z-index: 99999; pointer-events: none; text-align: center; color: var(--tip-fg); font-family: sans-serif; font-size: 12px; }
 #scroll-bar {
   position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
@@ -4015,30 +4027,7 @@ body { padding-top: 52px; padding-bottom: 80px; }
 #save-btn:hover { opacity: 1; }
 #lyrics-btn { font-size: 11px; font-family: sans-serif; border-radius: 6px !important; width: auto !important; padding: 0 7px !important; }
 #lyrics-btn.active { color: #ffd700; border-color: #ffd700; }
-#twocol-btn { font-size: 14px; }
-#twocol-btn.active { color: #ffd700; border-color: #ffd700; }
 #auto-btn.active { color: #ffd700; border-color: #ffd700; }
-/* ── Custom side panel (inline mode only in setlist) ─────────────────────── */
-.csp-group { display: flex; flex-direction: column; gap: 8px; }
-.csp-section-badge {
-  font-size: 11px; font-weight: bold; color: #9d8ef5; text-transform: uppercase;
-  letter-spacing: 0.8px; padding: 3px 10px; background: rgba(124,109,240,0.18);
-  border-radius: 5px; align-self: flex-start; border: 1px solid rgba(124,109,240,0.35);
-}
-.csp-chord-grid { display: flex; flex-wrap: wrap; gap: 8px 6px; }
-.section-side-panel {
-  background: rgba(128,128,128,0.1); border: 1px solid var(--border);
-  border-radius: 8px; padding: 12px 14px; margin-bottom: 10px;
-}
-.section-side-panel .csp-group {
-  flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 6px 12px;
-}
-.section-side-panel .csp-section-badge {
-  writing-mode: vertical-rl; transform: rotate(180deg); margin-right: 6px;
-  align-self: stretch; display: flex; align-items: center; justify-content: center;
-  border-radius: 4px; padding: 6px 4px; letter-spacing: 1px;
-}
-.section-side-panel .csp-chord-grid { flex: 1; }
 </style>
 </head>
 <body>
@@ -4053,7 +4042,7 @@ body { padding-top: 52px; padding-bottom: 80px; }
 </div>
 <div id="progress-bar"></div>
 <div id="song"></div>
-<div id="chord-tip"></div>
+${SHARED_SONG_HTML}
 <div id="scroll-bar">
   <button id="trans-down"   title="Transpose down (♭)">♭</button>
   <span   id="trans-label">0</span>
@@ -4067,7 +4056,8 @@ body { padding-top: 52px; padding-bottom: 80px; }
   <button id="font-smaller" title="Smaller text">A−</button>
   <button id="font-larger"  title="Larger text">A+</button>
   <button id="lyrics-btn"   title="Lyrics only">Ly</button>
-  <button id="twocol-btn"   title="Toggle two-column layout">⊞</button>
+  <button id="fs-btn"       title="Full screen (F)"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5V1h4M9 1h4v4M1 9v4h4M9 13h4V9"/></svg></button>
+  <button id="settings-btn" title="Settings">⚙</button>
 </div>
 <script>
 const vscodeApi = acquireVsCodeApi();
@@ -4075,245 +4065,10 @@ var SHARED_SVGS = ${safeSharedSvgs};
 var SONGS = ${safeSongs};
 var SONG_IDX = 0;
 var CHORD_SVGS = {};
-var PARSED = null;
-var previewTranspose = 0;
 var autoAdvance = false;
-var fontSize = 17;
+function savePerfSettings() {}  // no-op: setlist does not persist settings
 
-// ── Helpers (same as scroll preview) ────────────────────────────────────────
-var _SH = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-var _FL = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
-function _tn(root, n) {
-  var fi = _FL.indexOf(root), si = _SH.indexOf(root);
-  var pf = fi !== -1 && si === -1;
-  var idx = si !== -1 ? si : fi;
-  if (idx < 0) return root;
-  return (pf ? _FL : _SH)[((idx + n) % 12 + 12) % 12];
-}
-function transposeChordName(chord, n) {
-  if (!n) return chord;
-  var sl = chord.indexOf('/');
-  var main = sl >= 0 ? chord.slice(0, sl) : chord;
-  var bass = sl >= 0 ? chord.slice(sl + 1) : null;
-  var rm   = main.match(/^([A-G][b#]?)(.*)/);
-  if (!rm) return chord;
-  return _tn(rm[1], n) + rm[2] + (bass ? '/' + _tn(bass, n) : '');
-}
-
-function parseChordLine(line) {
-  var segs = [], re = /\\[([^\\]]*)\\]/g, last = 0, pending = null, m;
-  while ((m = re.exec(line)) !== null) {
-    var before = line.slice(last, m.index);
-    if (pending !== null || before) segs.push({ chord: pending || '', lyric: before });
-    pending = m[1]; last = m.index + m[0].length;
-  }
-  var tail = line.slice(last);
-  if (pending !== null || tail) segs.push({ chord: pending || '', lyric: tail });
-  return segs;
-}
-
-function parse(text) {
-  var meta = { title: '', subtitle: '', artist: '', key: '', capo: '', tempo: '' };
-  var sections = [];
-  var cur = { type: 'verse', label: '', lines: [], nav: false };
-  var inSidePanel = null;
-  function flush() { if (cur.lines.length) sections.push(cur); }
-  function next(type, label, nav) { flush(); cur = { type, label, lines: [], nav: !!nav }; }
-  for (var raw of text.split(/\\r?\\n/)) {
-    var line = raw.trimEnd();
-    if (/^\\s*#/.test(line)) continue;
-    var dir = line.trim().match(/^\\{([^}]+)\\}$/);
-    if (dir) {
-      var ci = dir[1].indexOf(':');
-      var k = (ci >= 0 ? dir[1].slice(0, ci) : dir[1]).trim().toLowerCase();
-      var v = ci >= 0 ? dir[1].slice(ci + 1).trim() : '';
-      if (k==='title'||k==='t')   { meta.title=v; continue; }
-      if (k==='subtitle'||k==='st'){ meta.subtitle=v; continue; }
-      if (k==='artist')           { meta.artist=v; continue; }
-      if (k==='key')              { meta.key=v; continue; }
-      if (k==='capo')             { meta.capo=v; continue; }
-      if (k==='tempo')            { meta.tempo=v; continue; }
-      if (k==='start_of_chorus'||k==='soc') { next('chorus',v||'Chorus',true); continue; }
-      if (k==='end_of_chorus'||k==='eoc')   { next('verse','',false); continue; }
-      if (k==='start_of_verse'||k==='sov')  { next('verse',v||'Verse',true); continue; }
-      if (k==='end_of_verse'||k==='eov')    { next('verse','',false); continue; }
-      if (k==='start_of_bridge'||k==='sob') { next('bridge',v||'Bridge',true); continue; }
-      if (k==='end_of_bridge'||k==='eob')   { next('verse','',false); continue; }
-      if (k==='start_of_tab'||k==='sot')    { next('tab',v||'Tab',true); continue; }
-      if (k==='end_of_tab'||k==='eot')      { next('verse','',false); continue; }
-      if (k==='start_of_grid'||k==='sog')   { next('grid',v||'Grid',true); continue; }
-      if (k==='end_of_grid'||k==='eog')     { next('verse','',false); continue; }
-      if (k==='x_start_section')                  { next('x-section',v||'Section',true); continue; }
-      if (k==='x_end_section')              { next('verse','',false); continue; }
-      if (k==='x_columns_on')  { flush(); sections.push({type:'col-zone-start',lines:[],label:'',nav:false}); cur={type:'verse',label:'',lines:[],nav:false}; continue; }
-      if (k==='x_columns_off') { flush(); sections.push({type:'col-zone-end',  lines:[],label:'',nav:false}); cur={type:'verse',label:'',lines:[],nav:false}; continue; }
-      if (k==='x_start_side_panel') { flush(); var _sp2={type:'side-panel',items:[],label:'',nav:false,lines:[]}; sections.push(_sp2); inSidePanel=_sp2; cur={type:'verse',label:'',lines:[],nav:false}; continue; }
-      if (k==='x_end_side_panel')   { inSidePanel=null; cur={type:'verse',label:'',lines:[],nav:false}; continue; }
-      if (k==='x_panel_section_title') { if (inSidePanel) inSidePanel.items.push({type:'title',label:v}); continue; }
-      if (k==='comment'||k==='c'||k==='highlight') { if (!inSidePanel) cur.lines.push({type:'comment',text:v}); continue; }
-      if (k==='comment_italic'||k==='ci')           { if (!inSidePanel) cur.lines.push({type:'comment',text:v}); continue; }
-      if (k==='comment_box'||k==='cb')              { if (!inSidePanel) cur.lines.push({type:'comment-box',text:v}); continue; }
-      if (k==='chorus')                             { if (!inSidePanel) cur.lines.push({type:'chorus-ref'}); continue; }
-      if (k==='new_page'||k==='np')                 { if (!inSidePanel) cur.lines.push({type:'page-break'}); continue; }
-      if (k==='chord' && v && !v.includes('frets')) {
-        if (inSidePanel) { inSidePanel.items.push({type:'chord',name:v.trim()}); continue; }
-        cur.lines.push({type:'chord-diagram',name:v.trim()}); continue;
-      }
-      continue;
-    }
-    if (inSidePanel) continue; // skip non-directive lines inside side panel block
-    if (cur.type==='tab')  { cur.lines.push({type:'tab',       text:line}); continue; }
-    if (cur.type==='grid') { cur.lines.push({type:'grid-line', text:line}); continue; }
-    if (!line.trim())      { cur.lines.push({type:'empty'}); continue; }
-    if (line.includes('[')) cur.lines.push({type:'chord-line',segs:parseChordLine(line)});
-    else                    cur.lines.push({type:'lyric',text:line});
-  }
-  flush();
-  return { meta, sections };
-}
-
-function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function safeFmt(s) { return esc(s).replace(new RegExp('&lt;(\\/?(b|i|em|strong|u|s))&gt;', 'gi'), '\x3c$1\x3e'); }
-function _spGroupsHtml(items, transpose) {
-  var groups = [], grp = { label: '', chords: [] };
-  (items || []).forEach(function(item) {
-    if (item.type === 'title') { if (grp.chords.length || grp.label) groups.push(grp); grp = { label: item.label, chords: [] }; }
-    else if (item.type === 'chord') grp.chords.push(item.name);
-  });
-  if (grp.chords.length || grp.label) groups.push(grp);
-  return groups.map(function(g) {
-    var cells = g.chords.map(function(n) {
-      var tn = transposeChordName(n, transpose || 0);
-      return '<div class="chord-diagram-cell" data-chord="' + esc(tn) + '"></div>';
-    }).join('');
-    var badge = g.label ? '<div class="csp-section-badge">' + esc(g.label) + '</div>' : '';
-    return '<div class="csp-group">' + badge + '<div class="csp-chord-grid">' + cells + '</div></div>';
-  }).join('');
-}
-function renderGridLine(text, transpose) {
-  return text.split(' ').map(function(tok) {
-    if (tok && /^[A-G][b#]?[^|.]*$/.test(tok) && tok !== '.') {
-      var dc = transposeChordName(tok, transpose || 0);
-      return '\x3cspan class="chord" data-chord="' + esc(dc) + '"\x3e' + esc(dc) + '\x3c/span\x3e';
-    }
-    return esc(tok);
-  }).join(' ');
-}
-
-function render({ meta, sections }, transpose) {
-  var out = ['<div class="song-header">'];
-  if (meta.title)    out.push('<div class="song-title">'    + esc(meta.title)    + '</div>');
-  if (meta.subtitle) out.push('<div class="song-subtitle">' + esc(meta.subtitle) + '</div>');
-  var mp = [];
-  if (meta.artist) mp.push(esc(meta.artist));
-  if (meta.key)    mp.push('Key: ' + esc(meta.key));
-  if (meta.tempo)  mp.push(esc(meta.tempo) + ' BPM');
-  var capoBadge = meta.capo ? '<span class="capo-badge">Capo ' + esc(meta.capo) + '</span>' : '';
-  if (mp.length || capoBadge) out.push('<div class="song-meta">' + mp.join(' &nbsp;·&nbsp; ') + capoBadge + '</div>');
-  out.push('</div>');
-  var _hasCZS2=sections.some(function(s){return s.type==='col-zone-start';});
-  var _hasCZE2=sections.some(function(s){return s.type==='col-zone-end';});
-  var effSections2=(_hasCZE2&&!_hasCZS2)?[{type:'col-zone-start',lines:[],label:'',nav:false}].concat(sections):sections;
-  var _inColZone = false;
-  for (var sec of effSections2) {
-    if (sec.type === 'col-zone-start') { out.push('<div class="col-zone">'); _inColZone = true; continue; }
-    if (sec.type === 'col-zone-end')   { out.push('</div>'); _inColZone = false; continue; }
-    if (sec.type === 'side-panel') {
-      out.push('<div class="section section-side-panel">');
-      out.push(_spGroupsHtml(sec.items || [], transpose));
-      out.push('</div>');
-      continue;
-    }
-    out.push('<div class="section section-' + sec.type + '">');
-    if (sec.label) out.push('<div class="section-label">' + esc(sec.label) + '</div>');
-    if (sec.type === 'tab') {
-      out.push('<pre class="tab-block">');
-      for (var l of sec.lines) if (l.type==='tab') out.push(esc(l.text));
-      out.push('</pre>');
-    } else if (sec.type === 'grid') {
-      out.push('<pre class="grid-block">');
-      for (var l of sec.lines) if (l.type==='grid-line') out.push(renderGridLine(l.text, transpose));
-      out.push('</pre>');
-    } else {
-      for (var l of sec.lines) {
-        if (l.type==='chord-line') {
-          out.push('<div class="chord-line">');
-          for (var s of l.segs) {
-            var dc = transposeChordName(s.chord||'', transpose||0);
-            var tight = s.lyric && s.lyric.length > 0 && s.lyric[s.lyric.length - 1] !== ' ';
-            out.push('<span class="pair' + (tight?' tight':'') + '"><span class="chord"' + (dc?' data-chord="'+esc(dc)+'"':'') + '>' + (dc?esc(dc):'&nbsp;') + '</span><span class="lyric">' + esc(s.lyric||' ') + '</span></span>');
-          }
-          out.push('</div>');
-        } else if (l.type==='lyric')        out.push('<div class="lyric-line">'  + safeFmt(l.text) + '</div>');
-        else if   (l.type==='comment')      out.push('<div class="comment">'      + safeFmt(l.text) + '</div>');
-        else if   (l.type==='comment-box')  out.push('<div class="comment comment-box">' + safeFmt(l.text) + '</div>');
-        else if   (l.type==='chorus-ref')   out.push('<div class="chorus-ref">[ Chorus ]</div>');
-        else if   (l.type==='empty')        out.push('<div class="empty-line"></div>');
-        else if   (l.type==='page-break')   out.push('<hr class="page-break">');
-        else if   (l.type==='chord-diagram')out.push('<div class="chord-diagram-cell" data-chord="' + esc(transposeChordName(l.name, transpose||0)) + '"></div>');
-      }
-    }
-    out.push('</div>');
-  }
-  if (_inColZone) out.push('</div>');
-  return out.join('\\n');
-}
-
-// Chord tooltips
-var tip = document.createElement('div');
-tip.id = 'chord-tip'; document.body.appendChild(tip);
-function showTip(el, e) {
-  var name = el.dataset.chord;
-  var svg = CHORD_SVGS[name];
-  if (!svg) {
-    var rm = name && name.match(/^([A-G][b#]?)(.*)/);
-    if (rm) {
-      var si = _SH.indexOf(rm[1]), fi = _FL.indexOf(rm[1]);
-      if (si >= 0) svg = CHORD_SVGS[_FL[si] + rm[2]];
-      if (!svg && fi >= 0) svg = CHORD_SVGS[_SH[fi] + rm[2]];
-    }
-  }
-  if (!svg) return;
-  tip.innerHTML = svg + '<div>' + name + '</div>';
-  tip.style.display = 'block'; positionTip(e);
-}
-function positionTip(e) {
-  var x = e.clientX+12, y = e.clientY+16;
-  if (x+130>window.innerWidth) x=e.clientX-130;
-  if (y+160>window.innerHeight) y=e.clientY-160;
-  tip.style.left=x+'px'; tip.style.top=y+'px';
-}
-function hideTip() { tip.style.display='none'; }
-function bindTooltips() {
-  document.querySelectorAll('.chord[data-chord]').forEach(function(el) {
-    el.addEventListener('mouseenter', function(e) { showTip(el,e); });
-    el.addEventListener('mousemove',  function(e) { positionTip(e); });
-    el.addEventListener('mouseleave', hideTip);
-  });
-}
-function populateChordDiagrams() {
-  document.querySelectorAll('.chord-diagram-cell[data-chord]').forEach(function(cell) {
-    var name = cell.dataset.chord;
-    var svg = CHORD_SVGS[name];
-    if (!svg) {
-      var rm = name && name.match(/^([A-G][b#]?)(.*)/);
-      if (rm) {
-        var si=_SH.indexOf(rm[1]), fi=_FL.indexOf(rm[1]);
-        if (si>=0) svg=CHORD_SVGS[_FL[si]+rm[2]];
-        if (!svg && fi>=0) svg=CHORD_SVGS[_SH[fi]+rm[2]];
-      }
-    }
-    if (svg) cell.innerHTML=svg+'<div class="cd-label">'+name+'</div>';
-  });
-}
-
-// Progress bar
-var progressBar = document.getElementById('progress-bar');
-function updateProgress() {
-  var scrollable = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-  progressBar.style.width = Math.min(100, (window.scrollY/scrollable)*100) + '%';
-}
-window.addEventListener('scroll', updateProgress, { passive: true });
+${SHARED_SONG_JS}
 
 // Auto-scroll
 var speed = 30, playing = false, lastTs = null, accum = 0;
@@ -4390,37 +4145,19 @@ function stopMetronome(){_metroActive=false;clearTimeout(_metroTimer);_updateMet
 function _updateMetroBtn(){metroBtn.disabled=activeBpm===0;metroBtn.style.opacity=activeBpm===0?'0.3':'';metroBtn.classList.toggle('active',_metroActive);}
 metroBtn.addEventListener('click',function(){if(_metroActive)stopMetronome();else startMetronome();});
 
-// Font size
-document.getElementById('font-smaller').addEventListener('click',function(){fontSize=Math.max(11,fontSize-1);document.body.style.fontSize=fontSize+'px';});
-document.getElementById('font-larger').addEventListener('click', function(){fontSize=Math.min(28,fontSize+1);document.body.style.fontSize=fontSize+'px';});
-
-// Lyrics toggle
-var lyricsBtn = document.getElementById('lyrics-btn');
-lyricsBtn.addEventListener('click',function(){
-  var on=document.getElementById('song').classList.toggle('lyrics-only');
-  lyricsBtn.classList.toggle('active',on);
+// Full-screen (setlist-specific — same as performance view)
+var fsBtn = document.getElementById('fs-btn');
+var _fsActive = false;
+var _svgEnterFs = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5V1h4M9 1h4v4M1 9v4h4M9 13h4V9"/></svg>';
+var _svgExitFs  = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 1v4H1M13 5h-4V1M5 13v-4H1M13 9h-4v4"/></svg>';
+fsBtn.addEventListener('click', function() {
+  _fsActive = !_fsActive;
+  fsBtn.innerHTML = _fsActive ? _svgExitFs : _svgEnterFs;
+  fsBtn.title = _fsActive ? 'Exit full screen (F)' : 'Full screen (F)';
+  vscodeApi.postMessage({ command: _fsActive ? 'enterFullscreen' : 'exitFullscreen' });
 });
 
-// Two-column toggle
-var twoColBtn = document.getElementById('twocol-btn');
-twoColBtn.addEventListener('click',function(){
-  var on=document.getElementById('song').classList.toggle('two-col');
-  twoColBtn.classList.toggle('active',on);
-});
-
-// Transpose
-var transLabel = document.getElementById('trans-label');
-function _updateTransLabel(){
-  transLabel.textContent = previewTranspose>0?'+'+previewTranspose:previewTranspose<0?String(previewTranspose):'0';
-  transLabel.classList.toggle('active',previewTranspose!==0);
-}
-document.getElementById('trans-down').addEventListener('click',function(){previewTranspose--;_updateTransLabel();rerender();});
-document.getElementById('trans-up').addEventListener('click',  function(){previewTranspose++;_updateTransLabel();rerender();});
-function applyColZones(){var hasCZ=PARSED.sections.some(function(s){return s.type==='col-zone-start'||s.type==='col-zone-end';});document.getElementById('song').classList.toggle('has-col-zones',hasCZ);}
-function rerender(){document.getElementById('song').innerHTML=render(PARSED,previewTranspose);applyColZones();bindTooltips();populateChordDiagrams();}
-
-// Theme
-var _sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+// Theme (nav bar toggle — setlist-specific; settings popup theme is in shared JS)
 var themeNavBtn = document.getElementById('theme-nav-btn');
 function _updateThemeNavBtn(){
   var cur = document.documentElement.dataset.theme||(_sysDark?'dark':'light');
@@ -4458,6 +4195,8 @@ function loadSong(idx){
   applyColZones();
   bindTooltips();
   populateChordDiagrams();
+  updateLegend();
+  applyCustomPanel();
   window.scrollTo(0,0);
   playing=false; updateUI();
   updateSongNav();
@@ -4477,6 +4216,7 @@ document.addEventListener('keydown',function(e){
   if(e.code==='PageDown') {if(SONG_IDX<SONGS.length-1)loadSong(SONG_IDX+1);e.preventDefault();}
   if(e.key==='m'||e.key==='M'){metroBtn.click();e.preventDefault();}
   if(e.key==='l'||e.key==='L'){lyricsBtn.click();e.preventDefault();}
+  if(e.key==='f'||e.key==='F'){fsBtn.click();e.preventDefault();}
 });
 
 // Boot
@@ -5085,7 +4825,11 @@ if(SONGS.length) loadSong(0);
         );
         panel.webview.html = getSetlistWebviewContent(songData, sharedSvgs);
         panel.webview.onDidReceiveMessage(msg => {
-            if (msg.command === 'saveSetlistHtml') {
+            if (msg.command === 'enterFullscreen') {
+                vscode.commands.executeCommand('workbench.action.toggleZenMode');
+            } else if (msg.command === 'exitFullscreen') {
+                vscode.commands.executeCommand('workbench.action.toggleZenMode');
+            } else if (msg.command === 'saveSetlistHtml') {
                 const folder = songLibraryProvider.getFolder();
                 const outPath = path.join(folder || require('os').homedir(), 'setlist_preview.html');
                 const standalone = getSetlistWebviewContent(songData, sharedSvgs)
