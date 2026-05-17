@@ -734,6 +734,26 @@ function validateChordName(name, frets) {
     return { status: 'ok' };
 }
 
+function findAlternativeRoots(name, frets) {
+    const m = name.match(/^([A-G][b#]?)(.*)/);
+    if (!m) return [];
+    const suffix = m[2];
+    const SH = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    const FL = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+    const inputRoot = m[1];
+    const matches = [];
+    for (let i = 0; i < 12; i++) {
+        for (const root of [...new Set([SH[i], FL[i]])]) {
+            if (root === inputRoot) continue;
+            try {
+                if (validateChordName(root + suffix, frets).status === 'ok')
+                    matches.push(root + suffix);
+            } catch (_) {}
+        }
+    }
+    return matches;
+}
+
 function saveCustomShapeMemory(context, name, frets) {
     const m = name.match(/^([A-G][b#]?)(.*)/);
     const rootName = m ? m[1] : name;
@@ -768,6 +788,80 @@ function lookupCustomShape(context, frets) {
     const newST = ((origST + offset) % 12 + 12) % 12;
     const useFlat = FL.includes(entry.rootName) && !SH.includes(entry.rootName);
     return (useFlat ? FL[newST] : SH[newST]) + entry.suffix;
+}
+
+async function _performInsert(cmd, chord, context) {
+    saveCustomShapeMemory(context, chord.name, chord.frets);
+    const editor = vscode.window.activeTextEditor;
+
+    if (cmd === 'insertInline') {
+        addSavedVoicing(context, chord);
+        if (!editor) {
+            vscode.env.clipboard.writeText('[' + chord.name + ']');
+            vscode.window.showInformationMessage('No active editor — chord name copied to clipboard');
+        } else {
+            editor.insertSnippet(new vscode.SnippetString('[' + chord.name + ']$0'));
+        }
+        return;
+    }
+
+    if (!editor) {
+        const text = cmd === 'insertChordDirective'
+            ? '{chord: ' + chord.name + '}\n' + toChordProDefine(chord)
+            : toChordProDefine(chord);
+        vscode.env.clipboard.writeText(text);
+        vscode.window.showInformationMessage('No active editor — definition copied to clipboard');
+        addSavedVoicing(context, chord);
+        return;
+    }
+
+    const existingDefines = parseDocumentDefines(editor.document);
+    if (existingDefines[chord.name]) {
+        const nextName = nextVoicingName(editor.document, chord.name);
+        const lines = editor.document.getText().split('\n');
+        const matchRe = new RegExp(`^\\s*\\{(?:define|chord):?\\s+${escapeRegex(chord.name)}[\\s}]`, 'i');
+        const lineIdx = lines.findIndex(l => matchRe.test(l));
+        const answer = await vscode.window.showInformationMessage(
+            `"${chord.name}" is already defined in this file.`,
+            'Go to definition', 'Replace', `Add as ${nextName}`
+        );
+        if (answer === 'Go to definition') {
+            if (lineIdx >= 0) {
+                const pos = new vscode.Position(lineIdx, 0);
+                editor.selection = new vscode.Selection(pos, pos);
+                editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
+            }
+        } else if (answer === 'Replace') {
+            if (lineIdx >= 0) {
+                await editor.edit(eb => eb.replace(
+                    new vscode.Range(lineIdx, 0, lineIdx, lines[lineIdx].length),
+                    toChordProDefine(chord)
+                ));
+            }
+            if (cmd === 'insertChordDirective') {
+                const cursorPos = editor.selection.active;
+                await editor.edit(eb => eb.insert(cursorPos, '{chord: ' + chord.name + '}\n'));
+            }
+            addSavedVoicing(context, chord);
+        } else if (answer === `Add as ${nextName}`) {
+            const newChord = Object.assign({}, chord, { name: nextName });
+            const insertLine = findDefineInsertLine(editor.document);
+            await editor.edit(eb => eb.insert(new vscode.Position(insertLine, 0), toChordProDefine(newChord) + '\n'));
+            if (cmd === 'insertChordDirective') {
+                const cursorPos = editor.selection.active;
+                await editor.edit(eb => eb.insert(cursorPos, '{chord: ' + nextName + '}\n'));
+            }
+            addSavedVoicing(context, newChord);
+        }
+    } else {
+        addSavedVoicing(context, chord);
+        const insertLine = findDefineInsertLine(editor.document);
+        editor.edit(eb => eb.insert(new vscode.Position(insertLine, 0), toChordProDefine(chord) + '\n'));
+        if (cmd === 'insertChordDirective') {
+            const cursorPos = editor.selection.active;
+            await editor.edit(eb => eb.insert(cursorPos, '{chord: ' + chord.name + '}\n'));
+        }
+    }
 }
 
 function toChordProDefine(chord) {
@@ -898,128 +992,29 @@ class ChordBuilderViewProvider {
         webviewView.webview.html = getWebviewContent();
 
         webviewView.webview.onDidReceiveMessage(async message => {
-            if (message.command === 'insertInline') {
-                const chord = message.chord;
-                addSavedVoicing(this.context, chord);
-                const editor = vscode.window.activeTextEditor;
-                if (!editor) {
-                    vscode.env.clipboard.writeText('[' + chord.name + ']');
-                    vscode.window.showInformationMessage('No active editor — chord name copied to clipboard');
-                } else {
-                    editor.insertSnippet(new vscode.SnippetString('[' + chord.name + ']$0'));
+            if (message.command === 'requestInsert') {
+                const { cmd, chord } = message;
+                let result;
+                try { result = validateChordName(chord.name, chord.frets); }
+                catch (e) { result = { status: 'ok' }; }
+                if (result.status !== 'ok') {
+                    const altRoots = result.status === 'mismatch'
+                        ? findAlternativeRoots(chord.name, chord.frets) : [];
+                    webviewView.webview.postMessage({ command: 'insertWarning', cmd, chord, ...result, altRoots });
+                    return;
                 }
+                await _performInsert(cmd, chord, this.context);
             }
 
-            if (message.command === 'insertChordDirective') {
-                const chord = message.chord;
-                const editor = vscode.window.activeTextEditor;
-                if (!editor) {
-                    vscode.env.clipboard.writeText('{chord: ' + chord.name + '}\n' + toChordProDefine(chord));
-                    vscode.window.showInformationMessage('No active editor — directive copied to clipboard');
-                    addSavedVoicing(this.context, chord);
-                } else {
-                    const existingDefines = parseDocumentDefines(editor.document);
-                    if (existingDefines[chord.name]) {
-                        const nextName = nextVoicingName(editor.document, chord.name);
-                        const lines = editor.document.getText().split('\n');
-                        const matchRe = new RegExp(`^\\s*\\{(?:define|chord):?\\s+${escapeRegex(chord.name)}[\\s}]`, 'i');
-                        const lineIdx = lines.findIndex(l => matchRe.test(l));
-                        const answer = await vscode.window.showInformationMessage(
-                            `"${chord.name}" is already defined in this file.`,
-                            'Go to definition', 'Replace', `Add as ${nextName}`
-                        );
-                        if (answer === 'Go to definition') {
-                            if (lineIdx >= 0) {
-                                const pos = new vscode.Position(lineIdx, 0);
-                                editor.selection = new vscode.Selection(pos, pos);
-                                editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
-                            }
-                        } else if (answer === 'Replace') {
-                            if (lineIdx >= 0) {
-                                await editor.edit(eb => eb.replace(
-                                    new vscode.Range(lineIdx, 0, lineIdx, lines[lineIdx].length),
-                                    toChordProDefine(chord)
-                                ));
-                            }
-                            const cursorPos = editor.selection.active;
-                            await editor.edit(eb => eb.insert(cursorPos, '{chord: ' + chord.name + '}\n'));
-                            addSavedVoicing(this.context, chord);
-                        } else if (answer === `Add as ${nextName}`) {
-                            const newChord = Object.assign({}, chord, { name: nextName });
-                            const insertLine = findDefineInsertLine(editor.document);
-                            await editor.edit(eb => eb.insert(new vscode.Position(insertLine, 0), toChordProDefine(newChord) + '\n'));
-                            const cursorPos = editor.selection.active;
-                            await editor.edit(eb => eb.insert(cursorPos, '{chord: ' + nextName + '}\n'));
-                            addSavedVoicing(this.context, newChord);
-                        }
-                    } else {
-                        addSavedVoicing(this.context, chord);
-                        const cursorPos = editor.selection.active;
-                        await editor.edit(eb => eb.insert(cursorPos, '{chord: ' + chord.name + '}\n'));
-                        const insertLine = findDefineInsertLine(editor.document);
-                        editor.edit(eb => eb.insert(new vscode.Position(insertLine, 0), toChordProDefine(chord) + '\n'));
-                    }
-                }
-            }
-
-            if (message.command === 'insertDefine') {
-                const chord = message.chord;
-                const editor = vscode.window.activeTextEditor;
-                if (!editor) {
-                    vscode.env.clipboard.writeText(toChordProDefine(chord));
-                    vscode.window.showInformationMessage('No active editor — definition copied to clipboard');
-                    addSavedVoicing(this.context, chord);
-                } else {
-                    const existingDefines = parseDocumentDefines(editor.document);
-                    if (existingDefines[chord.name]) {
-                        const nextName = nextVoicingName(editor.document, chord.name);
-                        const lines = editor.document.getText().split('\n');
-                        const matchRe = new RegExp(`^\\s*\\{(?:define|chord):?\\s+${escapeRegex(chord.name)}[\\s}]`, 'i');
-                        const lineIdx = lines.findIndex(l => matchRe.test(l));
-                        const answer = await vscode.window.showInformationMessage(
-                            `"${chord.name}" is already defined in this file.`,
-                            'Go to definition', 'Replace', `Add as ${nextName}`
-                        );
-                        if (answer === 'Go to definition') {
-                            if (lineIdx >= 0) {
-                                const pos = new vscode.Position(lineIdx, 0);
-                                editor.selection = new vscode.Selection(pos, pos);
-                                editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
-                            }
-                        } else if (answer === 'Replace') {
-                            if (lineIdx >= 0) {
-                                await editor.edit(eb => eb.replace(
-                                    new vscode.Range(lineIdx, 0, lineIdx, lines[lineIdx].length),
-                                    toChordProDefine(chord)
-                                ));
-                            }
-                            addSavedVoicing(this.context, chord);
-                        } else if (answer === `Add as ${nextName}`) {
-                            const newChord = Object.assign({}, chord, { name: nextName });
-                            const insertLine = findDefineInsertLine(editor.document);
-                            await editor.edit(eb => eb.insert(new vscode.Position(insertLine, 0), toChordProDefine(newChord) + '\n'));
-                            addSavedVoicing(this.context, newChord);
-                        }
-                    } else {
-                        addSavedVoicing(this.context, chord);
-                        const insertLine = findDefineInsertLine(editor.document);
-                        editor.edit(eb => eb.insert(new vscode.Position(insertLine, 0), toChordProDefine(chord) + '\n'));
-                    }
-                }
+            if (message.command === 'forceInsert') {
+                const { cmd, chord } = message;
+                await _performInsert(cmd, chord, this.context);
             }
 
             if (message.command === 'detectChord') {
                 const groups = detectChord(message.frets);
                 const customName = lookupCustomShape(this.context, message.frets);
                 webviewView.webview.postMessage({ command: 'chordSuggestions', groups, customName: customName || null });
-            }
-            if (message.command === 'validateShape') {
-                const result = validateChordName(message.name, message.frets);
-                webviewView.webview.postMessage({ command: 'shapeValidationResult', ...result });
-            }
-            if (message.command === 'saveCustomShape') {
-                saveCustomShapeMemory(this.context, message.name, message.frets);
-                webviewView.webview.postMessage({ command: 'shapeSaved' });
             }
             if (message.command === 'removeCustomShape') {
                 removeCustomShapeMemory(this.context, message.frets);
@@ -1072,7 +1067,7 @@ body { margin: 0; padding: 8px; background: var(--bg); color: var(--text); font-
 .dm-btn.active { background: var(--accent); color: #fff; font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,0.25); }
 #resetBtn { margin-left: 6px; padding: 4px 9px; font-size: 14px; line-height: 1; cursor: pointer; background: transparent; color: var(--danger); border: 1px solid var(--danger); border-radius: 5px; transition: all 0.12s ease; }
 #resetBtn:hover { background: var(--danger); color: var(--bg); }
-#playBtn { padding: 5px 10px; font-size: 11px; cursor: pointer; background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 5px; white-space: nowrap; font-family: inherit; transition: all 0.12s ease; }
+#playBtn { padding: 4px 7px; line-height: 0; cursor: pointer; background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 5px; transition: all 0.12s ease; }
 #playBtn:hover { background: var(--accent); color: #fff; }
 #fretboard { display: inline-flex; flex-direction: column; position: relative; background: var(--surf); border: 1px solid var(--border); border-radius: 6px; padding: 4px; margin-top: 4px; }
 .string-row { display: flex; align-items: center; height: 32px; position: relative; }
@@ -1097,15 +1092,14 @@ body { margin: 0; padding: 8px; background: var(--bg); color: var(--text); font-
 .custom-suggestion:hover { background: var(--accent) !important; color: #fff !important; }
 .remove-shape { cursor: pointer; color: var(--muted); font-size: 14px; line-height: 1; padding: 0 3px; user-select: none; }
 .remove-shape:hover { color: var(--danger); }
-#rememberBtn { padding: 4px 8px; font-size: 11px; cursor: pointer; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 5px; transition: all 0.12s ease; width: 100%; font-family: inherit; }
-#rememberBtn:hover { border-color: var(--accent); color: var(--accent); }
-#shape-msg { display: none; font-size: 11px; margin-top: 8px; padding: 7px 10px; border-radius: 5px; line-height: 1.6; }
-#shape-msg.ok   { background: rgba(50,200,100,0.1); color: #4caf50; border: 1px solid #4caf50; }
-#shape-msg.warn { background: rgba(255,180,0,0.08); color: var(--text); border: 1px solid var(--muted); }
-#shape-msg button { font-size: 10px; padding: 2px 8px; margin: 4px 4px 0 0; cursor: pointer; background: var(--surf); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-family: inherit; }
-#shape-msg button:hover { border-color: var(--accent); color: var(--accent); }
 .suggestion { padding: 3px 10px; font-size: 12px; cursor: pointer; background: var(--surf); color: var(--text); border: 1px solid var(--border); border-radius: 12px; user-select: none; transition: all 0.12s ease; }
 .suggestion:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+#insert-warning { position: fixed; bottom: 8px; left: 8px; right: 8px; font-size: 11px; padding: 8px 10px; border-radius: 6px; line-height: 1.7; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.4); background: var(--surf); border: 1px solid var(--muted); color: var(--text); }
+#insert-warning button { font-size: 10px; padding: 2px 8px; margin: 4px 4px 0 0; cursor: pointer; background: var(--surf-hi); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-family: inherit; }
+#insert-warning button:hover { border-color: var(--accent); color: var(--accent); }
+#insert-warning button.force-btn { border-color: var(--muted); }
+#insert-warning .iw-sugg { cursor: pointer; display: inline-block; padding: 1px 8px; margin: 0 2px; background: var(--accent-soft); border: 1px solid var(--accent); color: var(--accent); border-radius: 10px; font-size: 11px; }
+#insert-warning .iw-sugg:hover { background: var(--accent); color: #fff; }
 #outer-row { display: flex; gap: 16px; align-items: flex-start; }
 #right-col { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 0; align-self: flex-start; }
 #mini-diagram { user-select: none; }
@@ -1124,7 +1118,7 @@ body { margin: 0; padding: 8px; background: var(--bg); color: var(--text); font-
   <div id="wrapper">
     <div id="top">
       <input id="chordName" placeholder="Chord name" />
-      <button id="playBtn" title="Play chord (P)">▶</button>
+      <button id="playBtn" title="Play chord (P)"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M9 2.5a.5.5 0 0 1 .854-.354l4 4a.5.5 0 0 1 0 .708l-4 4A.5.5 0 0 1 9 10.5v-2H1.5a.5.5 0 0 1 0-1H9v-2a.5.5 0 0 1 .146-.354z" style="display:none"/><path d="M11.536 14.01A8.473 8.473 0 0 0 14.026 8a8.473 8.473 0 0 0-2.49-6.01l-.708.707A7.476 7.476 0 0 1 13.025 8c0 2.071-.84 3.946-2.197 5.303l.708.707z"/><path d="M10.121 12.596A6.48 6.48 0 0 0 12.025 8a6.48 6.48 0 0 0-1.904-4.596l-.707.707A5.483 5.483 0 0 1 11.025 8a5.483 5.483 0 0 1-1.61 3.89l.706.706z"/><path d="M8.707 11.182A4.486 4.486 0 0 0 10.025 8a4.486 4.486 0 0 0-1.318-3.182L8 5.525A3.489 3.489 0 0 1 9.025 8 3.489 3.489 0 0 1 8 10.475l.707.707z"/><path d="M6.717 3.55A.5.5 0 0 1 7 4v8a.5.5 0 0 1-.812.39L3.825 10.5H1.5A.5.5 0 0 1 1 10V6a.5.5 0 0 1 .5-.5h2.325l2.363-1.89a.5.5 0 0 1 .529-.06z"/></svg></button>
       <span class="insert-label">Insert:</span>
       <button id="saveBtn" title="Insert [CHORD] inline at cursor">Inline</button>
       <button id="saveDefineBtn" title="Insert {chord: CHORD} at cursor and add {define:} to file">{chord:}</button>
@@ -1136,11 +1130,10 @@ body { margin: 0; padding: 8px; background: var(--bg); color: var(--text); font-
     <div id="fretboard"></div>
     <div id="fret-numbers"></div>
     <div id="suggestions"><span>play some strings...</span></div>
-    <div id="shape-msg"></div>
   </div>
+  <div id="insert-warning" style="display:none;"></div>
   <div id="right-col">
     <div id="mini-diagram"></div>
-    <button id="rememberBtn" title="Remember this shape under the current chord name">★ Remember</button>
     <div id="fingeringToggle">Fingering <span class="toggle-track"><span class="toggle-thumb"></span></span></div>
     <div id="fingering-hint" style="display:none;font-size:10px;text-align:center;line-height:1.5;max-width:100px;color:var(--muted);">Click a dot to cycle finger (1–4)</div>
     <div id="dot-mode-wrap">
@@ -1398,12 +1391,66 @@ window.addEventListener('message', e => {
     });
 });
 
+// ── Insert warning popup ──────────────────────────────────────────────────────
+var _pendingInsert = null;
+
+function _showInsertWarning(html) {
+    const el = document.getElementById('insert-warning');
+    el.innerHTML = html;
+    el.style.display = 'block';
+    el.querySelector('.iw-cancel').addEventListener('click', _hideInsertWarning);
+    el.querySelector('.iw-force').addEventListener('click', () => {
+        _hideInsertWarning();
+        vscode.postMessage({ command: 'forceInsert', cmd: _pendingInsert.cmd, chord: _pendingInsert.chord });
+    });
+    el.querySelectorAll('.iw-sugg').forEach(s => s.addEventListener('click', () => {
+        const newName = s.dataset.name;
+        _hideInsertWarning();
+        document.getElementById('chordName').value = newName;
+        manualChordName = true;
+        const chord = Object.assign({}, _pendingInsert.chord, { name: newName });
+        vscode.postMessage({ command: 'requestInsert', cmd: _pendingInsert.cmd, chord });
+    }));
+}
+
+function _hideInsertWarning() {
+    const el = document.getElementById('insert-warning');
+    el.style.display = 'none';
+    el.innerHTML = '';
+    _pendingInsert = null;
+}
+
+window.addEventListener('message', e => {
+    const msg = e.data;
+    if (msg.command !== 'insertWarning') return;
+    _pendingInsert = { cmd: msg.cmd, chord: msg.chord };
+    let html = '';
+    if (msg.status === 'unknown') {
+        const suggsHtml = (msg.suggestions || []).map(s =>
+            \`<span class="iw-sugg" data-name="\${s}">\${s}</span>\`
+        ).join('');
+        html = \`⚠ <b>"\${msg.chord.name}"</b> is not a recognized chord name.\${suggsHtml.length ? ' Did you mean: ' + suggsHtml : ''}<br>\`;
+    } else if (msg.status === 'mismatch') {
+        const missing = (msg.missingNotes || []).join(', ');
+        const alts = msg.altRoots || [];
+        if (alts.length) {
+            const altHtml = alts.map(a => \`<span class="iw-sugg" data-name="\${a}">\${a}</span>\`).join('');
+            html = \`⚠ Voicing doesn't match <b>"\${msg.chord.name}"</b> — but it fits: \${altHtml}<br>\`;
+        } else {
+            html = \`⚠ Voicing doesn't fully match <b>"\${msg.chord.name}"</b>\${missing ? ' — missing: ' + missing : ''}.<br>\`;
+        }
+    }
+    html += \`<button class="iw-force force-btn">Insert anyway</button><button class="iw-cancel">Cancel</button>\`;
+    _showInsertWarning(html);
+});
+
 function doInsert(cmd) {
     const name = document.getElementById('chordName').value.trim();
     if (!name) { alert('Enter chord name'); return; }
+    _hideInsertWarning();
     const hasFingers = fingeringActive && fingersOverride.some(f => f !== null && f > 0);
     const fingers = hasFingers ? fingersOverride.map(f => f === null ? 0 : f) : null;
-    vscode.postMessage({ command: cmd, chord: { name, frets: [...fretsArray], fingers } });
+    vscode.postMessage({ command: 'requestInsert', cmd, chord: { name, frets: [...fretsArray], fingers } });
 }
 document.getElementById('saveBtn').addEventListener('click', () => doInsert('insertInline'));
 document.getElementById('saveDefineBtn').addEventListener('click', () => doInsert('insertChordDirective'));
@@ -1423,7 +1470,8 @@ document.querySelectorAll('.dm-btn').forEach(btn => {
     });
 });
 document.getElementById('chordName').addEventListener('input', () => {
-    manualChordName = document.getElementById('chordName').value.trim().length > 0;
+    if (document.getElementById('chordName').value.trim().length > 0) manualChordName = true;
+    // Don't reset to false on empty — user is editing; only ↺ reset re-enables auto-detect
     updateDisplay();
 });
 document.getElementById('resetBtn').addEventListener('click', () => {
@@ -1493,14 +1541,17 @@ function _pluckString(midi, ctx, when) {
 
 function playChord() {
     if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const t0 = _audioCtx.currentTime + 0.02;
-    let offset = 0;
-    for (let s = NUM_STRINGS - 1; s >= 0; s--) { // low E → high E
-        const fret = fretsArray[s];
-        if (fret === -1) continue;
-        _pluckString(OPEN_MIDI[s] + fret, _audioCtx, t0 + offset);
-        offset += 0.05;
+    const t0 = _audioCtx.currentTime + 0.05;
+    // Collect active strings low E → high e (ascending pitch)
+    const active = [];
+    for (let s = NUM_STRINGS - 1; s >= 0; s--) {
+        if (fretsArray[s] !== -1) active.push(s);
     }
+    // Phase 1: slow, note by note (160 ms between strings)
+    active.forEach((s, i) => _pluckString(OPEN_MIDI[s] + fretsArray[s], _audioCtx, t0 + i * 0.16));
+    // Phase 2: fast strum after short pause (30 ms between strings)
+    const t1 = t0 + active.length * 0.16 + 0.22;
+    active.forEach((s, i) => _pluckString(OPEN_MIDI[s] + fretsArray[s], _audioCtx, t1 + i * 0.055));
 }
 
 document.getElementById('playBtn').addEventListener('click', playChord);
@@ -1509,71 +1560,6 @@ document.addEventListener('keydown', e => {
     if (e.key === 'p' || e.key === 'P') { playChord(); e.preventDefault(); }
 });
 
-// ── Shape memory ─────────────────────────────────────────────────────────────
-var _pendingShapeSave = null;
-
-function _showShapeMsg(html, type) {
-    const el = document.getElementById('shape-msg');
-    el.className = 'shape-msg ' + type;
-    el.innerHTML = html;
-    el.style.display = 'block';
-    const sa = el.querySelector('.save-anyway-btn');
-    if (sa) sa.addEventListener('click', _forceSaveShape);
-    const cn = el.querySelector('.cancel-btn');
-    if (cn) cn.addEventListener('click', _hideShapeMsg);
-    el.querySelectorAll('.shape-sugg').forEach(s =>
-        s.addEventListener('click', () => { pickName(s.dataset.name); _hideShapeMsg(); })
-    );
-}
-
-function _hideShapeMsg() {
-    const el = document.getElementById('shape-msg');
-    el.style.display = 'none';
-    el.innerHTML = '';
-}
-
-function _forceSaveShape() {
-    if (!_pendingShapeSave) return;
-    vscode.postMessage({ command: 'saveCustomShape', name: _pendingShapeSave.name, frets: _pendingShapeSave.frets });
-}
-
-document.getElementById('rememberBtn').addEventListener('click', function() {
-    const name = document.getElementById('chordName').value.trim();
-    if (!name) { _showShapeMsg('Enter a chord name first.', 'warn'); return; }
-    _pendingShapeSave = { name, frets: fretsArray.slice() };
-    vscode.postMessage({ command: 'validateShape', name, frets: fretsArray.slice() });
-});
-
-window.addEventListener('message', e => {
-    const msg = e.data;
-    if (msg.command === 'shapeValidationResult') {
-        if (msg.status === 'ok') {
-            _forceSaveShape();
-        } else if (msg.status === 'unknown') {
-            const suggsHtml = msg.suggestions.map(s =>
-                \`<span class="suggestion shape-sugg" data-name="\${s}">\${s}</span>\`
-            ).join(' ');
-            _showShapeMsg(
-                \`<b>Unknown chord name.</b> Did you mean: \${suggsHtml}<br>\` +
-                \`<button class="save-anyway-btn">Save anyway</button> <button class="cancel-btn">Cancel</button>\`,
-                'warn'
-            );
-        } else if (msg.status === 'mismatch') {
-            _showShapeMsg(
-                \`<b>\${_pendingShapeSave.name}</b> needs \${msg.chordNotes.join(' ')} — voicing has \${msg.voicingNotes.join(' ')}\` +
-                (msg.missingNotes.length ? \` (missing: \${msg.missingNotes.join(' ')})\` : '') + \`.<br>\` +
-                \`<button class="save-anyway-btn">Save anyway</button> <button class="cancel-btn">Cancel</button>\`,
-                'warn'
-            );
-        }
-    }
-    if (msg.command === 'shapeSaved') {
-        _pendingShapeSave = null;
-        _showShapeMsg('✓ Shape remembered', 'ok');
-        setTimeout(_hideShapeMsg, 2000);
-        vscode.postMessage({ command: 'detectChord', frets: fretsArray.slice() });
-    }
-});
 
 window.addEventListener('message', e => {
     const msg = e.data;

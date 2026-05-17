@@ -17,7 +17,7 @@ ChordPro VSCode turns VSCode into a full-featured songwriting and performance en
 | | |
 |---|---|
 | 🎸 **Chord diagrams everywhere** | Hover over any `[chord]` in the source *or* in the live preview to see an SVG fretboard diagram |
-| 🎛 **Visual Chord Builder** | Click strings and frets on an interactive fretboard; the chord name is detected automatically; insert `{define:}` with one click |
+| 🎛 **Smart Chord Builder** | Click strings and frets on an interactive fretboard; the chord name is detected automatically; the builder learns from your own voicings and validates names before inserting; hear the chord with built-in audio playback |
 | 📖 **Chord Reference Panel** | Sidebar panel with three tabs — chords in the current file, your personal chord library, and the full built-in library; click to insert, Ctrl+click for diagram, right-click for options |
 | 🗂 **My Chords** | Automatically tracks every `{define:}` across all files you work on; stores multiple voicings per chord; navigate, delete, and sort your personal collection |
 | 🎼 **Visual Tab Editor** | Build guitar tablature by clicking a grid — no dashes to type |
@@ -205,12 +205,17 @@ Three tabs:
 Open with `Ctrl+Alt+B` or from the panel at the bottom.
 
 - Click strings and frets to place fingers on the fretboard; drag across strings to place the same fret on multiple strings
-- The chord name is detected automatically from your finger positions
+- **Auto-detect** — the chord name fills in automatically as you place fingers; fret dots show the note name (e.g. C#) or the interval relative to the root (1, m3, 5, b7…) — toggle with the Notes / Intervals switch
+- **Smart voicing memory** — every chord you insert is remembered as a shape. Next time you play the same fingering (or a barre-transposed version), your name appears as a ★ suggestion. Click × to forget a shape.
+- **Name validation** — any insert button validates the chord name first:
+  - *Unknown name*: suggests the closest recognized chord names; click one to re-validate instantly
+  - *Note mismatch*: lists the notes the name requires but the voicing is missing
+  - *Wrong root*: if the shape is a valid voicing of the same chord quality on a different root (e.g. you typed Cmaj6 but the fingering is Dmaj6), the correct root is suggested automatically
+- **Audio playback** — click 🔊 (or press `P`) to hear the chord: strings are plucked one by one from low E to high e, then a quick full strum rings out (Karplus-Strong synthesis, no external library)
 - **Fingering mode** — toggle to assign finger numbers (1–4) by clicking the fret dots
-- **At cursor** — inserts the `{define:}` block at the current cursor position
-- **With defines** — inserts the block grouped with existing `{define:}` lines in the file header; if the chord is already defined, you are prompted to replace or keep both
-- **↺ Reset** — clears the fretboard
-- **Open in Builder** link — hover over any `[chord]` or `{define:}` line and click the link to load that chord's fingering directly into the Builder
+- **Inline** — inserts `[CHORD]` at the cursor; **{chord:}** inserts the directive and adds a `{define:}` block; **{define:}** adds the define block only
+- **↺ Reset** — clears the fretboard; **−1 / +1** shift all frets down or up by one semitone; **Ctrl+Z / Ctrl+Shift+Z** undo/redo fret changes
+- **Open in Builder** — hover over any `[chord]` or `{define:}` line and click the link to load that chord's fingering directly into the Builder
 - Saved chords appear at the top of the `[` auto-completion list and in chord hover diagrams
 
 ### Tab Editor

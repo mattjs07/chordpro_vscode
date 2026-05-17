@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.1.0
+
+### Chord Builder
+- **Smart voicing memory** — the builder learns chord names from your own insertions: every chord you insert is stored as a shape fingerprint. Next time you play the same fingering (or a barre-transposed version of it), your name appears as a ★ suggestion alongside the standard auto-detected names. Click × to forget a saved shape.
+- **Name validation on insert** — clicking any insert button (Inline, `{chord:}`, `{define:}`) validates the chord name before inserting:
+  - *Unknown name*: warns with fuzzy-matched suggestions ("Did you mean C5, Caug…?"); click a suggestion to re-validate with that name immediately
+  - *Note mismatch*: warns when the voicing is missing notes required by the chord name, listing the missing notes
+  - *Wrong root, correct quality*: automatically checks all 12 roots with the same chord suffix and suggests the matching root (e.g. "Voicing doesn't match Cmaj6 — but it fits: Dmaj6"); click to re-validate and insert in one step
+  - All warnings appear inline in the builder panel; "Insert anyway" overrides the check
+- **Audio playback** — click the 🔊 speaker button (or press `P`) to hear the chord: each string is plucked individually from low E to high e, then a quick full strum plays all notes together (Karplus-Strong synthesis, no external library needed)
+- **Ctrl+Shift+Z redo** — redo stack added to the Chord Builder (and Tab Editor); Ctrl+Z undoes fret/string changes, Ctrl+Shift+Z redoes; performing a new action clears the redo stack
+
+### Performance View
+- **Three-column layout** — new "Three" option in the ⚙ Settings popup; supports `{x_columns_on}` / `{x_columns_off}` col-zone directives same as two-column mode
+- **Per-file settings memory** — theme, columns, font size, legend mode, diagram sizes, and BPM are saved per file URI and restored automatically on next open; `{tempo:}` always takes priority over saved BPM
+- **Full-screen icon fix** — enter/exit icons are now inline SVG (corner-bracket expand/compress) instead of Unicode glyphs that rendered blank in some fonts; the exit icon correctly shows inward arrows once in full-screen
+- **Custom side panel** — `{x_start_side_panel}` / `{x_end_side_panel}` / `{x_panel_section_title: Label}` directives define a chord reference panel that appears as a fixed right column ("Side" mode) or inline grey card ("Inline" mode); toggle in ⚙ Settings; panel width controlled by a shared slider (120–260 px); incompatible with the chord legend "Side panel" mode
+
+### All SVG chord diagrams
+- **Fret number display** — the position indicator (e.g. "5" instead of "5fr") is now vertically centred in the first fret slot with a larger font; applies to hover tooltips, the Chord Reference panel, and the builder mini-diagram
+
 ## 2.0.0
 
 ### Performance View
