@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.1.1
+
+### Sidebar UI overhaul
+- **Quick Actions panel** — new top-level sidebar section with 7 shortcut buttons: Performance View, Preview PDF, Build PDF, Chord Builder, Tab Editor, Grid Editor, Oolimo; same Linear Violet dark/light palette as the Chord Reference panel
+- **Song Library converted to webview** — purple hover highlight on song items and inline ▶ play button; currently-open file is highlighted with purple text and a soft violet background; filter input to search by title or artist; consistent dark/light palette across all three sidebar sections
+- **Sidebar order**: Quick Actions → Song Library → Chord Reference
+
+### Editor
+- **Edit existing tab/grid blocks via CodeLens** — `$(edit) Edit tab` and `$(edit) Edit grid` lenses appear above every `{start_of_tab}` and `{start_of_grid}` line; clicking opens the respective editor pre-populated with the block's current content; saving replaces the original block in-place
+
+### Chord Builder — bug fixes
+- **Insert Inline now always adds `{define:}`** — if the chord has no existing define in the document, one is inserted at the top of the defines section automatically
+- **"Already defined" dialog fires after mismatch warning** — when "Insert anyway" is clicked after a voicing-mismatch warning, the standard already-defined flow (Go to definition / Replace / Add as _2) now correctly triggers instead of silently skipping it
+- **`{chord:}` insert cursor position fixed** — the `editor.edit()` for inserting the define is now properly awaited before the cursor position is read, preventing the chord directive from landing on the wrong line
+
+### SVG chord diagrams — bug fixes
+- **Large-stretch chords render correctly** — diagrams like `{define: Am7 base-fret 5 frets x 0 1 1 1 x}` previously appeared blank; the fret window now shifts to the dot positions and a fret-number label appears at the correct row; fix applies to both the builder SVG and the Chord Reference panel
+
 ## 2.1.0
 
 ### Chord Builder

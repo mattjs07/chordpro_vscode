@@ -358,6 +358,10 @@ function generateChordSvg(frets, chordName) {
     } else {
         startFret = minFret; showNut = false;
     }
+    // If open strings exist but fretted notes exceed the 5-fret window, shift window up
+    if (hasOpen && minFret > NF) {
+        startFret = minFret; showNut = false;
+    }
 
     // Detect barre: ≥ 4 strings on the same lowest fret AND they form a contiguous range
     const fretCounts = {};
@@ -417,9 +421,10 @@ function generateChordSvg(frets, chordName) {
         parts.push(`<circle cx="${sx(s)}" cy="${dy(slot)}" r="7" fill="#222"/>`);
     });
 
-    // Fret number label for non-open-position chords
-    if (!showNut) {
-        parts.push(`<text x="${sx(NS-1)+5}" y="${dy(1)+4}" font-size="11" font-weight="bold" fill="#555" font-family="sans-serif" text-anchor="start">${startFret}</text>`);
+    // Fret number label: show whenever the lowest fretted note isn't near fret 1
+    if (minFret > 3) {
+        const labelSlot = minFret - startFret + 1;
+        parts.push(`<text x="${sx(NS-1)+5}" y="${dy(labelSlot)+4}" font-size="11" font-weight="bold" fill="#555" font-family="sans-serif" text-anchor="start">${minFret}</text>`);
     }
 
     parts.push('</svg>');
@@ -790,32 +795,48 @@ function lookupCustomShape(context, frets) {
     return (useFlat ? FL[newST] : SH[newST]) + entry.suffix;
 }
 
-async function _performInsert(cmd, chord, context) {
+async function _performInsert(cmd, chord, context, forceDefineCheck = false) {
     saveCustomShapeMemory(context, chord.name, chord.frets);
     const editor = vscode.window.activeTextEditor;
 
-    if (cmd === 'insertInline') {
-        addSavedVoicing(context, chord);
-        if (!editor) {
-            vscode.env.clipboard.writeText('[' + chord.name + ']');
-            vscode.window.showInformationMessage('No active editor — chord name copied to clipboard');
-        } else {
-            editor.insertSnippet(new vscode.SnippetString('[' + chord.name + ']$0'));
+    // Helper: insert the in-lyric reference at cursor position
+    const insertRef = async (name) => {
+        if (cmd === 'insertInline') {
+            editor.insertSnippet(new vscode.SnippetString('[' + name + ']$0'));
+        } else if (cmd === 'insertChordDirective') {
+            const cursorPos = editor.selection.active;
+            await editor.edit(eb => eb.insert(cursorPos, '{chord: ' + name + '}\n'));
         }
-        return;
-    }
+        // insertDefine: no cursor insert
+    };
 
     if (!editor) {
         const text = cmd === 'insertChordDirective'
             ? '{chord: ' + chord.name + '}\n' + toChordProDefine(chord)
+            : cmd === 'insertInline' ? '[' + chord.name + ']'
             : toChordProDefine(chord);
         vscode.env.clipboard.writeText(text);
-        vscode.window.showInformationMessage('No active editor — definition copied to clipboard');
+        vscode.window.showInformationMessage('No active editor — chord copied to clipboard');
         addSavedVoicing(context, chord);
         return;
     }
 
     const existingDefines = parseDocumentDefines(editor.document);
+
+    // For insertInline without forceDefineCheck: silently insert [name], inserting
+    // the define only if the chord isn't defined yet. No dialog on repeat use.
+    if (cmd === 'insertInline' && !forceDefineCheck) {
+        addSavedVoicing(context, chord);
+        if (!existingDefines[chord.name]) {
+            const insertLine = findDefineInsertLine(editor.document);
+            await editor.edit(eb => eb.insert(new vscode.Position(insertLine, 0), toChordProDefine(chord) + '\n'));
+        }
+        editor.insertSnippet(new vscode.SnippetString('[' + chord.name + ']$0'));
+        return;
+    }
+
+    // Full define-check flow (insertChordDirective, insertDefine, and insertInline
+    // when forceDefineCheck=true, i.e. user chose "Insert anyway" after a warning)
     if (existingDefines[chord.name]) {
         const nextName = nextVoicingName(editor.document, chord.name);
         const lines = editor.document.getText().split('\n');
@@ -831,6 +852,8 @@ async function _performInsert(cmd, chord, context) {
                 editor.selection = new vscode.Selection(pos, pos);
                 editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
             }
+            // For inline: still insert the reference even after navigating
+            if (cmd === 'insertInline') editor.insertSnippet(new vscode.SnippetString('[' + chord.name + ']$0'));
         } else if (answer === 'Replace') {
             if (lineIdx >= 0) {
                 await editor.edit(eb => eb.replace(
@@ -838,29 +861,20 @@ async function _performInsert(cmd, chord, context) {
                     toChordProDefine(chord)
                 ));
             }
-            if (cmd === 'insertChordDirective') {
-                const cursorPos = editor.selection.active;
-                await editor.edit(eb => eb.insert(cursorPos, '{chord: ' + chord.name + '}\n'));
-            }
+            await insertRef(chord.name);
             addSavedVoicing(context, chord);
         } else if (answer === `Add as ${nextName}`) {
             const newChord = Object.assign({}, chord, { name: nextName });
             const insertLine = findDefineInsertLine(editor.document);
             await editor.edit(eb => eb.insert(new vscode.Position(insertLine, 0), toChordProDefine(newChord) + '\n'));
-            if (cmd === 'insertChordDirective') {
-                const cursorPos = editor.selection.active;
-                await editor.edit(eb => eb.insert(cursorPos, '{chord: ' + nextName + '}\n'));
-            }
+            await insertRef(nextName);
             addSavedVoicing(context, newChord);
         }
     } else {
         addSavedVoicing(context, chord);
         const insertLine = findDefineInsertLine(editor.document);
-        editor.edit(eb => eb.insert(new vscode.Position(insertLine, 0), toChordProDefine(chord) + '\n'));
-        if (cmd === 'insertChordDirective') {
-            const cursorPos = editor.selection.active;
-            await editor.edit(eb => eb.insert(cursorPos, '{chord: ' + chord.name + '}\n'));
-        }
+        await editor.edit(eb => eb.insert(new vscode.Position(insertLine, 0), toChordProDefine(chord) + '\n'));
+        await insertRef(chord.name);
     }
 }
 
@@ -1008,7 +1022,7 @@ class ChordBuilderViewProvider {
 
             if (message.command === 'forceInsert') {
                 const { cmd, chord } = message;
-                await _performInsert(cmd, chord, this.context);
+                await _performInsert(cmd, chord, this.context, true);
             }
 
             if (message.command === 'detectChord') {
@@ -1750,6 +1764,94 @@ function findDefineInsertLine(document) {
     return lastDefine >= 0 ? lastDefine + 1 : lastMeta >= 0 ? lastMeta + 1 : 0;
 }
 
+class ChordProActionsViewProvider {
+    resolveWebviewView(view) {
+        view.webview.options = { enableScripts: true };
+        view.webview.html = this._buildHtml();
+        view.webview.onDidReceiveMessage(msg => {
+            if (msg.command === 'runAction') {
+                const cmds = {
+                    'perf':    'extension.autoScrollPreview',
+                    'preview': 'extension.previewChordPro',
+                    'build':   'extension.renderChordPro',
+                    'builder': 'chordproFretboard.openBuilder',
+                    'tab':     'extension.openTabEditor',
+                    'grid':    'extension.openGridEditor',
+                    'oolimo':  'extension.openChordAnalyzer',
+                };
+                if (cmds[msg.action]) vscode.commands.executeCommand(cmds[msg.action]);
+            }
+        });
+    }
+    _buildHtml() {
+        return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+:root {
+    --bg: #131215; --surf: #1e1c22; --surf-hi: #262329;
+    --text: #e6e8ef; --muted: #8b8fa3; --border: #2e2b36;
+    --accent: #7c6af6; --accent-soft: rgba(124,106,246,0.15);
+    --icon: #c5c7d4;
+}
+body.vscode-light, body.vscode-high-contrast-light {
+    --bg: #fafbfc; --surf: #ffffff; --surf-hi: #f0f3f9;
+    --text: #0f1117; --muted: #64748b; --border: #dde1eb;
+    --accent: #5e4fd8; --accent-soft: rgba(94,79,216,0.10);
+    --icon: #0f1117;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--vscode-font-family); }
+#action-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    padding: 7px 7px 6px;
+}
+.act-btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; padding: 5px 2px 4px;
+    background: var(--surf); border: 1px solid var(--border);
+    color: var(--icon); border-radius: 5px; cursor: pointer;
+    font-size: 9px; line-height: 1.2; transition: all 0.12s;
+    white-space: nowrap; font-family: inherit;
+}
+.act-btn:hover { background: var(--surf-hi); border-color: var(--accent); color: var(--accent); }
+.act-btn svg { display: block; flex-shrink: 0; }
+.act-btn.wide { grid-column: span 2; flex-direction: row; gap: 5px; padding: 5px 8px; font-size: 10px; }
+</style>
+</head><body>
+<div id="action-bar">
+  <button class="act-btn" data-action="perf" title="Performance View">
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M3 2.5l10 5.5-10 5.5V2.5z"/></svg>Perf
+  </button>
+  <button class="act-btn" data-action="preview" title="Preview PDF">
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 3C4.5 3 1.5 5.5 0 8c1.5 2.5 4.5 5 8 5s6.5-2.5 8-5c-1.5-2.5-4.5-5-8-5zm0 8a3 3 0 110-6 3 3 0 010 6zm0-4.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3z"/></svg>PDF
+  </button>
+  <button class="act-btn" data-action="build" title="Build PDF">
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M9.1 1L14 5.9V15H2V1h7.1zm-.6 1H3v12h10V6.5H8.5V2zM9.5 2.7V5.5H12.3L9.5 2.7z"/></svg>Build
+  </button>
+  <button class="act-btn" data-action="builder" title="Chord Builder">
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M2 1h12v2H2V1zm0 4h2v8H2V5zm3 0h2v8H5V5zm3 0h2v8H8V5zm3 0h2v8h-2V5zm-9 2.5h12v1H2v-1zm0 3h12v1H2v-1z"/></svg>Chords
+  </button>
+  <button class="act-btn" data-action="tab" title="Tab Editor">
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M1 2h14v1H1V2zm0 3h14v1H1V5zm0 3h14v1H1V8zm0 3h14v1H1v-1z"/></svg>Tab
+  </button>
+  <button class="act-btn" data-action="grid" title="Grid Editor">
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M1 1h6v6H1V1zm8 0h6v6H9V1zm-8 8h6v6H1V9zm8 0h6v6H9V9z"/></svg>Grid
+  </button>
+  <button class="act-btn wide" data-action="oolimo" title="Open Oolimo chord analyzer">
+    <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M9 1h6v6l-2-2-5 5-2-2 5-5L9 1zm-7 3h4v2H4v8h8v-4h2v6H2V4z"/></svg>Oolimo
+  </button>
+</div>
+<script>
+const vscode = acquireVsCodeApi();
+document.querySelectorAll('.act-btn').forEach(btn => {
+    btn.addEventListener('click', () => vscode.postMessage({ command: 'runAction', action: btn.dataset.action }));
+});
+</script>
+</body></html>`;
+    }
+}
+
 class ChordReferenceViewProvider {
     constructor(context) {
         this._ctx = context;
@@ -1810,6 +1912,7 @@ class ChordReferenceViewProvider {
                 vscode.commands.executeCommand('chordpro.openInBuilder', msg.name, msg.frets, msg.fingers || null);
                 return;
             }
+
 
             // ── Insert chord ──────────────────────────────────────────────
             const editor = vscode.window.activeTextEditor;
@@ -2058,6 +2161,7 @@ function drawSvg(frets, fingers) {
     var hasOpen=frets.some(function(f){return f===0;});
     var showNut=hasOpen||minF<=2;
     var startF=showNut?1:minF;
+    if(hasOpen&&minF>NF){startF=minF;showNut=false;}
     var fretCounts={};
     frets.forEach(function(f){if(f>0)fretCounts[f]=(fretCounts[f]||0)+1;});
     var barreCandidate=minF&&fretCounts[minF]>=4?minF:0;
@@ -2069,8 +2173,10 @@ function drawSvg(frets, fingers) {
     var s='';
     if(showNut){
         s+='<rect class="cd-nut" x="'+sx(0)+'" y="'+(fy(0)-3)+'" width="'+(sx(NS-1)-sx(0))+'" height="3"/>';
-    } else {
-        s+='<text class="cd-label" x="'+(W-2)+'" y="'+(cy(1)+3)+'" font-size="10" font-weight="bold" text-anchor="end">'+startF+'</text>';
+    }
+    if(startF>1){
+        var labelSlot=minF-startF+1;
+        s+='<text class="cd-label" x="'+(W-2)+'" y="'+(cy(labelSlot)+3)+'" font-size="10" font-weight="bold" text-anchor="end">'+startF+'</text>';
     }
     for(var i=showNut?1:0;i<=NF;i++){
         s+='<line class="cd-grid" x1="'+sx(0)+'" y1="'+fy(i)+'" x2="'+sx(NS-1)+'" y2="'+fy(i)+'" stroke-width="0.8"/>';
@@ -2287,30 +2393,72 @@ render();
 }
 
 // ─────────────────────────────────────────────
-// Song Library TreeDataProvider
+// Song Library WebviewViewProvider
 // ─────────────────────────────────────────────
 
-class SongLibraryProvider {
+class SongLibraryWebviewProvider {
     constructor(context) {
         this._ctx = context;
-        this._onDidChangeTreeData = new vscode.EventEmitter();
-        this.onDidChangeTreeData = this._onDidChangeTreeData.event;
+        this._view = null;
         this._songs = [];
         this._folder = context.globalState.get('libraryFolder') || null;
+        this._activePath = null;
         if (this._folder) this._loadSongs();
+    }
+
+    resolveWebviewView(view) {
+        this._view = view;
+        view.webview.options = { enableScripts: true };
+        view.webview.html = this._buildHtml();
+        view.webview.onDidReceiveMessage(async msg => {
+            if (msg.command === 'openSong') {
+                const doc = await vscode.workspace.openTextDocument(msg.filePath);
+                await vscode.window.showTextDocument(doc);
+            } else if (msg.command === 'previewSong') {
+                const song = this._songs.find(s => s.filePath === msg.filePath);
+                if (!song) return;
+                const source = fs.readFileSync(song.filePath, 'utf8');
+                const chordSvgs = buildChordSvgMap(source, buildChordData({ getText: () => source, getWordRangeAtPosition: () => null }));
+                const panel = vscode.window.createWebviewPanel(
+                    'chordproScrollPreview', song.title + ' — Preview',
+                    vscode.ViewColumn.One, { enableScripts: true, retainContextWhenHidden: true }
+                );
+                panel.webview.html = getScrollWebviewContent(source, chordSvgs);
+                panel.webview.onDidReceiveMessage(m => {
+                    if (m.command === 'saveHtml') {
+                        const outPath = song.filePath.replace(/\.[^.]+$/, '') + '_preview.html';
+                        const standalone = getScrollWebviewContent(source, buildChordSvgMap(source, buildChordData({ getText: () => source, getWordRangeAtPosition: () => null })))
+                            .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>\n?/, '')
+                            .replace('const vscodeApi = acquireVsCodeApi();', 'const vscodeApi = { postMessage: function() {} };');
+                        fs.writeFileSync(outPath, standalone, 'utf8');
+                        vscode.window.showInformationMessage('Saved: ' + outPath);
+                    }
+                });
+            } else if (msg.command === 'setFolder') {
+                vscode.commands.executeCommand('chordpro.setLibraryFolder');
+            }
+        });
     }
 
     setFolder(folder) {
         this._folder = folder;
         this._ctx.globalState.update('libraryFolder', folder);
         this._loadSongs();
-        this._onDidChangeTreeData.fire();
+        this._rebuildView();
     }
 
     refresh() {
         this._loadSongs();
-        this._onDidChangeTreeData.fire();
+        this._rebuildView();
     }
+
+    setActive(filePath) {
+        this._activePath = filePath || null;
+        if (this._view) this._view.webview.postMessage({ command: 'setActive', filePath: this._activePath });
+    }
+
+    getSongs()  { return this._songs; }
+    getFolder() { return this._folder; }
 
     _loadSongs() {
         this._songs = [];
@@ -2338,31 +2486,125 @@ class SongLibraryProvider {
         this._songs.sort((a, b) => a.title.localeCompare(b.title));
     }
 
-    getSongs()  { return this._songs; }
-    getFolder() { return this._folder; }
-
-    getTreeItem(element) {
-        if (element.isPlaceholder) {
-            const item = new vscode.TreeItem(element.label);
-            if (!this._folder) item.command = { command: 'chordpro.setLibraryFolder', title: 'Set Library Folder', arguments: [] };
-            return item;
-        }
-        const item = new vscode.TreeItem(element.title, vscode.TreeItemCollapsibleState.None);
-        item.description = element.artist;
-        item.tooltip = element.filePath;
-        item.command = { command: 'chordpro.openSong', title: 'Open', arguments: [element] };
-        item.contextValue = 'song';
-        return item;
+    _rebuildView() {
+        if (!this._view) return;
+        this._view.webview.html = this._buildHtml();
     }
 
-    getChildren() {
-        if (!this._folder) {
-            return [{ isPlaceholder: true, label: 'Click 📂 to set library folder' }];
-        }
-        if (!this._songs.length) {
-            return [{ isPlaceholder: true, label: 'No .cho files found in folder' }];
-        }
-        return this._songs;
+    _buildHtml() {
+        const data = JSON.stringify({
+            songs: this._songs.map(s => ({ title: s.title, artist: s.artist, filePath: s.filePath })),
+            activePath: this._activePath,
+            hasFolder: !!this._folder
+        });
+        return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+:root {
+    --bg: #131215; --surf: #1e1c22; --surf-hi: #262329;
+    --text: #e6e8ef; --muted: #8b8fa3; --border: #2e2b36;
+    --accent: #7c6af6; --accent-soft: rgba(124,106,246,0.15);
+    --icon: #c5c7d4;
+}
+body.vscode-light, body.vscode-high-contrast-light {
+    --bg: #fafbfc; --surf: #ffffff; --surf-hi: #f0f3f9;
+    --text: #0f1117; --muted: #64748b; --border: #dde1eb;
+    --accent: #5e4fd8; --accent-soft: rgba(94,79,216,0.10);
+    --icon: #0f1117;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--vscode-font-family); font-size: 13px; overflow-x: hidden; }
+#filter-wrap { padding: 6px 7px 5px; border-bottom: 1px solid var(--border); }
+#filter-input {
+    width: 100%; background: var(--surf); border: 1px solid var(--border);
+    color: var(--text); border-radius: 4px; padding: 3px 7px; font-size: 11px;
+    outline: none; font-family: inherit;
+}
+#filter-input:focus { border-color: var(--accent); }
+#placeholder { padding: 20px 12px; color: var(--muted); font-size: 11px; text-align: center; line-height: 1.5; }
+#placeholder a { color: var(--accent); cursor: pointer; }
+#song-list { padding: 3px 0; }
+.song-item {
+    display: flex; align-items: center; padding: 4px 8px 4px 10px; gap: 6px;
+    cursor: pointer; border-radius: 3px; margin: 0 3px;
+}
+.song-item:hover { background: var(--accent-soft); }
+.song-item:hover .song-title { color: var(--accent); }
+.song-item:hover .song-play { opacity: 1; color: var(--accent); }
+.song-item.active { background: var(--accent-soft); }
+.song-item.active .song-title { color: var(--accent); font-weight: 600; }
+.song-meta { flex: 1; min-width: 0; }
+.song-title { display: block; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--icon); transition: color 0.1s; }
+.song-artist { display: block; font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.song-play {
+    background: none; border: none; cursor: pointer; color: var(--muted);
+    opacity: 0; padding: 2px 5px; font-size: 11px; border-radius: 3px;
+    transition: opacity 0.1s, color 0.1s; flex-shrink: 0;
+}
+</style>
+</head><body>
+<div id="filter-wrap"><input id="filter-input" placeholder="Filter songs…" /></div>
+<div id="song-list"></div>
+<script>
+var DATA = ${data};
+var songs = DATA.songs;
+var activePath = DATA.activePath;
+var hasFolder = DATA.hasFolder;
+var vscode = acquireVsCodeApi();
+var filterEl = document.getElementById('filter-input');
+var listEl = document.getElementById('song-list');
+
+if (!hasFolder) document.getElementById('filter-wrap').style.display = 'none';
+
+function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function render(filter) {
+    var q = (filter || '').toLowerCase();
+    if (!songs.length) {
+        listEl.innerHTML = hasFolder
+            ? '<div id="placeholder">No .cho files found in folder</div>'
+            : '<div id="placeholder">Click the folder icon above<br>to set your library folder</div>';
+        return;
+    }
+    var visible = q ? songs.filter(function(s) {
+        return s.title.toLowerCase().indexOf(q) !== -1 || (s.artist && s.artist.toLowerCase().indexOf(q) !== -1);
+    }) : songs;
+    if (!visible.length) { listEl.innerHTML = '<div id="placeholder">No matches</div>'; return; }
+    listEl.innerHTML = visible.map(function(s) {
+        var cls = 'song-item' + (activePath && activePath === s.filePath ? ' active' : '');
+        return '<div class="' + cls + '" data-path="' + esc(s.filePath) + '">' +
+               '<div class="song-meta">' +
+               '<span class="song-title">' + esc(s.title) + '</span>' +
+               (s.artist ? '<span class="song-artist">' + esc(s.artist) + '</span>' : '') +
+               '</div>' +
+               '<button class="song-play" data-path="' + esc(s.filePath) + '" title="Preview">▶</button>' +
+               '</div>';
+    }).join('');
+    listEl.querySelectorAll('.song-item').forEach(function(el) {
+        el.addEventListener('click', function(e) {
+            if (e.target.closest('.song-play')) return;
+            vscode.postMessage({ command: 'openSong', filePath: el.dataset.path });
+        });
+        el.querySelector('.song-play').addEventListener('click', function(e) {
+            e.stopPropagation();
+            vscode.postMessage({ command: 'previewSong', filePath: e.currentTarget.dataset.path });
+        });
+    });
+}
+
+render();
+filterEl.addEventListener('input', function() { render(filterEl.value); });
+
+window.addEventListener('message', function(e) {
+    var msg = e.data;
+    if (msg.command === 'setActive') {
+        activePath = msg.filePath;
+        render(filterEl.value);
+    }
+});
+</script>
+</body></html>`;
     }
 }
 
@@ -3345,6 +3587,40 @@ function activate(context) {
                 arguments: [document],
             })];
         }
+    });
+
+    // CodeLens provider — ✏ Edit grid / ✏ Edit tab buttons above block start lines
+    const blockEditorLensProvider = vscode.languages.registerCodeLensProvider('chordpro', {
+        provideCodeLenses(document) {
+            const lenses = [];
+            const text = document.getText().split('\n');
+            for (let i = 0; i < text.length; i++) {
+                const range = new vscode.Range(i, 0, i, text[i].length);
+                if (/\{start_of_grid\b/i.test(text[i])) {
+                    lenses.push(new vscode.CodeLens(range, {
+                        title: '$(edit) Edit grid',
+                        command: 'chordpro.editBlockAtLine',
+                        arguments: [{ type: 'grid', line: i }]
+                    }));
+                }
+                if (/\{start_of_tab\b/i.test(text[i])) {
+                    lenses.push(new vscode.CodeLens(range, {
+                        title: '$(edit) Edit tab',
+                        command: 'chordpro.editBlockAtLine',
+                        arguments: [{ type: 'tab', line: i }]
+                    }));
+                }
+            }
+            return lenses;
+        }
+    });
+
+    const editBlockAtLine = vscode.commands.registerCommand('chordpro.editBlockAtLine', ({ type, line }) => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) return;
+        const pos = new vscode.Position(line, 0);
+        editor.selection = new vscode.Selection(pos, pos);
+        vscode.commands.executeCommand(type === 'grid' ? 'extension.openGridEditor' : 'extension.openTabEditor');
     });
 
     // ── User config file management ──────────────────────────────────────────
@@ -4919,6 +5195,12 @@ if(SONGS.length) loadSong(0);
     });
 
     // ─────────────────────────────────────────────
+    // Quick Actions Panel
+    // ─────────────────────────────────────────────
+    const actionsProvider = new ChordProActionsViewProvider();
+    const actionsView = vscode.window.registerWebviewViewProvider('chordproActions', actionsProvider);
+
+    // ─────────────────────────────────────────────
     // Chord Reference Panel
     // ─────────────────────────────────────────────
     const chordRefProvider = new ChordReferenceViewProvider(context);
@@ -4944,10 +5226,18 @@ if(SONGS.length) loadSong(0);
 
     // Song Library Panel
     // ─────────────────────────────────────────────
-    const songLibraryProvider = new SongLibraryProvider(context);
-    const libraryTreeView = vscode.window.createTreeView('chordproLibraryView', {
-        treeDataProvider: songLibraryProvider, showCollapseAll: false, canSelectMany: true
+    const songLibraryProvider = new SongLibraryWebviewProvider(context);
+    const songLibraryView = vscode.window.registerWebviewViewProvider('chordproLibraryView', songLibraryProvider);
+    // Track active editor so current song stays highlighted
+    const onEditorChangeLib = vscode.window.onDidChangeActiveTextEditor(editor => {
+        const p = editor && editor.document.languageId === 'chordpro' ? editor.document.uri.fsPath : null;
+        songLibraryProvider.setActive(p);
     });
+    // Set initial active path
+    (() => {
+        const ed = vscode.window.activeTextEditor;
+        if (ed && ed.document.languageId === 'chordpro') songLibraryProvider.setActive(ed.document.uri.fsPath);
+    })();
 
     const setLibraryFolder = vscode.commands.registerCommand('chordpro.setLibraryFolder', async () => {
         const picked = await vscode.window.showOpenDialog({
@@ -4993,8 +5283,7 @@ if(SONGS.length) loadSong(0);
     });
 
     const openSetlistPreview = vscode.commands.registerCommand('chordpro.openSetlistPreview', () => {
-        const selected = libraryTreeView.selection.filter(s => !s.isPlaceholder);
-        const songs = selected.length > 0 ? selected : songLibraryProvider.getSongs();
+        const songs = songLibraryProvider.getSongs();
         if (!songs.length) { vscode.window.showErrorMessage('No songs in library. Set a folder first.'); return; }
         const sharedSvgs = buildSharedSvgMap();
         const songData = songs.map(s => ({
@@ -5057,12 +5346,14 @@ if(SONGS.length) loadSong(0);
         onOpenDiag,
         onChangeDiag,
         onCloseDiag,
+        actionsView,
         chordRefView,
         onEditorChangeRef,
         onDocChangeRef,
         onOpenTrack,
         onSaveTrack,
-        libraryTreeView,
+        songLibraryView,
+        onEditorChangeLib,
         setLibraryFolder,
         refreshLibrary,
         openLibrarySong,
@@ -5073,9 +5364,96 @@ if(SONGS.length) loadSong(0);
         editChordProConfig,
         setUserConfigsFolder,
         registerGridEditor(context),
+        blockEditorLensProvider,
+        editBlockAtLine,
         wrapInSection,
         ...wrapSectionSubs
     );
+}
+
+// ─────────────────────────────────────────────
+// Tab/Grid Editor utilities
+// ─────────────────────────────────────────────
+
+function findEnclosingBlock(editor, startRe, endRe) {
+    if (!editor) return null;
+    const lines = editor.document.getText().split('\n');
+    const cur = editor.selection.active.line;
+    let start = -1;
+    for (let i = cur; i >= 0; i--) {
+        if (startRe.test(lines[i])) { start = i; break; }
+        if (endRe.test(lines[i])) break;
+    }
+    if (start < 0) return null;
+    let end = -1;
+    for (let i = start + 1; i < lines.length; i++) {
+        if (endRe.test(lines[i])) { end = i; break; }
+    }
+    if (end < 0) return null;
+    return { startLine: start, endLine: end, content: lines.slice(start + 1, end).join('\n') };
+}
+
+function parseGridContent(content) {
+    try {
+        const lines = content.split('\n').map(s => s.trim()).filter(Boolean);
+        if (!lines.length) return null;
+        const parsed = lines.map(line => {
+            const s = line.replace(/^\|\|?\s*/, '').replace(/\s*\|\|?$/, '');
+            return s.split(/\s*\|\s*/).map(bar =>
+                bar.trim().split(/\s+/).map(b => b === '.' ? '' : b)
+            );
+        });
+        const numBars = parsed[0].length;
+        const beats = parsed[0][0].length;
+        if (!numBars || !beats) return null;
+        return { rows: parsed, beats, numBars };
+    } catch (_) { return null; }
+}
+
+function parseTabContent(content) {
+    const STRING_NAMES = ['e', 'B', 'G', 'D', 'A', 'E'];
+    try {
+        const lines = content.split('\n');
+        const raw = {};
+        for (const line of lines) {
+            const t = line.trim();
+            for (const n of STRING_NAMES) {
+                if (t.startsWith(n + '|') && t.endsWith('|') && !raw[n]) {
+                    let s = t.slice(n.length + 1, -1);
+                    if (s.endsWith('--')) s = s.slice(0, -2);
+                    raw[n] = s;
+                    break;
+                }
+            }
+        }
+        if (Object.keys(raw).length < 6) return null;
+        const splits = {};
+        for (const n of STRING_NAMES) splits[n] = raw[n].split('|');
+        const numSegs = splits['e'].length;
+        const cols = [];
+        for (let si = 0; si < numSegs; si++) {
+            if (si > 0) cols.push({ type: 'bar' });
+            const segs = {};
+            let maxLen = 0;
+            for (const n of STRING_NAMES) { segs[n] = splits[n][si] || ''; if (segs[n].length > maxLen) maxLen = segs[n].length; }
+            if (!maxLen) continue;
+            const bounds = new Set([0]);
+            for (const n of STRING_NAMES) {
+                const s = segs[n];
+                for (let p = 1; p + 2 <= s.length; p++) {
+                    if (s[p] === '-' && s[p + 1] === '-' && s[p + 2] !== '-') bounds.add(p);
+                }
+            }
+            const sorted = [...bounds].sort((a, b) => a - b);
+            if (sorted.length === 1 && maxLen > 3) { for (let p = 3; p < maxLen; p += 3) sorted.push(p); }
+            const ends = [...sorted.slice(1), maxLen];
+            for (let bi = 0; bi < sorted.length; bi++) {
+                const values = STRING_NAMES.map(n => segs[n].substring(sorted[bi], ends[bi]).replace(/^--/, '').replace(/-+$/, ''));
+                cols.push({ type: 'notes', values });
+            }
+        }
+        return cols.length ? { cols } : null;
+    } catch (_) { return null; }
 }
 
 // ─────────────────────────────────────────────
@@ -5084,25 +5462,43 @@ if(SONGS.length) loadSong(0);
 function registerTabEditor(context) {
     return vscode.commands.registerCommand('extension.openTabEditor', () => {
         const targetEditor = vscode.window.activeTextEditor;
+        let existingBlock = null, initialCols = null;
+        if (targetEditor) {
+            existingBlock = findEnclosingBlock(targetEditor, /\{start_of_tab\b/i, /\{end_of_tab\b/i);
+            if (existingBlock) {
+                const parsed = parseTabContent(existingBlock.content);
+                if (parsed) initialCols = parsed.cols;
+            }
+        }
         const panel = vscode.window.createWebviewPanel(
             'chordproTabEditor',
-            'Tab Editor',
+            existingBlock ? 'Tab Editor — editing' : 'Tab Editor',
             vscode.ViewColumn.Beside,
             { enableScripts: true, retainContextWhenHidden: true }
         );
-        panel.webview.html = getTabEditorContent();
+        panel.webview.html = getTabEditorContent(initialCols, !!existingBlock);
         panel.webview.onDidReceiveMessage(msg => {
             if (msg.command === 'insertTab') {
                 const editor = targetEditor || vscode.window.activeTextEditor;
                 if (!editor) { vscode.window.showErrorMessage('No active editor'); return; }
-                const text = '{start_of_tab}\n' + msg.tab + '\n{end_of_tab}';
-                editor.insertSnippet(new vscode.SnippetString(text));
+                const newText = '{start_of_tab}\n' + msg.tab + '\n{end_of_tab}';
+                if (existingBlock) {
+                    const range = new vscode.Range(
+                        new vscode.Position(existingBlock.startLine, 0),
+                        new vscode.Position(existingBlock.endLine, editor.document.lineAt(existingBlock.endLine).text.length)
+                    );
+                    editor.edit(eb => eb.replace(range, newText));
+                } else {
+                    editor.insertSnippet(new vscode.SnippetString(newText));
+                }
             }
         });
     });
 }
 
-function getTabEditorContent() {
+function getTabEditorContent(initialCols, isEditing) {
+    const initColsJson = JSON.stringify(initialCols || null);
+    const btnLabel = isEditing ? 'Replace tab' : 'Insert tab';
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5191,7 +5587,7 @@ table { border-collapse: collapse; }
   <button class="btn" id="btn-bar">| Bar</button>
   <button class="btn" id="btn-del">Delete last</button>
   <button class="btn" id="btn-clear">Clear</button>
-  <button class="btn btn-insert" id="btn-insert">Insert tab</button>
+  <button class="btn btn-insert" id="btn-insert">${btnLabel}</button>
 </div>
 <div id="grid-wrap"><table id="grid"></table></div>
 <div id="preview-wrap">
@@ -5203,16 +5599,18 @@ const vscode = acquireVsCodeApi();
 const STRINGS = ['e','B','G','D','A','E'];
 const NS = 6;
 
-let cols = [];    // { type: 'notes', values: string[NS] } | { type: 'bar' }
+const INIT_COLS = ${initColsJson};
+let cols = INIT_COLS ? INIT_COLS.map(c => c.type === 'bar' ? {type:'bar'} : {type:'notes', values:c.values.slice()}) : [];
 let selC = -1, selS = -1, inputBuf = '';
 let tabUndoStack = [];
 let tabRedoStack = [];
 function tabPushUndo() { tabUndoStack.push(JSON.parse(JSON.stringify(cols))); if (tabUndoStack.length > 50) tabUndoStack.shift(); tabRedoStack = []; }
 
-// Start with 8 columns, bar, 8 columns
-for (let i = 0; i < 8; i++) addNote();
-addBar();
-for (let i = 0; i < 8; i++) addNote();
+if (!INIT_COLS) {
+  for (let i = 0; i < 8; i++) addNote();
+  addBar();
+  for (let i = 0; i < 8; i++) addNote();
+}
 
 function addNote() { cols.push({ type: 'notes', values: Array(NS).fill('') }); }
 function addBar()  { cols.push({ type: 'bar' }); }
@@ -5377,26 +5775,41 @@ function registerGridEditor(context) {
             const reInline = /\[([A-G][^\[\]]*)\]/g;
             while ((m = reInline.exec(text)) !== null) addChord(m[1]);
         }
+        let existingBlock = null, existingData = null;
+        if (targetEditor) {
+            existingBlock = findEnclosingBlock(targetEditor, /\{start_of_grid\b/i, /\{end_of_grid\b/i);
+            if (existingBlock) existingData = parseGridContent(existingBlock.content);
+        }
         const panel = vscode.window.createWebviewPanel(
             'chordproGridEditor',
-            'Grid Editor',
+            existingBlock ? 'Grid Editor — editing' : 'Grid Editor',
             vscode.ViewColumn.Beside,
             { enableScripts: true, retainContextWhenHidden: true }
         );
-        panel.webview.html = getGridEditorContent(songChords);
+        panel.webview.html = getGridEditorContent(songChords, existingData);
         panel.webview.onDidReceiveMessage(msg => {
             if (msg.command === 'insertGrid') {
                 const editor = targetEditor || vscode.window.activeTextEditor;
                 if (!editor) { vscode.window.showErrorMessage('No active editor'); return; }
-                const text = '{start_of_grid}\n' + msg.grid + '\n{end_of_grid}';
-                editor.insertSnippet(new vscode.SnippetString(text));
+                const newText = '{start_of_grid}\n' + msg.grid + '\n{end_of_grid}';
+                if (existingBlock) {
+                    const range = new vscode.Range(
+                        new vscode.Position(existingBlock.startLine, 0),
+                        new vscode.Position(existingBlock.endLine, editor.document.lineAt(existingBlock.endLine).text.length)
+                    );
+                    editor.edit(eb => eb.replace(range, newText));
+                } else {
+                    editor.insertSnippet(new vscode.SnippetString(newText));
+                }
             }
         });
     });
 }
 
-function getGridEditorContent(songChords) {
+function getGridEditorContent(songChords, existingData) {
     const chordsJson = JSON.stringify(songChords);
+    const initDataJson = JSON.stringify(existingData || null);
+    const btnLabel = existingData ? 'Replace grid' : 'Insert grid';
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5477,7 +5890,7 @@ td { padding: 1px 1px; vertical-align: middle; }
     <option value="2">2/4</option>
   </select></label>
   <span class="tsep">|</span>
-  <button class="btn btn-insert" id="btn-insert">Insert grid</button>
+  <button class="btn btn-insert" id="btn-insert">${btnLabel}</button>
 </div>
 <div id="grid-wrap"><table id="grid"><tbody></tbody></table></div>
 <div id="palette-section">
@@ -5491,18 +5904,21 @@ td { padding: 1px 1px; vertical-align: middle; }
 <script>
 var vscode = acquireVsCodeApi();
 var SONG_CHORDS = ${chordsJson};
+var INIT_DATA = ${initDataJson};
 
 // rows[ri][bi][ki] = chord string; empty string = dot in output
-var beats = 4;
-var numBars = 4;
-var rows = [];
+var beats = INIT_DATA ? INIT_DATA.beats : 4;
+var numBars = INIT_DATA ? INIT_DATA.numBars : 4;
+var rows = INIT_DATA ? INIT_DATA.rows : [];
 var lastFocused = null; // { r, b, k }
 
 function makeBar()  { return new Array(beats).fill(''); }
 function makeLine() { var l = []; for (var i = 0; i < numBars; i++) l.push(makeBar()); return l; }
 
-rows.push(makeLine());
-rows.push(makeLine());
+if (!INIT_DATA) {
+  rows.push(makeLine());
+  rows.push(makeLine());
+}
 
 function generateGrid() {
   var colW = [];
@@ -5656,6 +6072,7 @@ if (SONG_CHORDS.length) {
   paletteDiv.innerHTML = '<span style="color:#444;font-size:11px">No chords found in document</span>';
 }
 
+if (INIT_DATA) document.getElementById('beats-sel').value = String(beats);
 render();
 </script>
 </body>

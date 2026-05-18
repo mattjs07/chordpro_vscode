@@ -3,7 +3,7 @@
   "displayName": "ChordPro VSCode",
   "description": "Edit, render, and build ChordPro songs in VSCode — includes PDF rendering, templates, and an interactive chord builder with fretboard.",
   "publisher": "mattjs07",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "icon": "images/icon.png",
   "categories": [
     "Other"
@@ -61,9 +61,14 @@
     "views": {
       "chordproLibrary": [
         {
+          "type": "webview",
+          "id": "chordproActions",
+          "name": "Quick Actions"
+        },
+        {
+          "type": "webview",
           "id": "chordproLibraryView",
-          "name": "Song Library",
-          "icon": "$(music)"
+          "name": "Song Library"
         },
         {
           "type": "webview",
@@ -242,13 +247,6 @@
           "group": "navigation"
         }
       ],
-      "view/item/context": [
-        {
-          "command": "chordpro.previewSongFromLibrary",
-          "when": "viewItem == song",
-          "group": "inline"
-        }
-      ],
       "editor/context": [
         {
           "submenu": "chordpro.wrapSubmenu",
@@ -390,6 +388,7 @@
     "onCommand:extension.transposeChords",
     "onCommand:extension.capoHelper",
     "onCommand:extension.detectKey",
+    "onView:chordproActions",
     "onView:chordproLibraryView",
     "onView:chordproChordReference",
     "onCommand:chordpro.setLibraryFolder",
