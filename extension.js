@@ -351,6 +351,7 @@ function generateChordSvg(frets, chordName) {
     const frettedNotes = frets.filter(f => f > 0);
     const hasOpen = frets.some(f => f === 0);
     const minFret = frettedNotes.length ? Math.min(...frettedNotes) : 1;
+    const maxFret = frettedNotes.length ? Math.max(...frettedNotes) : 1;
 
     let startFret, showNut;
     if (hasOpen || minFret <= 3) {
@@ -358,8 +359,8 @@ function generateChordSvg(frets, chordName) {
     } else {
         startFret = minFret; showNut = false;
     }
-    // If open strings exist but fretted notes exceed the 5-fret window, shift window up
-    if (hasOpen && minFret > NF) {
+    // Open string + fretted notes that overflow the window: shift up to minFret
+    if (hasOpen && maxFret > NF) {
         startFret = minFret; showNut = false;
     }
 
@@ -421,10 +422,10 @@ function generateChordSvg(frets, chordName) {
         parts.push(`<circle cx="${sx(s)}" cy="${dy(slot)}" r="7" fill="#222"/>`);
     });
 
-    // Fret number label: show whenever the lowest fretted note isn't near fret 1
-    if (minFret > 3) {
+    // Fret number label: show whenever the window doesn't start at the nut
+    if (startFret > 1) {
         const labelSlot = minFret - startFret + 1;
-        parts.push(`<text x="${sx(NS-1)+5}" y="${dy(labelSlot)+4}" font-size="11" font-weight="bold" fill="#555" font-family="sans-serif" text-anchor="start">${minFret}</text>`);
+        parts.push(`<text x="${sx(NS-1)+5}" y="${dy(labelSlot)+4}" font-size="11" font-weight="bold" fill="#555" font-family="sans-serif" text-anchor="start">${startFret}</text>`);
     }
 
     parts.push('</svg>');
@@ -1112,7 +1113,7 @@ body { margin: 0; padding: 8px; background: var(--bg); color: var(--text); font-
 #insert-warning button { font-size: 10px; padding: 2px 8px; margin: 4px 4px 0 0; cursor: pointer; background: var(--surf-hi); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-family: inherit; }
 #insert-warning button:hover { border-color: var(--accent); color: var(--accent); }
 #insert-warning button.force-btn { border-color: var(--muted); }
-#insert-warning .iw-sugg { cursor: pointer; display: inline-block; padding: 1px 8px; margin: 0 2px; background: var(--accent-soft); border: 1px solid var(--accent); color: var(--accent); border-radius: 10px; font-size: 11px; }
+#insert-warning .iw-sugg { cursor: pointer; display: inline-block; padding: 1px 8px; margin: 0 2px; background: var(--accent-soft); border: 1px solid var(--accent); color: var(--text); border-radius: 10px; font-size: 11px; }
 #insert-warning .iw-sugg:hover { background: var(--accent); color: #fff; }
 #outer-row { display: flex; gap: 16px; align-items: flex-start; }
 #right-col { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 0; align-self: flex-start; }
@@ -1414,16 +1415,18 @@ function _showInsertWarning(html) {
     el.style.display = 'block';
     el.querySelector('.iw-cancel').addEventListener('click', _hideInsertWarning);
     el.querySelector('.iw-force').addEventListener('click', () => {
+        const { cmd, chord } = _pendingInsert;
         _hideInsertWarning();
-        vscode.postMessage({ command: 'forceInsert', cmd: _pendingInsert.cmd, chord: _pendingInsert.chord });
+        vscode.postMessage({ command: 'forceInsert', cmd, chord });
     });
     el.querySelectorAll('.iw-sugg').forEach(s => s.addEventListener('click', () => {
+        const { cmd, chord: pendingChord } = _pendingInsert;
         const newName = s.dataset.name;
         _hideInsertWarning();
         document.getElementById('chordName').value = newName;
         manualChordName = true;
-        const chord = Object.assign({}, _pendingInsert.chord, { name: newName });
-        vscode.postMessage({ command: 'requestInsert', cmd: _pendingInsert.cmd, chord });
+        const chord = Object.assign({}, pendingChord, { name: newName });
+        vscode.postMessage({ command: 'requestInsert', cmd, chord });
     }));
 }
 
@@ -2158,10 +2161,11 @@ function drawSvg(frets, fingers) {
     var cy=function(i){return PT+(i-0.5)*FH;};
     var played=frets.filter(function(f){return f>0;});
     var minF=played.length?Math.min.apply(null,played):1;
+    var maxF=played.length?Math.max.apply(null,played):1;
     var hasOpen=frets.some(function(f){return f===0;});
     var showNut=hasOpen||minF<=2;
     var startF=showNut?1:minF;
-    if(hasOpen&&minF>NF){startF=minF;showNut=false;}
+    if(hasOpen&&maxF>NF){startF=minF;showNut=false;}
     var fretCounts={};
     frets.forEach(function(f){if(f>0)fretCounts[f]=(fretCounts[f]||0)+1;});
     var barreCandidate=minF&&fretCounts[minF]>=4?minF:0;
@@ -5055,9 +5059,18 @@ if(SONGS.length) loadSong(0);
         const savedNames = new Set(getAllSavedNames(context));
 
         const usedChords = new Set();
+        let inGrid = false;
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
+
+            // Track grid blocks and collect chord tokens within them
+            if (/\{start_of_grid\b/i.test(line)) { inGrid = true; continue; }
+            if (/\{end_of_grid\b/i.test(line))   { inGrid = false; continue; }
+            if (inGrid) {
+                line.split(/[\s|]+/).forEach(t => { if (t && t !== '.' && t !== '||') usedChords.add(t); });
+                continue;
+            }
 
             // {chord: NAME} counts as usage even though it's not an inline [chord]
             const chordDirRe = /\{chord:\s+([^\s}]+)/gi;
@@ -5082,7 +5095,7 @@ if(SONGS.length) loadSong(0);
         }
 
         // Warn about {define:} blocks whose chord never appears as [chord]
-        const defineLineRe = /\{(?:define|chord):?\s+(\S+)/gi;
+        const defineLineRe = /\{(?:define|chord):?\s+([^\s}]+)/gi;
         for (let i = 0; i < lines.length; i++) {
             defineLineRe.lastIndex = 0;
             let dm;

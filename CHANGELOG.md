@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.2
+
+### Bug fixes
+- **Chord Builder — "Insert anyway" broken for unknown names**: clicking "Insert anyway" (or a "Did you mean" suggestion) after an unknown-name warning did nothing; the click handler was reading `_pendingInsert` after it had already been nulled by `_hideInsertWarning`
+- **Chord Builder — SVG diagrams with open string + high frets**: chords like `E7 base-fret 3 frets 0 x 4 2 1 x` showed incomplete diagrams (highest dot dropped, no fret label); the window-shift now triggers on `maxFret > NF` instead of `minFret > NF`, and the fret label shows whenever the window doesn't start at the nut
+- **"Defined but never used" false positive on `{chord:}`**: the diagnostic regex used `\S+` to capture the chord name, swallowing the closing `}` and producing a key mismatch with `usedChords`; changed to `[^\s}]+`
+- **"Defined but never used" false positive for grid chords**: chords used inside `{start_of_grid}` blocks were not counted as used; grid lines are now scanned and all chord tokens added to the used-chord set
+
 ## 2.1.1
 
 ### Sidebar UI overhaul
