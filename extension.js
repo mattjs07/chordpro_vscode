@@ -1009,14 +1009,18 @@ class ChordBuilderViewProvider {
         webviewView.webview.onDidReceiveMessage(async message => {
             if (message.command === 'requestInsert') {
                 const { cmd, chord } = message;
-                let result;
-                try { result = validateChordName(chord.name, chord.frets); }
-                catch (e) { result = { status: 'ok' }; }
-                if (result.status !== 'ok') {
-                    const altRoots = result.status === 'mismatch'
-                        ? findAlternativeRoots(chord.name, chord.frets) : [];
-                    webviewView.webview.postMessage({ command: 'insertWarning', cmd, chord, ...result, altRoots });
-                    return;
+                const savedVoicings = this.context.globalState.get('savedVoicings') || [];
+                const isSaved = savedVoicings.some(v => v.name === chord.name);
+                if (!isSaved) {
+                    let result;
+                    try { result = validateChordName(chord.name, chord.frets); }
+                    catch (e) { result = { status: 'ok' }; }
+                    if (result.status !== 'ok') {
+                        const altRoots = result.status === 'mismatch'
+                            ? findAlternativeRoots(chord.name, chord.frets) : [];
+                        webviewView.webview.postMessage({ command: 'insertWarning', cmd, chord, ...result, altRoots });
+                        return;
+                    }
                 }
                 await _performInsert(cmd, chord, this.context);
             }
@@ -2407,6 +2411,7 @@ class SongLibraryWebviewProvider {
         this._songs = [];
         this._folder = context.globalState.get('libraryFolder') || null;
         this._activePath = null;
+        this._selection = [];
         if (this._folder) this._loadSongs();
     }
 
@@ -2421,23 +2426,9 @@ class SongLibraryWebviewProvider {
             } else if (msg.command === 'previewSong') {
                 const song = this._songs.find(s => s.filePath === msg.filePath);
                 if (!song) return;
-                const source = fs.readFileSync(song.filePath, 'utf8');
-                const chordSvgs = buildChordSvgMap(source, buildChordData({ getText: () => source, getWordRangeAtPosition: () => null }));
-                const panel = vscode.window.createWebviewPanel(
-                    'chordproScrollPreview', song.title + ' — Preview',
-                    vscode.ViewColumn.One, { enableScripts: true, retainContextWhenHidden: true }
-                );
-                panel.webview.html = getScrollWebviewContent(source, chordSvgs);
-                panel.webview.onDidReceiveMessage(m => {
-                    if (m.command === 'saveHtml') {
-                        const outPath = song.filePath.replace(/\.[^.]+$/, '') + '_preview.html';
-                        const standalone = getScrollWebviewContent(source, buildChordSvgMap(source, buildChordData({ getText: () => source, getWordRangeAtPosition: () => null })))
-                            .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>\n?/, '')
-                            .replace('const vscodeApi = acquireVsCodeApi();', 'const vscodeApi = { postMessage: function() {} };');
-                        fs.writeFileSync(outPath, standalone, 'utf8');
-                        vscode.window.showInformationMessage('Saved: ' + outPath);
-                    }
-                });
+                vscode.commands.executeCommand('chordpro.previewSongFromLibrary', { filePath: song.filePath, title: song.title });
+            } else if (msg.command === 'selectionChanged') {
+                this._selection = msg.paths || [];
             } else if (msg.command === 'setFolder') {
                 vscode.commands.executeCommand('chordpro.setLibraryFolder');
             }
@@ -2461,8 +2452,12 @@ class SongLibraryWebviewProvider {
         if (this._view) this._view.webview.postMessage({ command: 'setActive', filePath: this._activePath });
     }
 
-    getSongs()  { return this._songs; }
-    getFolder() { return this._folder; }
+    getSongs()     { return this._songs; }
+    getFolder()    { return this._folder; }
+    getSelection() {
+        if (!this._selection.length) return this._songs;
+        return this._songs.filter(s => this._selection.includes(s.filePath));
+    }
 
     _loadSongs() {
         this._songs = [];
@@ -2529,21 +2524,25 @@ body { background: var(--bg); color: var(--text); font-family: var(--vscode-font
 #song-list { padding: 3px 0; }
 .song-item {
     display: flex; align-items: center; padding: 4px 8px 4px 10px; gap: 6px;
-    cursor: pointer; border-radius: 3px; margin: 0 3px;
+    cursor: pointer; border-radius: 3px; margin: 0 3px; user-select: none;
 }
 .song-item:hover { background: var(--accent-soft); }
 .song-item:hover .song-title { color: var(--accent); }
-.song-item:hover .song-play { opacity: 1; color: var(--accent); }
+.song-item:hover .song-play { border-color: var(--accent); color: var(--accent); }
 .song-item.active { background: var(--accent-soft); }
 .song-item.active .song-title { color: var(--accent); font-weight: 600; }
+.song-item.selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.song-item.selected .song-title { color: var(--accent); font-weight: 500; }
 .song-meta { flex: 1; min-width: 0; }
 .song-title { display: block; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--icon); transition: color 0.1s; }
 .song-artist { display: block; font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .song-play {
-    background: none; border: none; cursor: pointer; color: var(--muted);
-    opacity: 0; padding: 2px 5px; font-size: 11px; border-radius: 3px;
-    transition: opacity 0.1s, color 0.1s; flex-shrink: 0;
+    background: var(--surf); border: 1px solid var(--border); border-radius: 4px;
+    cursor: pointer; color: var(--muted); padding: 2px 7px; font-size: 10px;
+    transition: background 0.1s, border-color 0.1s, color 0.1s; flex-shrink: 0;
 }
+.song-play:hover { background: var(--surf-hi); border-color: var(--accent); color: var(--accent); }
+.song-play:active, .song-play.clicked { background: var(--accent); border-color: var(--accent); color: #fff; }
 </style>
 </head><body>
 <div id="filter-wrap"><input id="filter-input" placeholder="Filter songs…" /></div>
@@ -2556,6 +2555,8 @@ var hasFolder = DATA.hasFolder;
 var vscode = acquireVsCodeApi();
 var filterEl = document.getElementById('filter-input');
 var listEl = document.getElementById('song-list');
+var selectedPaths = new Set();
+var lastClickIndex = -1;
 
 if (!hasFolder) document.getElementById('filter-wrap').style.display = 'none';
 
@@ -2563,42 +2564,79 @@ function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function render(filter) {
+function visibleSongs(filter) {
     var q = (filter || '').toLowerCase();
+    if (!q) return songs;
+    return songs.filter(function(s) {
+        return s.title.toLowerCase().indexOf(q) !== -1 || (s.artist && s.artist.toLowerCase().indexOf(q) !== -1);
+    });
+}
+
+function render(filter) {
     if (!songs.length) {
         listEl.innerHTML = hasFolder
             ? '<div id="placeholder">No .cho files found in folder</div>'
             : '<div id="placeholder">Click the folder icon above<br>to set your library folder</div>';
         return;
     }
-    var visible = q ? songs.filter(function(s) {
-        return s.title.toLowerCase().indexOf(q) !== -1 || (s.artist && s.artist.toLowerCase().indexOf(q) !== -1);
-    }) : songs;
+    var visible = visibleSongs(filter);
     if (!visible.length) { listEl.innerHTML = '<div id="placeholder">No matches</div>'; return; }
     listEl.innerHTML = visible.map(function(s) {
-        var cls = 'song-item' + (activePath && activePath === s.filePath ? ' active' : '');
+        var cls = 'song-item';
+        if (activePath && activePath === s.filePath) cls += ' active';
+        if (selectedPaths.has(s.filePath)) cls += ' selected';
         return '<div class="' + cls + '" data-path="' + esc(s.filePath) + '">' +
                '<div class="song-meta">' +
                '<span class="song-title">' + esc(s.title) + '</span>' +
                (s.artist ? '<span class="song-artist">' + esc(s.artist) + '</span>' : '') +
                '</div>' +
-               '<button class="song-play" data-path="' + esc(s.filePath) + '" title="Preview">▶</button>' +
+               '<button class="song-play" data-path="' + esc(s.filePath) + '" title="Open Performance View">▶</button>' +
                '</div>';
     }).join('');
-    listEl.querySelectorAll('.song-item').forEach(function(el) {
-        el.addEventListener('click', function(e) {
-            if (e.target.closest('.song-play')) return;
-            vscode.postMessage({ command: 'openSong', filePath: el.dataset.path });
-        });
-        el.querySelector('.song-play').addEventListener('click', function(e) {
-            e.stopPropagation();
-            vscode.postMessage({ command: 'previewSong', filePath: e.currentTarget.dataset.path });
-        });
-    });
 }
 
+function notifySelection() {
+    vscode.postMessage({ command: 'selectionChanged', paths: Array.from(selectedPaths) });
+}
+
+listEl.addEventListener('click', function(e) {
+    var playBtn = e.target.closest('.song-play');
+    if (playBtn) {
+        playBtn.classList.add('clicked');
+        setTimeout(function() { playBtn.classList.remove('clicked'); }, 600);
+        vscode.postMessage({ command: 'previewSong', filePath: playBtn.dataset.path });
+        return;
+    }
+    var item = e.target.closest('.song-item');
+    if (!item) return;
+
+    var visible = visibleSongs(filterEl.value);
+    var idx = visible.findIndex(function(s) { return s.filePath === item.dataset.path; });
+    var filePath = item.dataset.path;
+
+    if (e.ctrlKey || e.metaKey) {
+        if (selectedPaths.has(filePath)) selectedPaths.delete(filePath);
+        else selectedPaths.add(filePath);
+        lastClickIndex = idx;
+        render(filterEl.value);
+        notifySelection();
+    } else if (e.shiftKey && lastClickIndex >= 0) {
+        var start = Math.min(lastClickIndex, idx);
+        var end = Math.max(lastClickIndex, idx);
+        for (var i = start; i <= end; i++) selectedPaths.add(visible[i].filePath);
+        render(filterEl.value);
+        notifySelection();
+    } else {
+        selectedPaths.clear();
+        lastClickIndex = idx;
+        vscode.postMessage({ command: 'openSong', filePath: filePath });
+        render(filterEl.value);
+        notifySelection();
+    }
+});
+
 render();
-filterEl.addEventListener('input', function() { render(filterEl.value); });
+filterEl.addEventListener('input', function() { lastClickIndex = -1; render(filterEl.value); });
 
 window.addEventListener('message', function(e) {
     var msg = e.data;
@@ -5296,7 +5334,7 @@ if(SONGS.length) loadSong(0);
     });
 
     const openSetlistPreview = vscode.commands.registerCommand('chordpro.openSetlistPreview', () => {
-        const songs = songLibraryProvider.getSongs();
+        const songs = songLibraryProvider.getSelection();
         if (!songs.length) { vscode.window.showErrorMessage('No songs in library. Set a folder first.'); return; }
         const sharedSvgs = buildSharedSvgMap();
         const songData = songs.map(s => ({
