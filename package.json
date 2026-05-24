@@ -199,6 +199,14 @@
         "title": "ChordPro: Open Chord in Builder"
       },
       {
+        "command": "chordpro.editNotationMap",
+        "title": "ChordPro: Edit Notation Map"
+      },
+      {
+        "command": "chordpro.resetNotationMap",
+        "title": "ChordPro: Reset Notation Map to Defaults"
+      },
+      {
         "command": "chordpro.wrapInSection",
         "title": "ChordPro: Wrap in Section"
       },
