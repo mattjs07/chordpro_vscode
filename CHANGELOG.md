@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.0
+
+- New display of grids in performance mode
+- New and improved grid editor
+
 ## 2.1.2
 
 ### Bug fixes

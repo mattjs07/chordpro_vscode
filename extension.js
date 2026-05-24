@@ -2924,6 +2924,52 @@ const SHARED_SONG_HTML = `
 </div>`;
 
 // ─────────────────────────────────────────────
+// Shared grid-alt JS: injected into both the performance view and grid editor webviews.
+// No external dependencies — pure DOM manipulation on .cg-bar / .cg-beat elements.
+// ─────────────────────────────────────────────
+const SHARED_GRID_JS = `
+var _GRID_REF_PX = 48, _GRID_MAX_PX = 36;
+function updateGridAlt() {
+  function fitFont(chord, textW, maxW) {
+    chord.style.fontSize = Math.round(Math.min(_GRID_MAX_PX, _GRID_REF_PX * (maxW / textW)) * 10) / 10 + 'px';
+  }
+  Array.from(document.querySelectorAll('.cg-beat')).forEach(function(b) {
+    b.classList.remove('cg-alt', 'cg-pos-top', 'cg-pos-bot');
+    var c = b.querySelector('.cg-chord');
+    if (c) c.style.fontSize = _GRID_REF_PX + 'px';
+  });
+  Array.from(document.querySelectorAll('.cg-bar')).forEach(function(bar) {
+    var barBeats = Array.from(bar.querySelectorAll(':scope > .cg-beat'));
+    var n = barBeats.length, inAlt = false, nextIsTop = true;
+    for (var i = 0; i < n; i++) {
+      var b = barBeats[i];
+      var chord = b.querySelector('.cg-chord');
+      var isLast = b.classList.contains('cg-last');
+      var textW = chord ? chord.getBoundingClientRect().width : 0;
+      var cellW = b.getBoundingClientRect().width;
+      if (isLast) {
+        if (inAlt && chord) b.classList.add('cg-alt', nextIsTop ? 'cg-pos-top' : 'cg-pos-bot');
+        if (chord) fitFont(chord, textW, cellW * 0.90);
+        break;
+      }
+      if (!chord) continue;
+      var needsAlt = textW > cellW * 1.4;
+      if (!inAlt) {
+        if (needsAlt) {
+          inAlt = true; nextIsTop = false; b.classList.add('cg-alt', 'cg-pos-top');
+          fitFont(chord, textW, cellW * 1.5);
+        } else fitFont(chord, textW, cellW * 0.90);
+      } else {
+        b.classList.add('cg-alt', nextIsTop ? 'cg-pos-top' : 'cg-pos-bot');
+        fitFont(chord, textW, cellW * 1.5);
+        nextIsTop = !nextIsTop;
+      }
+    }
+  });
+}
+`;
+
+// ─────────────────────────────────────────────
 // Shared JS: injected into both performance view and setlist webviews.
 // Requires these variables to be declared in the view's preamble (before injection):
 //   CHORD_SVGS  — object mapping chord name → SVG string
@@ -3400,53 +3446,7 @@ function applyCustomPanel() {
   if (isSide) renderCustomPanel();
 }
 
-// ── Grid alt layout: auto-fit font + sequential top/bot propagation ──────────
-// Every chord is scaled to fill its available cell width (capped at MAX_PX).
-// Alt mode activates when the natural fit font would be unreadably small, and
-// allows overflow into 150% of cell width to buy back a larger font size.
-// All measurements use a fixed REF_PX reference (independent of body font size).
-var _GRID_REF_PX = 48, _GRID_MAX_PX = 36;
-function updateGridAlt() {
-  function fitFont(chord, textW, maxW) {
-    chord.style.fontSize = Math.round(Math.min(_GRID_MAX_PX, _GRID_REF_PX * (maxW / textW)) * 10) / 10 + 'px';
-  }
-  // Phase 1: clear alt state, set all chords to REF_PX for measurement
-  Array.from(document.querySelectorAll('.cg-beat')).forEach(function(b) {
-    b.classList.remove('cg-alt', 'cg-pos-top', 'cg-pos-bot');
-    var c = b.querySelector('.cg-chord');
-    if (c) c.style.fontSize = _GRID_REF_PX + 'px';
-  });
-  // Phase 2: per-bar sequential propagation
-  Array.from(document.querySelectorAll('.cg-bar')).forEach(function(bar) {
-    var barBeats = Array.from(bar.querySelectorAll(':scope > .cg-beat'));
-    var n = barBeats.length, inAlt = false, nextIsTop = true;
-    for (var i = 0; i < n; i++) {
-      var b = barBeats[i];
-      var chord = b.querySelector('.cg-chord');
-      var isLast = b.classList.contains('cg-last');
-      // Measure before adding cg-alt — max-width:150% would cap getBoundingClientRect
-      var textW = chord ? chord.getBoundingClientRect().width : 0;
-      var cellW = b.getBoundingClientRect().width;
-      if (isLast) {
-        if (inAlt && chord) b.classList.add('cg-alt', nextIsTop ? 'cg-pos-top' : 'cg-pos-bot');
-        if (chord) fitFont(chord, textW, cellW * 0.90);
-        break;
-      }
-      if (!chord) continue;
-      var needsAlt = textW > cellW * 1.4;
-      if (!inAlt) {
-        if (needsAlt) {
-          inAlt = true; nextIsTop = false; b.classList.add('cg-alt', 'cg-pos-top');
-          fitFont(chord, textW, cellW * 1.5);
-        } else fitFont(chord, textW, cellW * 0.90);
-      } else {
-        b.classList.add('cg-alt', nextIsTop ? 'cg-pos-top' : 'cg-pos-bot');
-        fitFont(chord, textW, cellW * 1.5);
-        nextIsTop = !nextIsTop;
-      }
-    }
-  });
-}
+${SHARED_GRID_JS}
 (function() {
   var _pending = false;
   function scheduleAlt() {
@@ -4292,7 +4292,7 @@ body {
   border-radius: 6px 6px 0 0;
 }
 .ctrl-label {
-  font-size: 8px; color: #555; text-transform: uppercase; letter-spacing: 0.1em;
+  font-size: 8px; color: #999; text-transform: uppercase; letter-spacing: 0.1em;
   white-space: nowrap;
 }
 .ctrl-btns { display: flex; align-items: center; gap: 5px; padding-bottom: 2px; }
@@ -4309,13 +4309,13 @@ body {
   padding: 4px 2px; font-family: sans-serif; height: 30px; box-sizing: border-box;
 }
 #bpm-input::-webkit-inner-spin-button, #bpm-input::-webkit-outer-spin-button { -webkit-appearance: none; }
-#bpm-input::placeholder { color: #444; font-size: 10px; }
+#bpm-input::placeholder { color: #888; font-size: 10px; }
 #bpm-input:focus { outline: 1px solid #7c6df0; outline-offset: 0; }
 /* Tempo/metro buttons */
-#tempo-btn { opacity: 0.35; }
+#tempo-btn { opacity: 0.65; }
 #tempo-btn:not(:disabled):hover { opacity: 1; }
 #tempo-btn.active { opacity: 1; color: #7c6df0; border-color: #7c6df0; }
-#metro-btn { opacity: 0.35; }
+#metro-btn { opacity: 0.65; }
 #metro-btn:not(:disabled):hover { opacity: 1; }
 #metro-btn.active { opacity: 1; color: #ffd700; border-color: #ffd700; }
 #font-smaller, #font-larger { font-size: 11px; font-family: sans-serif; letter-spacing: -0.5px; border-radius: 6px !important; width: auto !important; padding: 0 7px !important; }
@@ -4375,7 +4375,7 @@ ${SHARED_SONG_HTML}
     <div class="ctrl-btns">
       <button id="tap-btn"   title="Tap tempo (T)">Tap</button>
       <input  type="number"  id="bpm-input" min="20" max="300" placeholder="BPM" title="Type BPM or use Tap">
-      <button id="metro-btn" title="Metronome click track (M)" disabled style="opacity:0.35"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M7 22L11 2h2l4 20z" opacity="0.45"/><line x1="12" y1="15" x2="18" y2="6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="15" r="1.8"/></svg></button>
+      <button id="metro-btn" title="Metronome click track (M)" disabled style="opacity:0.65"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M7 22L11 2h2l4 20z" opacity="0.45"/><line x1="12" y1="15" x2="18" y2="6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="15" r="1.8"/></svg></button>
     </div>
   </div>
   <div class="ctrl-group">
@@ -4501,7 +4501,7 @@ const bpmInput = document.getElementById('bpm-input');
 function _updateTempoBtns() {
   var hasBpm = activeBpm > 0;
   tempoBtn.disabled = !hasBpm;
-  tempoBtn.style.opacity = hasBpm ? '' : '0.35';
+  tempoBtn.style.opacity = hasBpm ? '' : '0.65';
   tempoBtn.classList.toggle('active', hasBpm && speed === tempoSpeed);
 }
 
@@ -4680,7 +4680,7 @@ function stopMetronome() {
 function _updateMetroBtn() {
   var hasBpm = activeBpm > 0;
   metroBtn.disabled = !hasBpm;
-  metroBtn.style.opacity = hasBpm ? '' : '0.35';
+  metroBtn.style.opacity = hasBpm ? '' : '0.65';
   metroBtn.classList.toggle('active', _metroActive);
 }
 
@@ -6322,7 +6322,7 @@ body.vscode-light #preview, body.vscode-high-contrast-light #preview { color: #0
 .cg-row-label { width: 22px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 0.65em; font-weight: 700; letter-spacing: 0.04em; color: var(--accent); background: var(--accent-soft); border-radius: 6px; }
 .cg-bar { display: grid; grid-template-columns: repeat(var(--beats, 4), minmax(0, 1fr)); flex: 1; min-width: calc(var(--beats, 4) * 44px); border-radius: 8px; border: 1px solid var(--border); background: var(--surf-hi); position: relative; padding-top: 18px; overflow: visible; }
 .cg-bar-num { position: absolute; top: 4px; left: 8px; font-size: 0.6em; font-weight: 500; color: var(--muted); line-height: 1; pointer-events: none; }
-.cg-beat { display: flex; align-items: center; justify-content: center; min-height: 60px; padding: 4px; position: relative; overflow: visible; border-right: 1px solid var(--border); container-type: inline-size; }
+.cg-beat { display: flex; align-items: center; justify-content: center; min-height: 80px; padding: 4px; position: relative; overflow: visible; border-right: 1px solid var(--border); container-type: inline-size; }
 .cg-beat:last-child { border-right: none; }
 .cg-beat-dots { position: absolute; bottom: 5px; left: 0; right: 0; display: flex; justify-content: space-around; padding: 0 8px; pointer-events: none; }
 .cg-beat-dots i { display: block; width: 3px; height: 3px; border-radius: 50%; background: var(--text); opacity: 0.18; flex-shrink: 0; }
@@ -6334,7 +6334,7 @@ body.vscode-light #preview, body.vscode-high-contrast-light #preview { color: #0
 .cg-beat-split { flex-direction: column; align-items: stretch; justify-content: center; padding: 2px 1px 18px; gap: 0; overflow: hidden; }
 .cg-split-line { height: 1px; background: var(--border); margin: 1px 2px; }
 .cg-chord-top, .cg-chord-bot { font-weight: 700; color: var(--accent); text-align: center; line-height: 1.2; white-space: nowrap; }
-.cg-beat.cg-alt { min-height: 90px; }
+.cg-beat.cg-alt { min-height: 110px; }
 .cg-alt.cg-pos-top .cg-chord { position: absolute; left: 4px; top: 4px; z-index: 2; max-width: 150%; }
 .cg-alt.cg-pos-bot .cg-chord { position: absolute; left: 4px; bottom: 28px; z-index: 2; max-width: 150%; }
 .cg-beat.cg-last.cg-alt { overflow: hidden; }
@@ -6637,45 +6637,7 @@ function wvBeatHtml(beat, isLast) {
   var c = wvChordInner(chords[0]);
   return '<div class="cg-beat' + lc + '"' + sp + '><span class="cg-chord" style="' + c.fs + '">' + c.html + '</span>' + dd + '</div>';
 }
-var _GRID_REF_PX = 48, _GRID_MAX_PX = 36;
-function updateGridAlt() {
-  function fitFont(chord, textW, maxW) {
-    chord.style.fontSize = Math.round(Math.min(_GRID_MAX_PX, _GRID_REF_PX * (maxW / textW)) * 10) / 10 + 'px';
-  }
-  document.querySelectorAll('.cg-beat').forEach(function(b) {
-    b.classList.remove('cg-alt', 'cg-pos-top', 'cg-pos-bot');
-    var c = b.querySelector('.cg-chord');
-    if (c) c.style.fontSize = _GRID_REF_PX + 'px';
-  });
-  document.querySelectorAll('.cg-bar').forEach(function(bar) {
-    var barBeats = Array.from(bar.querySelectorAll(':scope > .cg-beat'));
-    var n = barBeats.length, inAlt = false, nextIsTop = true;
-    for (var i = 0; i < n; i++) {
-      var b = barBeats[i];
-      var chord = b.querySelector('.cg-chord');
-      var isLast = b.classList.contains('cg-last');
-      var textW = chord ? chord.getBoundingClientRect().width : 0;
-      var cellW = b.getBoundingClientRect().width;
-      if (isLast) {
-        if (inAlt && chord) b.classList.add('cg-alt', nextIsTop ? 'cg-pos-top' : 'cg-pos-bot');
-        if (chord) fitFont(chord, textW, cellW * 0.90);
-        break;
-      }
-      if (!chord) continue;
-      var needsAlt = textW > cellW * 1.4;
-      if (!inAlt) {
-        if (needsAlt) {
-          inAlt = true; nextIsTop = false; b.classList.add('cg-alt', 'cg-pos-top');
-          fitFont(chord, textW, cellW * 1.5);
-        } else fitFont(chord, textW, cellW * 0.90);
-      } else {
-        b.classList.add('cg-alt', nextIsTop ? 'cg-pos-top' : 'cg-pos-bot');
-        fitFont(chord, textW, cellW * 1.5);
-        nextIsTop = !nextIsTop;
-      }
-    }
-  });
-}
+${SHARED_GRID_JS}
 function renderGridHtml() {
   var lines = generateGrid().split('\\n').filter(function(l) { return l.trim(); });
   var parsed = wvParseGridRows(lines);
