@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.2.1 — 2026-05-29
+
+### Grid Editor
+- **Chord diagram on hover**: hovering over any chord in the visual preview now shows its fingering diagram. Uses the same chord dictionary as the Chord Reference panel (CHORD_DB + saved voicings + `{define:}` directives from the file), with enharmonic fallback (e.g. C# ↔ Db).
+- **Grid title field**: a new "Title" input maps to `{start_of_grid: Title}` in the ChordPro output.
+- **Responsive preview**: the visual preview now correctly reflows chord positions when the panel is resized.
+
+### Performance View
+- **Follow VS Code theme**: a third theme button (next to Light / Dark) lets the performance view automatically match VS Code's current light or dark theme.
+
+### Chord Builder
+- **Chord name auto-updates**: selecting a chord suggestion no longer locks the chord name — it continues to update as you adjust frets.
+
+### Keyboard Shortcuts
+- **Alt+Ctrl+B / Alt+Ctrl+G / Alt+Ctrl+T**: these shortcuts now toggle their respective panels (Chord Builder, Grid Editor, Tab Editor) — pressing again closes the open panel.
+
+### Chord Display
+- **Minor 7th interval renamed**: `b7` → `7` in the chord builder interval labels.
+- **Base-fret 3 diagram fix**: chords with `base-fret 3` (e.g. `{define: Bb9 base-fret 3 frets 4 x 4 3 1 x}`) were being clipped; now renders correctly.
+
 ## 2.2.0
 
 - New display of grids in performance mode
