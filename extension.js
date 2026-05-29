@@ -354,13 +354,9 @@ function generateChordSvg(frets, chordName) {
     const maxFret = frettedNotes.length ? Math.max(...frettedNotes) : 1;
 
     let startFret, showNut;
-    if (hasOpen || minFret <= 3) {
+    if ((hasOpen || minFret <= 3) && maxFret <= NF) {
         startFret = 1; showNut = true;
     } else {
-        startFret = minFret; showNut = false;
-    }
-    // Open string + fretted notes that overflow the window: shift up to minFret
-    if (hasOpen && maxFret > NF) {
         startFret = minFret; showNut = false;
     }
 
@@ -1044,6 +1040,14 @@ class ChordBuilderViewProvider {
     }
 }
 
+function buildSharedSvgMap() {
+    const map = {};
+    for (const [name, frets] of Object.entries(CHORD_DB)) {
+        map[name] = generateChordSvg(frets, name);
+    }
+    return map;
+}
+
 function getWebviewContent() {
     return `<!DOCTYPE html>
 <html lang="en">
@@ -1169,7 +1173,7 @@ const vscode = acquireVsCodeApi();
 const NUM_STRINGS = 6, NUM_FRETS = 15, ROW_H = 32, FRET_W = 40, INDICATOR_W = 28;
 const OPEN_SEMITONES = [4, 11, 7, 2, 9, 4]; // highE→lowE: E B G D A E (matches fretsArray index 0=highE)
 const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-const INTERVAL_NAMES = ['1','b2','2','m3','3','4','b5','5','#5','6','b7','maj7'];
+const INTERVAL_NAMES = ['1','b2','2','m3','3','4','b5','5','#5','6','7','maj7'];
 const ROOT_SEMITONES = {C:0,D:2,E:4,F:5,G:7,A:9,B:11};
 function noteName(s, fret) { return NOTE_NAMES[(OPEN_SEMITONES[s] + fret) % 12]; }
 function parseRoot(chordName) {
@@ -1181,13 +1185,20 @@ function parseRoot(chordName) {
     if (m[2] === 'b') n = (n + 11) % 12;
     return n;
 }
-function intervalName(s, fret, root) {
-    return INTERVAL_NAMES[((OPEN_SEMITONES[s] + fret) - root + 12) % 12];
+function isChordDiminished(chordName) {
+    if (!chordName) return false;
+    return /^dim/i.test(chordName.replace(/^[A-G][#b]?/, ''));
+}
+function intervalName(s, fret, root, isDim) {
+    const semi = ((OPEN_SEMITONES[s] + fret) - root + 12) % 12;
+    if (semi === 9 && isDim) return 'dim7';
+    return INTERVAL_NAMES[semi];
 }
 function dotLabel(s, fret) {
     if (displayMode === 'intervals') {
-        const root = parseRoot(document.getElementById('chordName').value.trim());
-        return root !== null ? intervalName(s, fret, root) : noteName(s, fret);
+        const chordName = document.getElementById('chordName').value.trim();
+        const root = parseRoot(chordName);
+        return root !== null ? intervalName(s, fret, root, isChordDiminished(chordName)) : noteName(s, fret);
     }
     return noteName(s, fret);
 }
@@ -1350,7 +1361,7 @@ function updateDisplay() {
 
 function pickName(name) {
     document.getElementById('chordName').value = name;
-    manualChordName = true;
+    manualChordName = false;
     updateDisplay();
 }
 
@@ -2900,8 +2911,9 @@ const SHARED_SONG_HTML = `
   <div class="set-row">
     <span class="set-label">Theme</span>
     <div class="set-theme-btns">
-      <button id="theme-light" title="Light mode">&#9728;</button>
-      <button id="theme-dark"  title="Dark mode">&#9790;</button>
+      <button id="theme-light"  title="Light mode">&#9728;</button>
+      <button id="theme-dark"   title="Dark mode">&#9790;</button>
+      <button id="theme-vscode" title="Follow VS Code theme">VS</button>
     </div>
   </div>
   <div class="set-row">
@@ -3076,6 +3088,7 @@ function parse(text) {
       if (k === 'x_start_side_panel') { flush(); const _sp = { type: 'side-panel', items: [], label: '', nav: false, lines: [] }; sections.push(_sp); inSidePanel = _sp; cur = { type: 'verse', label: '', lines: [], nav: false }; continue; }
       if (k === 'x_end_side_panel')   { inSidePanel = null; cur = { type: 'verse', label: '', lines: [], nav: false }; continue; }
       if (k === 'x_panel_section_title') { if (inSidePanel) inSidePanel.items.push({ type: 'title', label: v }); continue; }
+      if (k === 'image') { const sm = v.match(/src\s*=\s*["']?([^"'\s}]+)["']?/) || v.trim().match(/^([^\s{}]+)/); if (sm) cur.lines.push({ type:'image', src:sm[1] }); continue; }
       if (k === 'comment'||k==='c'||k==='highlight') { if (!inSidePanel) cur.lines.push({ type:'comment',     text:v }); continue; }
       if (k === 'comment_italic' ||k==='ci')          { if (!inSidePanel) cur.lines.push({ type:'comment',     text:v }); continue; }
       if (k === 'comment_box'    ||k==='cb')          { if (!inSidePanel) cur.lines.push({ type:'comment-box', text:v }); continue; }
@@ -3302,6 +3315,7 @@ function render({ meta, sections }, transpose) {
         else if   (l.type === 'empty')        out.push('<div class="empty-line"></div>');
         else if   (l.type === 'page-break')   out.push('<hr class="page-break">');
         else if   (l.type === 'chord-diagram')out.push('<div class="chord-diagram-cell" data-chord="' + esc(transposeChordName(l.name, transpose || 0)) + '"></div>');
+        else if   (l.type === 'image')        out.push('<div class="img-line"><img src="' + esc(l.src) + '" style="max-width:100%;height:auto;display:block;margin:8px 0"></div>');
       }
     }
     out.push('</div>');
@@ -3526,16 +3540,29 @@ songSzSlider.addEventListener('input', function() {
 document.body.style.setProperty('--song-svg-w', songSzSlider.value + 'px');
 
 (function() {
-  var btnLight = document.getElementById('theme-light');
-  var btnDark  = document.getElementById('theme-dark');
+  var btnLight  = document.getElementById('theme-light');
+  var btnDark   = document.getElementById('theme-dark');
+  var btnVscode = document.getElementById('theme-vscode');
+  var _vscodeThemeMode = false;
+  function vscodeDerivedTheme() {
+    return document.body.classList.contains('vscode-light') ? 'light' : 'dark';
+  }
   function applyThemeUI(t) {
-    document.documentElement.dataset.theme = t;
-    btnLight.classList.toggle('active', t === 'light');
-    btnDark.classList.toggle('active',  t === 'dark');
+    _vscodeThemeMode = (t === 'vscode');
+    var effective = _vscodeThemeMode ? vscodeDerivedTheme() : t;
+    document.documentElement.dataset.theme = effective;
+    btnLight.classList.toggle('active',  t === 'light');
+    btnDark.classList.toggle('active',   t === 'dark');
+    btnVscode.classList.toggle('active', _vscodeThemeMode);
   }
   applyThemeUI(_sysDark ? 'dark' : 'light');
-  btnLight.addEventListener('click', function() { applyThemeUI('light'); savePerfSettings(); });
-  btnDark.addEventListener('click',  function() { applyThemeUI('dark');  savePerfSettings(); });
+  btnLight.addEventListener('click',  function() { applyThemeUI('light');  savePerfSettings(); });
+  btnDark.addEventListener('click',   function() { applyThemeUI('dark');   savePerfSettings(); });
+  btnVscode.addEventListener('click', function() { applyThemeUI('vscode'); savePerfSettings(); });
+  new MutationObserver(function() {
+    if (_vscodeThemeMode) document.documentElement.dataset.theme = vscodeDerivedTheme();
+  }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  window._applyThemeUI = applyThemeUI;
 })();
 
 document.getElementById('show-voicings-chk').addEventListener('change', function() {
@@ -3691,7 +3718,11 @@ function activate(context) {
     );
 
     const openBuilder = vscode.commands.registerCommand('chordproFretboard.openBuilder', () => {
-        vscode.commands.executeCommand('chordproFretboard.chordBuilderView.focus');
+        if (chordBuilderProvider._view?.visible) {
+            vscode.commands.executeCommand('workbench.action.togglePanel');
+        } else {
+            vscode.commands.executeCommand('chordproFretboard.chordBuilderView.focus');
+        }
     });
 
     // Open a specific chord in the Builder (frets: lowE→highE absolute)
@@ -4119,13 +4150,24 @@ function activate(context) {
         return map;
     }
 
-    // All standard CHORD_DB SVGs — built once and shared across setlist songs
-    function buildSharedSvgMap() {
-        const map = {};
-        for (const [name, frets] of Object.entries(CHORD_DB)) {
-            map[name] = generateChordSvg(frets, name);
-        }
-        return map;
+    // Replace relative/absolute image srcs in {image:} directives with data URIs for webview embedding
+    const IMAGE_MIME = { '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.gif':'image/gif', '.svg':'image/svg+xml', '.webp':'image/webp', '.bmp':'image/bmp' };
+    function resolveImageUrisInSource(source, docDir) {
+        const fs = require('fs');
+        return source.replace(/\{image:([^}]*)\}/gi, (match, attrs) => {
+            const srcMatch = attrs.match(/src\s*=\s*["']?([^"'\s}]+)["']?/) || attrs.trim().match(/^([^\s{}]+)/);
+            if (!srcMatch) return match;
+            const imgPath = srcMatch[1];
+            if (/^(https?:|data:)/.test(imgPath)) return match;
+            try {
+                const absPath = path.isAbsolute(imgPath) ? imgPath : path.join(docDir, imgPath);
+                const ext = path.extname(absPath).toLowerCase();
+                const mime = IMAGE_MIME[ext] || 'image/png';
+                const data = fs.readFileSync(absPath);
+                const dataUri = 'data:' + mime + ';base64,' + data.toString('base64');
+                return match.replace(imgPath, dataUri);
+            } catch (e) { return match; }
+        });
     }
 
     // Only {define:} / {chord:} SVGs from a single source file (for setlist per-song data)
@@ -4142,14 +4184,16 @@ function activate(context) {
         const editor = vscode.window.activeTextEditor;
         if (!editor) { vscode.window.showErrorMessage('No active editor found'); return; }
 
-        const source   = editor.document.getText();
+        const rawSource = editor.document.getText();
         const title    = path.basename(editor.document.uri.fsPath, path.extname(editor.document.uri.fsPath));
         const chordData = buildChordData(editor.document);
-        const chordSvgs = buildChordSvgMap(source, chordData);
+        const chordSvgs = buildChordSvgMap(rawSource, chordData);
+        const docDir   = path.dirname(editor.document.uri.fsPath);
 
         if (scrollPanel) {
             scrollDocUri = editor.document.uri.toString(); // keep uri in sync for save-reload
             scrollPanel.reveal(scrollPanel.viewColumn ?? vscode.ViewColumn.Two, true);
+            const source = resolveImageUrisInSource(rawSource, docDir);
             scrollPanel.webview.postMessage({ command: 'reload', source, chordSvgs });
             return;
         }
@@ -4162,6 +4206,7 @@ function activate(context) {
             { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
             { enableScripts: true, retainContextWhenHidden: true }
         );
+        const source = resolveImageUrisInSource(rawSource, docDir);
         scrollPanel.webview.html = getScrollWebviewContent(source, chordSvgs, savedSettings);
         scrollPanel.webview.onDidReceiveMessage(msg => {
             if (msg.command === 'saveSettings') {
@@ -4423,7 +4468,7 @@ updateLegend();
 // ── Saved settings ───────────────────────────────────────────────────────────
 function savePerfSettings() {
   vscodeApi.postMessage({ command: 'saveSettings', settings: {
-    theme:      document.documentElement.dataset.theme || (_sysDark ? 'dark' : 'light'),
+    theme:      (typeof _applyThemeUI !== 'undefined' && document.getElementById('theme-vscode').classList.contains('active')) ? 'vscode' : (document.documentElement.dataset.theme || (_sysDark ? 'dark' : 'light')),
     cols:       colSlider.value,
     fontSize:   fontSize,
     legendMode:   legendMode,
@@ -4439,11 +4484,7 @@ function savePerfSettings() {
 (function applyPerfSettings() {
   var s = SAVED_SETTINGS;
   if (!s || !Object.keys(s).length) return;
-  if (s.theme) {
-    document.documentElement.dataset.theme = s.theme;
-    document.getElementById('theme-light').classList.toggle('active', s.theme === 'light');
-    document.getElementById('theme-dark').classList.toggle('active',  s.theme === 'dark');
-  }
+  if (s.theme && typeof window._applyThemeUI === 'function') { window._applyThemeUI(s.theme); }
   if (s.cols) {
     var n = parseInt(s.cols, 10) || 1;
     colSlider.value = n; colVal.textContent = n; applyColCount(n);
@@ -5472,8 +5513,10 @@ if(SONGS.length) loadSong(0);
     // Auto-reload preview on save
     const onSaveScrollReload = vscode.workspace.onDidSaveTextDocument(doc => {
         if (!scrollPanel || doc.uri.toString() !== scrollDocUri) return;
-        const source    = doc.getText();
-        const chordSvgs = buildChordSvgMap(source, buildChordData(doc));
+        const rawSource = doc.getText();
+        const chordSvgs = buildChordSvgMap(rawSource, buildChordData(doc));
+        const docDir    = path.dirname(doc.uri.fsPath);
+        const source    = resolveImageUrisInSource(rawSource, docDir);
         scrollPanel.webview.postMessage({ command: 'reload', source, chordSvgs, preserveScroll: true });
     });
 
@@ -5864,7 +5907,9 @@ function parseTabContent(content) {
 // Tab Editor (outside activate — pure webview HTML)
 // ─────────────────────────────────────────────
 function registerTabEditor(context) {
+    let tabEditorPanel = null;
     return vscode.commands.registerCommand('extension.openTabEditor', () => {
+        if (tabEditorPanel) { tabEditorPanel.dispose(); return; }
         const targetEditor = vscode.window.activeTextEditor;
         let existingBlock = null, initialCols = null;
         if (targetEditor) {
@@ -5880,6 +5925,8 @@ function registerTabEditor(context) {
             vscode.ViewColumn.Beside,
             { enableScripts: true, retainContextWhenHidden: true }
         );
+        tabEditorPanel = panel;
+        panel.onDidDispose(() => { tabEditorPanel = null; });
         panel.webview.html = getTabEditorContent(initialCols, !!existingBlock);
         panel.webview.onDidReceiveMessage(msg => {
             if (msg.command === 'insertTab') {
@@ -6173,7 +6220,9 @@ render();
 // Grid Editor
 // ─────────────────────────────────────────────
 function registerGridEditor(context) {
+    let gridEditorPanel = null;
     return vscode.commands.registerCommand('extension.openGridEditor', () => {
+        if (gridEditorPanel) { gridEditorPanel.dispose(); return; }
         const targetEditor = vscode.window.activeTextEditor;
         const songChords = [];
         if (targetEditor) {
@@ -6186,10 +6235,15 @@ function registerGridEditor(context) {
             const reInline = /\[([A-G][^\[\]]*)\]/g;
             while ((m = reInline.exec(text)) !== null) addChord(m[1]);
         }
-        let existingBlock = null, existingData = null;
+        let existingBlock = null, existingData = null, existingTitle = '';
         if (targetEditor) {
             existingBlock = findEnclosingBlock(targetEditor, /\{start_of_grid\b/i, /\{end_of_grid\b/i);
-            if (existingBlock) existingData = parseGridContent(existingBlock.content);
+            if (existingBlock) {
+                existingData = parseGridContent(existingBlock.content);
+                const startLineText = targetEditor.document.lineAt(existingBlock.startLine).text;
+                const tm = startLineText.match(/\{start_of_grid\s*:\s*(.*?)\}/i);
+                existingTitle = tm ? tm[1].trim() : '';
+            }
         }
         const panel = vscode.window.createWebviewPanel(
             'chordproGridEditor',
@@ -6197,12 +6251,15 @@ function registerGridEditor(context) {
             vscode.ViewColumn.Beside,
             { enableScripts: true, retainContextWhenHidden: true }
         );
-        panel.webview.html = getGridEditorContent(songChords, existingData);
+        gridEditorPanel = panel;
+        panel.onDidDispose(() => { gridEditorPanel = null; });
+        panel.webview.html = getGridEditorContent(songChords, existingData, existingTitle);
         panel.webview.onDidReceiveMessage(msg => {
             if (msg.command === 'insertGrid') {
                 const editor = targetEditor || vscode.window.activeTextEditor;
                 if (!editor) { vscode.window.showErrorMessage('No active editor'); return; }
-                const newText = '{start_of_grid}\n' + msg.grid + '\n{end_of_grid}';
+                const gridTitle = (msg.title || '').trim();
+                const newText = (gridTitle ? '{start_of_grid: ' + gridTitle + '}' : '{start_of_grid}') + '\n' + msg.grid + '\n{end_of_grid}';
                 if (existingBlock) {
                     const range = new vscode.Range(
                         new vscode.Position(existingBlock.startLine, 0),
@@ -6217,10 +6274,11 @@ function registerGridEditor(context) {
     });
 }
 
-function getGridEditorContent(songChords, existingData) {
+function getGridEditorContent(songChords, existingData, existingTitle) {
     const chordsJson   = JSON.stringify(songChords);
     const initDataJson = JSON.stringify(existingData || null);
     const btnLabel     = existingData ? 'Replace grid' : 'Insert grid';
+    const safeTitle    = JSON.stringify(existingTitle || '');
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6243,6 +6301,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   padding: 12px; display: flex; flex-direction: column; height: 100vh; gap: 10px;
 }
+#title-bar { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
 #toolbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; flex-shrink: 0; }
 .btn {
   padding: 4px 14px; background: var(--surf); border: 1px solid var(--border);
@@ -6341,6 +6400,10 @@ body.vscode-light #preview, body.vscode-high-contrast-light #preview { color: #0
 </style>
 </head>
 <body>
+<div id="title-bar">
+  <label style="font-size:11px;color:var(--muted);white-space:nowrap">Title</label>
+  <input type="text" id="grid-title" placeholder="Section title (optional)" value="" style="flex:1;padding:4px 8px;font-size:12px;background:var(--surf);color:var(--text);border:1px solid var(--border);border-radius:4px;outline:none;font-family:inherit;">
+</div>
 <div id="toolbar">
   <div class="btn-group">
     <button class="btn" id="btn-del-line">&#8722;</button>
@@ -6382,7 +6445,6 @@ body.vscode-light #preview, body.vscode-high-contrast-light #preview { color: #0
 var vscode = acquireVsCodeApi();
 var SONG_CHORDS = ${chordsJson};
 var INIT_DATA   = ${initDataJson};
-
 var START_CYCLE = ['|', '||', '|:', ':|:', '|1', '|2', ':|1', ':|2'];
 var END_CYCLE   = ['|', '||', ':|', '|.', ':|:'];
 var BAR_LABEL   = {
@@ -6717,8 +6779,10 @@ document.getElementById('custom-beats').addEventListener('change', function() {
   beats = nb; render();
 });
 document.getElementById('btn-insert').addEventListener('click', function() {
-  vscode.postMessage({ command: 'insertGrid', grid: generateGrid() });
+  var title = document.getElementById('grid-title').value;
+  vscode.postMessage({ command: 'insertGrid', grid: generateGrid(), title: title });
 });
+document.getElementById('grid-title').value = ${safeTitle};
 
 // Palette
 var paletteDiv = document.getElementById('chord-buttons');
@@ -6806,6 +6870,9 @@ render();
   }
   window.addEventListener('resize', scheduleAlt);
 })();
+
+// ── Chord diagram hover ───────────────────────────────────────────────────────
+
 </script>
 </body>
 </html>`;
