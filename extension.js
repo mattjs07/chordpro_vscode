@@ -2982,6 +2982,138 @@ function updateGridAlt() {
 `;
 
 // ─────────────────────────────────────────────
+// Shared grid-preview renderer — injected into both the grid editor visual preview
+// and (optionally) any other webview that needs to render a chord grid.
+// Requires: updateGridAlt() already defined (from SHARED_GRID_JS).
+// Optionally reads: CHORD_SVGS — chord name → SVG string, for hover diagrams.
+// ─────────────────────────────────────────────
+const SHARED_GRID_RENDER_JS = SHARED_GRID_JS + `
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+function wvParseGridRows(lines) {
+  var KNOWN = { '|':1,'||':1,'|.':1,'|:':1,':|':1,':|:':1 };
+  function isBl(t) { return !!KNOWN[t] || /^:?\\|[1-9]$/.test(t); }
+  var out = [];
+  for (var li = 0; li < lines.length; li++) {
+    var tokens = lines[li].trim().split(/\\s+/).filter(Boolean);
+    if (!tokens.length) continue;
+    var bars = [], openBl = null, bts = [], ev = null;
+    for (var ti = 0; ti < tokens.length; ti++) {
+      var tok = tokens[ti];
+      if (isBl(tok)) {
+        if (ev) { bts.push(ev); ev = null; }
+        if (openBl !== null) { bars.push({ beats: bts }); bts = []; }
+        openBl = tok;
+      } else if (tok === '.') {
+        if (ev) ev.span++;
+      } else {
+        if (ev) bts.push(ev);
+        ev = { chords: tok.split('~'), span: 1 };
+      }
+    }
+    if (ev) bts.push(ev);
+    if (openBl !== null && bts.length) bars.push({ beats: bts });
+    if (bars.length) out.push(bars);
+  }
+  return out;
+}
+function wvChordInner(raw) {
+  var slash = raw.lastIndexOf('/');
+  var bass = slash > 0 ? raw.slice(slash) : '', main = slash > 0 ? raw.slice(0, slash) : raw;
+  var rm = main.match(/^[A-G][b#]?/);
+  if (!rm) return { html: escHtml(raw), fs: 'font-size:clamp(0.5em,27cqi,1.6em)' };
+  var root = rm[0], rest = main.slice(root.length), qual = '';
+  var QS = ['maj','min','dim','aug','sus2','sus4','sus','add','no','M'];
+  for (var qi = 0; qi < QS.length; qi++) {
+    if (rest.slice(0, QS[qi].length) === QS[qi]) { qual = QS[qi]; rest = rest.slice(qual.length); break; }
+  }
+  if (!qual && rest.charAt(0) === 'm' && rest.slice(0,3) !== 'maj') { qual = 'm'; rest = rest.slice(1); }
+  var len = raw.length;
+  var c = len <= 2 ? 70 : len <= 4 ? 40 : len <= 6 ? 27 : len <= 8 ? 20 : 15;
+  return {
+    html: escHtml(root + qual) + (rest ? '<sup class="cg-ch-ext">' + escHtml(rest) + '</sup>' : '') + (bass ? '<span class="cg-ch-bass">' + escHtml(bass) + '</span>' : ''),
+    fs: 'font-size:clamp(0.5em,' + c + 'cqi,1.6em)'
+  };
+}
+function wvBeatHtml(beat, isLast) {
+  var chords = beat.chords;
+  var sp = beat.span > 1 ? ' style="grid-column:span ' + beat.span + '"' : '';
+  var lc = isLast ? ' cg-last' : '';
+  var dd = '<div class="cg-beat-dots">' + '<i></i>'.repeat(beat.span) + '</div>';
+  if (chords.length === 1 && chords[0] === '%') {
+    return '<div class="cg-beat cg-beat-rep' + lc + '"' + sp + '><span class="cg-rep-sym">%</span>' + dd + '</div>';
+  }
+  if (chords.length >= 2) {
+    var c0 = wvChordInner(chords[0]), c1 = wvChordInner(chords[1]);
+    return '<div class="cg-beat cg-beat-split' + lc + '"' + sp + '>' +
+      '<span class="cg-chord-top" data-chord="' + escHtml(chords[0]) + '" style="' + c0.fs + '">' + c0.html + '</span>' +
+      '<div class="cg-split-line"></div>' +
+      '<span class="cg-chord-bot" data-chord="' + escHtml(chords[1]) + '" style="' + c1.fs + '">' + c1.html + '</span>' +
+      dd + '</div>';
+  }
+  var c = wvChordInner(chords[0]);
+  return '<div class="cg-beat' + lc + '"' + sp + '><span class="cg-chord" data-chord="' + escHtml(chords[0]) + '" style="' + c.fs + '">' + c.html + '</span>' + dd + '</div>';
+}
+function renderGridPreview(containerId, gridText, fallbackBeats) {
+  var lines = gridText.split(/\\n/).filter(function(l) { return l.trim(); });
+  var parsed = wvParseGridRows(lines);
+  var el = document.getElementById(containerId);
+  if (!el) return;
+  if (!parsed.length) { el.innerHTML = ''; return; }
+  var barN = 0, html = '<div class="chord-grid">';
+  parsed.forEach(function(bars, ri) {
+    html += '<div class="cg-row"><span class="cg-row-label">' + String.fromCharCode(65 + ri) + '</span>';
+    bars.forEach(function(bar) {
+      barN++;
+      var totalBeats = 0;
+      bar.beats.forEach(function(b) { totalBeats += b.span; });
+      if (!totalBeats) totalBeats = fallbackBeats || 4;
+      html += '<div class="cg-bar" style="--beats:' + totalBeats + '"><span class="cg-bar-num">' + barN + '</span>';
+      bar.beats.forEach(function(b, bii) { html += wvBeatHtml(b, bii === bar.beats.length - 1); });
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+  requestAnimationFrame(updateGridAlt);
+  if (typeof CHORD_SVGS !== 'undefined') bindGridChordTips(el);
+}
+function bindGridChordTips(container) {
+  var tip = window._gcTip;
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.style.cssText = 'position:fixed;display:none;background:#fafafa;border:1px solid #ccc;border-radius:8px;padding:8px;box-shadow:0 4px 16px rgba(0,0,0,.3);pointer-events:none;z-index:99999;';
+    document.body.appendChild(tip);
+    window._gcTip = tip;
+  }
+  var SH = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  var FL = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+  container.querySelectorAll('[data-chord]').forEach(function(el) {
+    var orig = el.dataset.chord;
+    var name = orig.replace(/\\/[A-G][b#]?$/, '');
+    var svg = CHORD_SVGS[name] || CHORD_SVGS[orig];
+    if (!svg) {
+      var m = name.match(/^([A-G][b#]?)(.*)/);
+      if (m) {
+        var si = SH.indexOf(m[1]), fi = FL.indexOf(m[1]);
+        var alt = si >= 0 ? FL[si] + m[2] : fi >= 0 ? SH[fi] + m[2] : null;
+        if (alt) svg = CHORD_SVGS[alt] || CHORD_SVGS[alt + orig.slice(name.length)];
+      }
+    }
+    if (!svg) return;
+    el.addEventListener('mouseenter', function() { tip.innerHTML = svg; tip.style.display = 'block'; });
+    el.addEventListener('mousemove', function(e) {
+      var x = e.clientX + 14, y = e.clientY + 16;
+      if (x + 120 > window.innerWidth) x = e.clientX - 125;
+      if (y + 145 > window.innerHeight) y = e.clientY - 145;
+      tip.style.left = x + 'px'; tip.style.top = y + 'px';
+    });
+    el.addEventListener('mouseleave', function() { tip.style.display = 'none'; });
+  });
+}
+`;
+
+// ─────────────────────────────────────────────
 // Shared JS: injected into both performance view and setlist webviews.
 // Requires these variables to be declared in the view's preamble (before injection):
 //   CHORD_SVGS  — object mapping chord name → SVG string
@@ -6253,7 +6385,40 @@ function registerGridEditor(context) {
         );
         gridEditorPanel = panel;
         panel.onDidDispose(() => { gridEditorPanel = null; });
-        panel.webview.html = getGridEditorContent(songChords, existingData, existingTitle);
+        // Build full chord data: CHORD_DB + saved voicings + doc defines
+        const _SH = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+        const _FL = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+        const fullChordData = Object.assign({}, CHORD_DB);
+        for (const v of (context.globalState.get('savedVoicings') || [])) {
+            if (!fullChordData[v.name] && v.frets) fullChordData[v.name] = [...v.frets].reverse();
+        }
+        if (targetEditor) Object.assign(fullChordData, parseDocumentDefines(targetEditor.document));
+        // Collect all chord names: palette chords + any chords in the existing grid
+        const allGridChords = new Set(songChords);
+        if (existingBlock) {
+            const gridTokenRe = /[A-G][b#]?[^\s|:.{}[\]~]*/g;
+            let gm;
+            while ((gm = gridTokenRe.exec(existingBlock.content)) !== null) {
+                // Only keep tokens that look like chord names (start with a note)
+                if (/^[A-G][b#]?/.test(gm[0]) && gm[0] !== '%') allGridChords.add(gm[0]);
+            }
+        }
+        const editorSvgMap = {};
+        allGridChords.forEach(name => {
+            const base = name.replace(/\/[A-G][b#]?$/, '');
+            // Priority: exact name → base (no bass) → enharmonic of base → enharmonic+bass
+            let frets = fullChordData[name] || fullChordData[base];
+            if (!frets) {
+                const m = base.match(/^([A-G][b#]?)(.*)/);
+                if (m) {
+                    const si = _SH.indexOf(m[1]), fi = _FL.indexOf(m[1]);
+                    const alt = si >= 0 ? _FL[si] + m[2] : fi >= 0 ? _SH[fi] + m[2] : null;
+                    if (alt) frets = fullChordData[alt + name.slice(base.length)] || fullChordData[alt];
+                }
+            }
+            if (frets) editorSvgMap[name] = generateChordSvg(frets, name);
+        });
+        panel.webview.html = getGridEditorContent(songChords, existingData, existingTitle, editorSvgMap);
         panel.webview.onDidReceiveMessage(msg => {
             if (msg.command === 'insertGrid') {
                 const editor = targetEditor || vscode.window.activeTextEditor;
@@ -6274,11 +6439,13 @@ function registerGridEditor(context) {
     });
 }
 
-function getGridEditorContent(songChords, existingData, existingTitle) {
+function getGridEditorContent(songChords, existingData, existingTitle, svgMap) {
     const chordsJson   = JSON.stringify(songChords);
     const initDataJson = JSON.stringify(existingData || null);
     const btnLabel     = existingData ? 'Replace grid' : 'Insert grid';
     const safeTitle    = JSON.stringify(existingTitle || '');
+    // Escape </ so the HTML parser never sees </script inside the JSON
+    const safeChordSvgs = JSON.stringify(svgMap || {}).replace(/<\//g, '<\\/');
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6445,6 +6612,8 @@ body.vscode-light #preview, body.vscode-high-contrast-light #preview { color: #0
 var vscode = acquireVsCodeApi();
 var SONG_CHORDS = ${chordsJson};
 var INIT_DATA   = ${initDataJson};
+var CHORD_SVGS  = ${safeChordSvgs};
+${SHARED_GRID_RENDER_JS}
 var START_CYCLE = ['|', '||', '|:', ':|:', '|1', '|2', ':|1', ':|2'];
 var END_CYCLE   = ['|', '||', ':|', '|.', ':|:'];
 var BAR_LABEL   = {
@@ -6546,7 +6715,6 @@ function generateGrid() {
 }
 
 function escAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
-function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
 
 function render() {
   var html = '';
@@ -6635,98 +6803,10 @@ function focusCell(r, b, k) {
   if (inp) { lastFocused = { r: r, b: b, k: k }; inp.focus(); inp.select(); }
 }
 
-function wvParseGridRows(lines) {
-  var KNOWN = { '|':1,'||':1,'|.':1,'|:':1,':|':1,':|:':1 };
-  function isBl(t) { return !!KNOWN[t] || /^:?\\|[1-9]$/.test(t); }
-  var out = [];
-  for (var li = 0; li < lines.length; li++) {
-    var tokens = lines[li].trim().split(/\\s+/).filter(Boolean);
-    if (!tokens.length) continue;
-    var bars = [], openBl = null, bts = [], ev = null;
-    for (var ti = 0; ti < tokens.length; ti++) {
-      var tok = tokens[ti];
-      if (isBl(tok)) {
-        if (ev) { bts.push(ev); ev = null; }
-        if (openBl !== null) { bars.push({ beats: bts }); bts = []; }
-        openBl = tok;
-      } else if (tok === '.') {
-        if (ev) ev.span++;
-      } else {
-        if (ev) bts.push(ev);
-        ev = { chords: tok.split('~'), span: 1 };
-      }
-    }
-    if (ev) bts.push(ev);
-    if (openBl !== null && bts.length) bars.push({ beats: bts });
-    if (bars.length) out.push(bars);
-  }
-  return out;
-}
-function wvChordInner(raw) {
-  var slash = raw.lastIndexOf('/');
-  var bass = slash > 0 ? raw.slice(slash) : '', main = slash > 0 ? raw.slice(0, slash) : raw;
-  var rm = main.match(/^[A-G][b#]?/);
-  if (!rm) return { html: escHtml(raw), fs: 'font-size:clamp(0.5em,27cqi,1.6em)' };
-  var root = rm[0], rest = main.slice(root.length), qual = '';
-  var QS = ['maj','min','dim','aug','sus2','sus4','sus','add','no','M'];
-  for (var qi = 0; qi < QS.length; qi++) {
-    if (rest.slice(0, QS[qi].length) === QS[qi]) { qual = QS[qi]; rest = rest.slice(qual.length); break; }
-  }
-  if (!qual && rest.charAt(0) === 'm' && rest.slice(0,3) !== 'maj') { qual = 'm'; rest = rest.slice(1); }
-  var len = raw.length;
-  var c = len <= 2 ? 70 : len <= 4 ? 40 : len <= 6 ? 27 : len <= 8 ? 20 : 15;
-  return {
-    html: escHtml(root + qual) + (rest ? '<sup class="cg-ch-ext">' + escHtml(rest) + '</sup>' : '') + (bass ? '<span class="cg-ch-bass">' + escHtml(bass) + '</span>' : ''),
-    fs: 'font-size:clamp(0.5em,' + c + 'cqi,1.6em)'
-  };
-}
-function wvBeatHtml(beat, isLast) {
-  var chords = beat.chords;
-  var sp = beat.span > 1 ? ' style="grid-column:span ' + beat.span + '"' : '';
-  var lc = isLast ? ' cg-last' : '';
-  var dd = '<div class="cg-beat-dots">' + '<i></i>'.repeat(beat.span) + '</div>';
-  if (chords.length === 1 && chords[0] === '%') {
-    return '<div class="cg-beat cg-beat-rep' + lc + '"' + sp + '><span class="cg-rep-sym">%</span>' + dd + '</div>';
-  }
-  if (chords.length >= 2) {
-    var c0 = wvChordInner(chords[0]), c1 = wvChordInner(chords[1]);
-    return '<div class="cg-beat cg-beat-split' + lc + '"' + sp + '>' +
-      '<span class="cg-chord-top" style="' + c0.fs + '">' + c0.html + '</span>' +
-      '<div class="cg-split-line"></div>' +
-      '<span class="cg-chord-bot" style="' + c1.fs + '">' + c1.html + '</span>' +
-      dd + '</div>';
-  }
-  var c = wvChordInner(chords[0]);
-  return '<div class="cg-beat' + lc + '"' + sp + '><span class="cg-chord" style="' + c.fs + '">' + c.html + '</span>' + dd + '</div>';
-}
-${SHARED_GRID_JS}
-function renderGridHtml() {
-  var lines = generateGrid().split('\\n').filter(function(l) { return l.trim(); });
-  var parsed = wvParseGridRows(lines);
-  if (!parsed.length) { document.getElementById('rendered-preview').innerHTML = ''; return; }
-  var barN = 0, html = '<div class="chord-grid">';
-  parsed.forEach(function(bars, ri) {
-    html += '<div class="cg-row"><span class="cg-row-label">' + String.fromCharCode(65 + ri) + '</span>';
-    bars.forEach(function(bar) {
-      barN++;
-      var totalBeats = 0;
-      bar.beats.forEach(function(b) { totalBeats += b.span; });
-      if (!totalBeats) totalBeats = beats;
-      html += '<div class="cg-bar" style="--beats:' + totalBeats + '"><span class="cg-bar-num">' + barN + '</span>';
-      bar.beats.forEach(function(b, bii) { html += wvBeatHtml(b, bii === bar.beats.length - 1); });
-      html += '</div>';
-    });
-    html += '</div>';
-  });
-  html += '</div>';
-  document.getElementById('rendered-preview').innerHTML = html;
-  requestAnimationFrame(updateGridAlt);
-}
-
 function updatePreview() {
-  document.getElementById('preview').textContent =
-    '{start_of_grid}\\n' + generateGrid() + '\\n{end_of_grid}';
-  renderGridHtml();
+  var g = generateGrid();
+  document.getElementById('preview').textContent = '{start_of_grid}\\n' + g + '\\n{end_of_grid}';
+  renderGridPreview('rendered-preview', g, beats);
 }
 
 document.getElementById('btn-add-line').addEventListener('click', function() {
