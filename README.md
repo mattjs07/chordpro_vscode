@@ -6,11 +6,10 @@
 
 **Write, rehearse, and perform your songs — without leaving VSCode.**
 
-[![VS Code version](https://vsmarketplacebadges.dev/version-short/mattjs07.chordpro-vscode.svg)](https://marketplace.visualstudio.com/items?itemName=mattjs07.chordpro-vscode)
-[![VS Code installs](https://vsmarketplacebadges.dev/installs-short/mattjs07.chordpro-vscode.svg?label=VS%20Code%20installs)](https://marketplace.visualstudio.com/items?itemName=mattjs07.chordpro-vscode)
-[![VS Code downloads](https://vsmarketplacebadges.dev/downloads-short/mattjs07.chordpro-vscode.svg?label=VS%20Code%20downloads)](https://marketplace.visualstudio.com/items?itemName=mattjs07.chordpro-vscode)
-[![OpenVSX downloads](https://img.shields.io/open-vsx/dt/mattjs07/chordpro-vscode?label=OpenVSX%20downloads&color=purple)](https://open-vsx.org/extension/mattjs07/chordpro-vscode)
-![Open VSX Version](https://img.shields.io/open-vsx/v/mattjs07/chordpro-vscode)
+[![VS Code version](https://img.shields.io/visual-studio-marketplace/v/mattjs07.chordpro-vscode.png?label=VS%20Code%20version)](https://marketplace.visualstudio.com/items?itemName=mattjs07.chordpro-vscode)
+[![VS Code installs](https://img.shields.io/visual-studio-marketplace/i/mattjs07.chordpro-vscode.png?label=VS%20Code%20installs)](https://marketplace.visualstudio.com/items?itemName=mattjs07.chordpro-vscode)
+[![OpenVSX version](https://img.shields.io/open-vsx/v/mattjs07/chordpro-vscode.png?label=OpenVSX%20version&color=purple)](https://open-vsx.org/extension/mattjs07/chordpro-vscode)
+[![OpenVSX downloads](https://img.shields.io/open-vsx/dt/mattjs07/chordpro-vscode.png?label=OpenVSX%20downloads&color=purple)](https://open-vsx.org/extension/mattjs07/chordpro-vscode)
 
 Available on both the **[VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=mattjs07.chordpro-vscode)** and **[OpenVSX](https://open-vsx.org/extension/mattjs07/chordpro-vscode)** (for VSCodium, Gitpod, and other open-source VSCode distributions).
 
