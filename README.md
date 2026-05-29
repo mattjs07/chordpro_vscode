@@ -6,7 +6,9 @@
 
 **Write, rehearse, and perform your songs — without leaving VSCode.**
 
-[![VS Code Marketplace](https://vsmarketplacebadges.dev/downloads-short/mattjs07.chordpro-vscode.svg)](https://marketplace.visualstudio.com/items?itemName=mattjs07.chordpro-vscode)
+[![VS Code version](https://vsmarketplacebadges.dev/version-short/mattjs07.chordpro-vscode.svg)](https://marketplace.visualstudio.com/items?itemName=mattjs07.chordpro-vscode)
+[![VS Code installs](https://vsmarketplacebadges.dev/installs-short/mattjs07.chordpro-vscode.svg)](https://marketplace.visualstudio.com/items?itemName=mattjs07.chordpro-vscode)
+[![VS Code downloads](https://vsmarketplacebadges.dev/downloads-short/mattjs07.chordpro-vscode.svg)](https://marketplace.visualstudio.com/items?itemName=mattjs07.chordpro-vscode)
 [![OpenVSX](https://img.shields.io/open-vsx/dt/mattjs07/chordpro-vscode?label=OpenVSX&color=purple)](https://open-vsx.org/extension/mattjs07/chordpro-vscode)
 
 Available on both the **[VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=mattjs07.chordpro-vscode)** and **[OpenVSX](https://open-vsx.org/extension/mattjs07/chordpro-vscode)** (for VSCodium, Gitpod, and other open-source VSCode distributions).
