@@ -6,7 +6,10 @@
 
 **Write, rehearse, and perform your songs — without leaving VSCode.**
 
-![Installs](https://img.shields.io/visual-studio-marketplace/i/mattjs07.chordpro-vscode?label=installs&color=blue)
+[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/d/mattjs07.chordpro-vscode?label=VS%20Code%20Marketplace&color=007ACC)](https://marketplace.visualstudio.com/items?itemName=mattjs07.chordpro-vscode)
+[![OpenVSX](https://img.shields.io/open-vsx/dt/mattjs07/chordpro-vscode?label=OpenVSX&color=purple)](https://open-vsx.org/extension/mattjs07/chordpro-vscode)
+
+Available on both the **[VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=mattjs07.chordpro-vscode)** and **[OpenVSX](https://open-vsx.org/extension/mattjs07/chordpro-vscode)** (for VSCodium, Gitpod, and other open-source VSCode distributions).
 
 ChordPro VSCode turns VSCode into a full-featured songwriting and performance environment. Write `.cho` files with rich auto-completion, visualise chord fingerings instantly, scroll through your setlist hands-free, and generate print-ready PDFs — all from the editor you already use.
 
@@ -329,6 +332,8 @@ The **Performance View**, **Song Library**, **Setlist**, **Chord Builder**, **Ch
 
 ## Useful Links
 
+- [VS Code Marketplace listing](https://marketplace.visualstudio.com/items?itemName=mattjs07.chordpro-vscode)
+- [OpenVSX listing](https://open-vsx.org/extension/mattjs07/chordpro-vscode)
 - [ChordPro official site & documentation](https://www.chordpro.org/chordpro/home/)
 - [ChordPro directive reference](https://www.chordpro.org/chordpro/chordpro-directives/)
 - [Oolimo chord analyzer](https://www.oolimo.com/en/guitar-chords/analyze)
