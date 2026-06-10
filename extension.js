@@ -5825,13 +5825,17 @@ if(SONGS.length) loadSong(0);
         const source = fs.readFileSync(element.filePath, 'utf8');
         const chordSvgs = buildChordSvgMap(source, buildChordData({ getText: () => source, getWordRangeAtPosition: () => null }));
         const title = element.title || path.basename(element.filePath);
+        const settingsKey = 'perfSettings:' + vscode.Uri.file(element.filePath).toString();
+        const savedSettings = context.globalState.get(settingsKey) || {};
         const panel = vscode.window.createWebviewPanel(
             'chordproScrollPreview', title + ' — Preview',
             vscode.ViewColumn.One, { enableScripts: true, retainContextWhenHidden: true }
         );
-        panel.webview.html = getScrollWebviewContent(source, chordSvgs);
+        panel.webview.html = getScrollWebviewContent(source, chordSvgs, savedSettings);
         panel.webview.onDidReceiveMessage(msg => {
-            if (msg.command === 'saveHtml') {
+            if (msg.command === 'saveSettings') {
+                context.globalState.update(settingsKey, msg.settings);
+            } else if (msg.command === 'saveHtml') {
                 const outPath = element.filePath.replace(/\.[^.]+$/, '') + '_preview.html';
                 const standalone = getScrollWebviewContent(source, buildChordSvgMap(source, buildChordData({ getText: () => source, getWordRangeAtPosition: () => null })))
                     .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>\n?/, '')
