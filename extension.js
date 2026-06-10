@@ -4902,12 +4902,13 @@ setTimeout(function() {
     // ─────────────────────────────────────────────
     // Setlist Webview
     // ─────────────────────────────────────────────
-    function getSetlistWebviewContent(songs, sharedSvgs) {
+    function getSetlistWebviewContent(songs, sharedSvgs, savedSettings) {
         const safeSongs = JSON.stringify(songs.map(s => ({
             title: s.title, artist: s.artist, source: s.source, customSvgs: s.customSvgs
         })));
         const safeSharedSvgs = JSON.stringify(sharedSvgs);
         const safeNotationMapSL = JSON.stringify(loadNotationMap());
+        const safeSavedSettingsSL = JSON.stringify(savedSettings || {});
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -5039,7 +5040,22 @@ var SONGS = ${safeSongs};
 var SONG_IDX = 0;
 var CHORD_SVGS = {};
 var autoAdvance = false;
-function savePerfSettings() {}  // no-op: setlist does not persist settings
+const SAVED_SETTINGS = ${safeSavedSettingsSL};
+function savePerfSettings() {
+  vscodeApi.postMessage({ command: 'saveSettings', settings: {
+    theme:      (typeof _applyThemeUI !== 'undefined' && document.getElementById('theme-vscode').classList.contains('active')) ? 'vscode' : (document.documentElement.dataset.theme || (_sysDark ? 'dark' : 'light')),
+    cols:       colSlider.value,
+    fontSize:   fontSize,
+    legendMode:   legendMode,
+    showVoicings:      showVoicings,
+    useCustomNotation: useCustomNotation,
+    legendSz:   parseInt(legendSzSlider.value, 10),
+    songSz:     parseInt(songSzSlider.value, 10),
+    speed:      speed,
+    panelMode:  panelMode,
+    panelW:     parseInt(panelWSlider.value, 10)
+  }});
+}
 ${SHARED_SONG_JS}
 NOTATION_MAP = ${safeNotationMapSL};
 
@@ -5194,6 +5210,22 @@ document.addEventListener('keydown',function(e){
 
 // Boot
 _updateThemeNavBtn();
+(function applySetlistSettings() {
+  var s = SAVED_SETTINGS;
+  if (!s || !Object.keys(s).length) return;
+  if (s.theme && typeof window._applyThemeUI === 'function') { window._applyThemeUI(s.theme); }
+  if (s.cols) { var n = parseInt(s.cols, 10) || 1; colSlider.value = n; colVal.textContent = n; applyColCount(n); }
+  if (s.fontSize) { fontSize = s.fontSize; document.body.style.fontSize = fontSize + 'px'; }
+  if (s.legendMode) { legendMode = s.legendMode; document.querySelectorAll('input[name="legend-mode"]').forEach(function(r) { r.checked = parseInt(r.value,10) === legendMode; }); updateLegend(); }
+  if (s.showVoicings) { showVoicings = true; document.getElementById('show-voicings-chk').checked = true; }
+  if (s.useCustomNotation) { useCustomNotation = true; document.getElementById('custom-notation-chk').checked = true; }
+  if (s.legendSz) { legendSzSlider.value = s.legendSz; legendSzVal.textContent = s.legendSz + 'px'; document.body.style.setProperty('--legend-svg-w', s.legendSz + 'px'); }
+  if (s.songSz) { songSzSlider.value = s.songSz; songSzVal.textContent = s.songSz + 'px'; document.body.style.setProperty('--song-svg-w', s.songSz + 'px'); }
+  if (s.speed) { speed = s.speed; }
+  if (s.panelMode) { panelMode = s.panelMode; document.querySelectorAll('input[name="panel-mode"]').forEach(function(r) { r.checked = r.value === panelMode; }); }
+  if (s.panelW) { panelWSlider.value = s.panelW; panelWVal.textContent = s.panelW + 'px'; document.body.style.setProperty('--panel-w', s.panelW + 'px'); }
+})();
+applyCustomPanel();
 if(SONGS.length) loadSong(0);
 </script>
 </body>
@@ -5816,13 +5848,16 @@ if(SONGS.length) loadSong(0);
             title: s.title, artist: s.artist, source: s.source,
             customSvgs: buildCustomSvgMap(s.source)
         }));
+        const savedSetlistSettings = context.globalState.get('setlistSettings') || {};
         const panel = vscode.window.createWebviewPanel(
             'chordproSetlist', 'Setlist Preview',
             vscode.ViewColumn.One, { enableScripts: true, retainContextWhenHidden: true }
         );
-        panel.webview.html = getSetlistWebviewContent(songData, sharedSvgs);
+        panel.webview.html = getSetlistWebviewContent(songData, sharedSvgs, savedSetlistSettings);
         panel.webview.onDidReceiveMessage(msg => {
-            if (msg.command === 'enterFullscreen') {
+            if (msg.command === 'saveSettings') {
+                context.globalState.update('setlistSettings', msg.settings);
+            } else if (msg.command === 'enterFullscreen') {
                 vscode.commands.executeCommand('workbench.action.toggleZenMode');
             } else if (msg.command === 'exitFullscreen') {
                 vscode.commands.executeCommand('workbench.action.toggleZenMode');
