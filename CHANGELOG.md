@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.2 — 2026-06-10
+
+### Bug Fixes
+- **Settings persistence in library preview**: opening a song via the library play button now correctly restores and saves preferences (theme, columns, font size, etc.) between sessions.
+- **Settings persistence in setlist view**: preferences changed in the setlist view are now correctly saved and restored on reopen.
+
 ## 2.2.1 — 2026-05-29
 
 ### Grid Editor
