@@ -9,3 +9,14 @@ vsc-extension-quickstart.md
 **/eslint.config.mjs
 **/.vscode-test.*
 images/*_hd.gif
+# Dev/scratch files
+.claude/**
+*.tmp.*
+builder-mockup.html
+check_webview.js
+test_out.txt
+test_webview.js
+webview_test.js
+webview_test2.js
+cTempext_orig.js
+c??Tempext_orig.js
