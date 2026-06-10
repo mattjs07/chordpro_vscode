@@ -5041,6 +5041,13 @@ var SONG_IDX = 0;
 var CHORD_SVGS = {};
 var autoAdvance = false;
 const SAVED_SETTINGS = ${safeSavedSettingsSL};
+${SHARED_SONG_JS}
+NOTATION_MAP = ${safeNotationMapSL};
+
+// Auto-scroll
+var speed = 30, playing = false, lastTs = null, accum = 0;
+var tempoSpeed = 0, activeBpm = 0;
+
 function savePerfSettings() {
   vscodeApi.postMessage({ command: 'saveSettings', settings: {
     theme:      (typeof _applyThemeUI !== 'undefined' && document.getElementById('theme-vscode').classList.contains('active')) ? 'vscode' : (document.documentElement.dataset.theme || (_sysDark ? 'dark' : 'light')),
@@ -5056,12 +5063,7 @@ function savePerfSettings() {
     panelW:     parseInt(panelWSlider.value, 10)
   }});
 }
-${SHARED_SONG_JS}
-NOTATION_MAP = ${safeNotationMapSL};
 
-// Auto-scroll
-var speed = 30, playing = false, lastTs = null, accum = 0;
-var tempoSpeed = 0, activeBpm = 0;
 var playBtn   = document.getElementById('play-btn');
 var speedLabel = document.getElementById('speed-label');
 var tempoBtn  = document.getElementById('tempo-btn');
