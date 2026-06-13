@@ -6841,7 +6841,7 @@ function render() {
     var eb = rowEndBars[ri]   || '|';
     html += '<tr data-ri="' + ri + '">';
     html += '<td class="row-controls">'
-          + '<span class="row-handle" data-ri="' + ri + '" title="Drag to reorder">&#8286;</span>'
+          + '<span class="row-handle" data-ri="' + ri + '" title="Drag to reorder">&#10303;</span>'
           + '<span class="row-dup"   data-ri="' + ri + '" title="Duplicate line">&#10697;</span>'
           + '</td>';
     html += '<td class="clickable-bar" data-side="start" data-ri="' + ri
