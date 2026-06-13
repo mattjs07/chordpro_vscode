@@ -2,6 +2,9 @@
 
 ## 2.2.4 — 2026-06-13
 
+### Grid Editor
+- **Palette filter while typing**: the chord badge palette now filters live as you type in any cell — only chords matching the current text are shown. The palette label shows how many matches are found. All badges are restored when the cell loses focus.
+
 ### Bug Fixes
 - **"No active editor" on insert**: the Chord Builder, Chord Reference panel, Grid Editor, and Tab Editor now automatically find the visible ChordPro file when the panel itself has focus — no need to click back into the editor first. If multiple ChordPro files are open side-by-side, a quick-pick prompt asks which one to insert into.
 - **Grid editor insert fails on non-uniform grids**: grids where different rows had different bar or beat counts (e.g. after manually adding lines) caused a silent crash in the editor before the insert could fire. The parser now normalises all rows to the same dimensions.

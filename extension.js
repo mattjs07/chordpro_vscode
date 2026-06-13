@@ -6907,12 +6907,15 @@ function render() {
     inp.addEventListener('focus', function() {
       lastFocused = { r: +inp.dataset.r, b: +inp.dataset.b, k: +inp.dataset.k };
       undoPushedForCell = false;
+      filterPalette(inp.value);
     });
     inp.addEventListener('input', function() {
       if (!undoPushedForCell) { gridPushUndo(); undoPushedForCell = true; }
       rows[+inp.dataset.r][+inp.dataset.b][+inp.dataset.k] = inp.value;
       updatePreview();
+      filterPalette(inp.value);
     });
+    inp.addEventListener('blur', function() { filterPalette(''); });
     inp.addEventListener('keydown', navHandler);
   });
 
@@ -7129,6 +7132,32 @@ pctBtn.addEventListener('click', function() {
 });
 paletteDiv.appendChild(pctBtn);
 
+var paletteLabel = document.getElementById('palette-label');
+var paletteLabelOrig = paletteLabel ? paletteLabel.innerHTML : '';
+var palFilter = '';
+function fuzzyChord(name, q) {
+  var fi = 0, f = q.toLowerCase(), n = name.toLowerCase();
+  for (var i = 0; i < n.length && fi < f.length; i++) { if (n[i] === f[fi]) fi++; }
+  return fi === f.length;
+}
+function filterPalette(q) {
+  palFilter = q;
+  var lq = q.trim();
+  var visible = 0;
+  paletteDiv.querySelectorAll('.chord-btn:not(.stack-btn):not(.special-btn)').forEach(function(btn) {
+    var show = !lq || fuzzyChord(btn.textContent, lq);
+    btn.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  if (paletteLabel) {
+    if (lq) {
+      paletteLabel.textContent = 'Filter: “' + lq + '” — ' + visible + ' match' + (visible !== 1 ? 'es' : '') + '   (start typing in any cell to filter)';
+    } else {
+      paletteLabel.innerHTML = paletteLabelOrig;
+    }
+  }
+}
+
 function buildChordButtons() {
   paletteDiv.querySelectorAll('.chord-btn:not(.stack-btn):not(.special-btn), .no-chords-msg').forEach(function(b) { b.remove(); });
   if (SONG_CHORDS.length) {
@@ -7163,6 +7192,7 @@ function buildChordButtons() {
     noChords.textContent = 'No chords found in document';
     paletteDiv.appendChild(noChords);
   }
+  filterPalette(palFilter);
 }
 buildChordButtons();
 
