@@ -1118,6 +1118,7 @@ body { margin: 0; padding: 8px; background: var(--bg); color: var(--text); font-
 .remove-shape:hover { color: var(--danger); }
 .suggestion { padding: 3px 10px; font-size: 12px; cursor: pointer; background: var(--surf); color: var(--text); border: 1px solid var(--border); border-radius: 12px; user-select: none; transition: all 0.12s ease; }
 .suggestion:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.suggestion.selected { background: var(--accent) !important; border-color: var(--accent) !important; color: #fff !important; }
 #insert-warning { position: fixed; bottom: 8px; left: 8px; right: 8px; font-size: 11px; padding: 8px 10px; border-radius: 6px; line-height: 1.7; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.4); background: var(--surf); border: 1px solid var(--muted); color: var(--text); }
 #insert-warning button { font-size: 10px; padding: 2px 8px; margin: 4px 4px 0 0; cursor: pointer; background: var(--surf-hi); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-family: inherit; }
 #insert-warning button:hover { border-color: var(--accent); color: var(--accent); }
@@ -1226,7 +1227,7 @@ for (let s = 0; s < NUM_STRINGS; s++) {
     const indicator = document.createElement('div');
     indicator.className = 'string-indicator muted';
     indicator.innerText = 'X';
-    indicator.addEventListener('click', () => { builderPushUndo(); fretsArray[s] = (fretsArray[s] === 0) ? -1 : 0; fingersOverride[s] = null; manualChordName = false; updateDisplay(); });
+    indicator.addEventListener('click', () => { builderPushUndo(); fretsArray[s] = (fretsArray[s] === 0) ? -1 : 0; fingersOverride[s] = null; manualChordName = false; document.querySelectorAll('#suggestions .suggestion.selected').forEach(b => b.classList.remove('selected')); updateDisplay(); });
     row.appendChild(indicator);
     for (let f = 1; f <= NUM_FRETS; f++) {
         const cell = document.createElement('div');
@@ -1246,6 +1247,7 @@ for (let s = 0; s < NUM_STRINGS; s++) {
             isDragging = (next === f);
             dragFret = f;
             manualChordName = false;
+            document.querySelectorAll('#suggestions .suggestion.selected').forEach(b => b.classList.remove('selected'));
             updateDisplay();
         });
         cell.addEventListener('mouseenter', () => {
@@ -1253,6 +1255,7 @@ for (let s = 0; s < NUM_STRINGS; s++) {
             fretsArray[s] = f;
             fingersOverride[s] = null;
             manualChordName = false;
+            document.querySelectorAll('#suggestions .suggestion.selected').forEach(b => b.classList.remove('selected'));
             updateDisplay();
         });
         row.appendChild(cell);
@@ -1365,7 +1368,24 @@ function updateDisplay() {
 function pickName(name) {
     document.getElementById('chordName').value = name;
     manualChordName = true;
+    document.querySelectorAll('#suggestions .suggestion').forEach(b => b.classList.toggle('selected', b.dataset.name === name));
     updateDisplay();
+}
+
+const _ENHARM = {'Bb':'A#','Eb':'D#','Ab':'G#','Db':'C#','Gb':'F#','A#':'Bb','D#':'Eb','G#':'Ab','C#':'Db','F#':'Gb'};
+function _enharmonicName(name) {
+    const m = name.match(/^([A-G][b#]?)(.*)/);
+    if (!m) return null;
+    const alt = _ENHARM[m[1]];
+    return alt ? alt + m[2] : null;
+}
+function _makeSuggBtn(name, cls) {
+    const btn = document.createElement('div');
+    btn.className = 'suggestion' + (cls ? ' ' + cls : '');
+    btn.dataset.name = name;
+    btn.textContent = (cls && cls.includes('custom')) ? '★ ' + name : name;
+    btn.addEventListener('click', () => pickName(name));
+    return btn;
 }
 
 window.addEventListener('message', e => {
@@ -1374,20 +1394,18 @@ window.addEventListener('message', e => {
     const div = document.getElementById('suggestions');
     div.innerHTML = '';
 
-    // Custom remembered name — shown first with star + forget button
+    // Custom remembered name — show star badge(s) + forget button
     if (msg.customName) {
         const wrap = document.createElement('div');
         wrap.style.cssText = 'display:flex;align-items:center;gap:3px;';
-        const btn = document.createElement('div');
-        btn.className = 'suggestion custom-suggestion';
-        btn.textContent = '★ ' + msg.customName;
-        btn.addEventListener('click', () => pickName(msg.customName));
+        wrap.appendChild(_makeSuggBtn(msg.customName, 'custom-suggestion'));
+        const enh = _enharmonicName(msg.customName);
+        if (enh) wrap.appendChild(_makeSuggBtn(enh, 'custom-suggestion'));
         const rem = document.createElement('span');
         rem.className = 'remove-shape';
         rem.title = 'Forget this shape';
         rem.textContent = '×';
         rem.addEventListener('click', () => vscode.postMessage({ command: 'removeCustomShape', frets: fretsArray.slice() }));
-        wrap.appendChild(btn);
         wrap.appendChild(rem);
         div.appendChild(wrap);
     }
@@ -1406,22 +1424,18 @@ window.addEventListener('message', e => {
         if (group.length > 1) {
             const stack = document.createElement('div');
             stack.style.cssText = 'display:flex;flex-direction:column;gap:2px;';
-            group.forEach(name => {
-                const btn = document.createElement('div');
-                btn.className = 'suggestion';
-                btn.innerText = name;
-                btn.addEventListener('click', () => pickName(name));
-                stack.appendChild(btn);
-            });
+            group.forEach(name => stack.appendChild(_makeSuggBtn(name)));
             div.appendChild(stack);
         } else {
-            const btn = document.createElement('div');
-            btn.className = 'suggestion';
-            btn.innerText = group[0];
-            btn.addEventListener('click', () => pickName(group[0]));
-            div.appendChild(btn);
+            div.appendChild(_makeSuggBtn(group[0]));
         }
     });
+
+    // Re-apply selected highlight if a name was manually chosen
+    if (manualChordName) {
+        const chosen = document.getElementById('chordName').value;
+        div.querySelectorAll('.suggestion').forEach(b => b.classList.toggle('selected', b.dataset.name === chosen));
+    }
 });
 
 // ── Insert warning popup ──────────────────────────────────────────────────────
