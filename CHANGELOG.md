@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.4 — 2026-06-13
+
+### Bug Fixes
+- **"No active editor" on insert**: the Chord Builder, Chord Reference panel, Grid Editor, and Tab Editor now automatically find the visible ChordPro file when the panel itself has focus — no need to click back into the editor first. If multiple ChordPro files are open side-by-side, a quick-pick prompt asks which one to insert into.
+- **Grid editor insert fails on non-uniform grids**: grids where different rows had different bar or beat counts (e.g. after manually adding lines) caused a silent crash in the editor before the insert could fire. The parser now normalises all rows to the same dimensions.
+
 ## 2.2.3 — 2026-06-13
 
 ### Chord Builder

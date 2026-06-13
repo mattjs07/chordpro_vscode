@@ -801,9 +801,28 @@ function lookupCustomShape(context, frets) {
     return (useFlat ? FL[newST] : SH[newST]) + entry.suffix;
 }
 
+async function resolveTargetEditor() {
+    const active = vscode.window.activeTextEditor;
+    if (active && active.document.languageId === 'chordpro') return active;
+    const cpEditors = vscode.window.visibleTextEditors.filter(
+        e => e.document.languageId === 'chordpro' && !e.document.isClosed
+    );
+    if (cpEditors.length === 0) return null;
+    if (cpEditors.length === 1) return cpEditors[0];
+    const items = cpEditors.map(e => ({
+        label: path.basename(e.document.uri.fsPath),
+        description: vscode.workspace.asRelativePath(e.document.uri),
+        editor: e
+    }));
+    const pick = await vscode.window.showQuickPick(items, {
+        placeHolder: 'Multiple ChordPro files open — select which to insert into'
+    });
+    return pick ? pick.editor : null;
+}
+
 async function _performInsert(cmd, chord, context, forceDefineCheck = false) {
     saveCustomShapeMemory(context, chord.name, chord.frets);
-    const editor = vscode.window.activeTextEditor;
+    const editor = await resolveTargetEditor();
 
     // Helper: insert the in-lyric reference at cursor position
     const insertRef = async (name) => {
@@ -1966,7 +1985,7 @@ class ChordReferenceViewProvider {
 
 
             // ── Insert chord ──────────────────────────────────────────────
-            const editor = vscode.window.activeTextEditor;
+            const editor = await resolveTargetEditor();
             if (!editor) return;
             // Snapshot cursor before any edit (edits shift the cursor and we need the original)
             let cursorPos = editor.selection.active;
@@ -6056,9 +6075,17 @@ function parseGridContent(content) {
             parsed.push(row);
         }
 
-        const numBars = parsed[0].length;
-        const beats   = parsed[0][0].length;
+        const numBars = Math.max(...parsed.map(r => r.length));
+        const beats   = Math.max(...parsed.map(r => Math.max(...r.map(b => b.length))));
         if (!numBars || !beats) return null;
+        // Normalize: ensure every row has exactly numBars bars, each with exactly beats beats
+        for (const row of parsed) {
+            while (row.length < numBars) row.push(new Array(beats).fill(''));
+            for (const bar of row) {
+                while (bar.length < beats) bar.push('');
+                if (bar.length > beats) bar.length = beats;
+            }
+        }
         return { rows: parsed, beats, numBars, rowStartBars, rowEndBars };
     } catch (_) { return null; }
 }
@@ -6134,10 +6161,11 @@ function registerTabEditor(context) {
         tabEditorPanel = panel;
         panel.onDidDispose(() => { tabEditorPanel = null; });
         panel.webview.html = getTabEditorContent(initialCols, !!existingBlock);
-        panel.webview.onDidReceiveMessage(msg => {
+        panel.webview.onDidReceiveMessage(async msg => {
             if (msg.command === 'insertTab') {
-                const editor = targetEditor || vscode.window.activeTextEditor;
-                if (!editor) { vscode.window.showErrorMessage('No active editor'); return; }
+                const editor = (targetEditor && !targetEditor.document.isClosed)
+                    ? targetEditor : await resolveTargetEditor();
+                if (!editor) { vscode.window.showErrorMessage('No ChordPro file open to insert into'); return; }
                 const newText = '{start_of_tab}\n' + msg.tab + '\n{end_of_tab}';
                 if (existingBlock) {
                     const range = new vscode.Range(
@@ -6493,10 +6521,11 @@ function registerGridEditor(context) {
             if (frets) editorSvgMap[name] = generateChordSvg(frets, name);
         });
         panel.webview.html = getGridEditorContent(songChords, existingData, existingTitle, editorSvgMap);
-        panel.webview.onDidReceiveMessage(msg => {
+        panel.webview.onDidReceiveMessage(async msg => {
             if (msg.command === 'insertGrid') {
-                const editor = targetEditor || vscode.window.activeTextEditor;
-                if (!editor) { vscode.window.showErrorMessage('No active editor'); return; }
+                const editor = (targetEditor && !targetEditor.document.isClosed)
+                    ? targetEditor : await resolveTargetEditor();
+                if (!editor) { vscode.window.showErrorMessage('No ChordPro file open to insert into'); return; }
                 const gridTitle = (msg.title || '').trim();
                 const newText = (gridTitle ? '{start_of_grid: ' + gridTitle + '}' : '{start_of_grid}') + '\n' + msg.grid + '\n{end_of_grid}';
                 if (existingBlock) {
