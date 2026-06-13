@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.2.3 — 2026-06-13
+
+### Chord Builder
+- **Fixed**: clicking a suggestion badge now correctly locks the chord name — previously the recommended name would override any manual badge selection
+- **Favorite chord enharmonics**: starred (favorite) chords now show both enharmonic spellings stacked (e.g. F# / Gb), with the original saved name on top and auto-selected
+- **Selected badge highlight**: the active chord name badge stays highlighted (solid accent) until the frets change
+
+### Grid Editor
+- **Live chord palette**: adding a new `{define:}` or inline chord to the document now instantly updates the grid editor's chord palette without needing to reopen it
+- **Duplicate & reorder lines**: each row now has a ⧉ duplicate button and a ⠿ drag handle to copy or reorder lines by dragging
+
+### Bug Fixes
+- **Extended chord validation**: chords like B13 no longer incorrectly warn about missing intermediate extensions (9th, 11th) that are standard omissions in jazz voicings
+
 ## 2.2.2 — 2026-06-10
 
 ### Bug Fixes
