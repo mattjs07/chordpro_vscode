@@ -6613,6 +6613,15 @@ td { padding: 1px 1px; vertical-align: middle; }
   cursor: pointer; user-select: none; border-radius: 4px; transition: background 0.12s;
 }
 .clickable-bar:hover { background: var(--accent-soft); }
+.row-controls { width: 44px; padding: 0 4px 0 0; white-space: nowrap; user-select: none; }
+.row-handle { display: inline-block; cursor: grab; color: var(--muted); font-size: 14px; padding: 2px 3px; border-radius: 3px; vertical-align: middle; line-height: 1; }
+.row-handle:hover { color: var(--text); background: var(--surf-hi); }
+.row-handle:active { cursor: grabbing; }
+.row-dup { display: inline-block; cursor: pointer; color: var(--muted); font-size: 13px; padding: 2px 3px; border-radius: 3px; vertical-align: middle; line-height: 1; }
+.row-dup:hover { color: var(--accent); background: var(--accent-soft); }
+tr.drag-over-above td { border-top: 2px solid var(--accent); }
+tr.drag-over-below td { border-bottom: 2px solid var(--accent); }
+tr.dragging { opacity: 0.35; }
 .bar-sep { width: 6px; }
 .bar-sep-inner { width: 2px; height: 28px; background: var(--border); margin: 0 auto; }
 .beat-gap { width: 3px; }
@@ -6830,7 +6839,11 @@ function render() {
   rows.forEach(function(row, ri) {
     var sb = rowStartBars[ri] || '|';
     var eb = rowEndBars[ri]   || '|';
-    html += '<tr>';
+    html += '<tr data-ri="' + ri + '">';
+    html += '<td class="row-controls">'
+          + '<span class="row-handle" data-ri="' + ri + '" title="Drag to reorder">&#8286;</span>'
+          + '<span class="row-dup"   data-ri="' + ri + '" title="Duplicate line">&#10697;</span>'
+          + '</td>';
     html += '<td class="clickable-bar" data-side="start" data-ri="' + ri
           + '" title="' + escAttr((BAR_LABEL[sb] || sb) + ' \u2014 click to cycle') + '">'
           + escHtml(sb) + '</td>';
@@ -6872,6 +6885,78 @@ function render() {
       cycleBar(td.dataset.side, +td.dataset.ri);
       render();
       if (pf) focusCell(pf.r, pf.b, pf.k);
+    });
+  });
+
+  document.querySelectorAll('.row-dup').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var ri = +btn.dataset.ri;
+      gridPushUndo();
+      rows.splice(ri + 1, 0, JSON.parse(JSON.stringify(rows[ri])));
+      rowStartBars.splice(ri + 1, 0, rowStartBars[ri] || '|');
+      rowEndBars.splice(ri + 1, 0, rowEndBars[ri] || '|');
+      render();
+    });
+  });
+
+  document.querySelectorAll('.row-handle').forEach(function(handle) {
+    handle.addEventListener('mousedown', function(e) {
+      e.preventDefault();
+      var dragRi = +handle.dataset.ri;
+      var tbody  = document.querySelector('#grid tbody');
+      var allTrs = function() { return Array.from(tbody.querySelectorAll('tr')); };
+      var srcTr  = allTrs()[dragRi];
+      srcTr.classList.add('dragging');
+      var overRi = null;
+      var overPos = null; // 'above' | 'below'
+
+      function trAtY(y) {
+        var trs = allTrs();
+        for (var i = 0; i < trs.length; i++) {
+          var rect = trs[i].getBoundingClientRect();
+          if (y >= rect.top && y <= rect.bottom) return i;
+        }
+        return trs.length > 0 ? (y < trs[0].getBoundingClientRect().top ? 0 : trs.length - 1) : null;
+      }
+
+      function clearHighlights() {
+        allTrs().forEach(function(tr) { tr.classList.remove('drag-over-above', 'drag-over-below'); });
+      }
+
+      function onMove(ev) {
+        var y = ev.clientY;
+        var ti = trAtY(y);
+        if (ti === null) return;
+        var trs  = allTrs();
+        var rect = trs[ti].getBoundingClientRect();
+        var pos  = (y - rect.top) < rect.height / 2 ? 'above' : 'below';
+        if (ti === overRi && pos === overPos) return;
+        overRi = ti; overPos = pos;
+        clearHighlights();
+        if (ti !== dragRi) trs[ti].classList.add(pos === 'above' ? 'drag-over-above' : 'drag-over-below');
+      }
+
+      function onUp(ev) {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        srcTr.classList.remove('dragging');
+        clearHighlights();
+        if (overRi !== null && overRi !== dragRi) {
+          gridPushUndo();
+          var dropIdx = overPos === 'below' ? overRi + 1 : overRi;
+          if (dropIdx > dragRi) dropIdx--;
+          var rowCopy = rows.splice(dragRi, 1)[0];
+          var sbCopy  = rowStartBars.splice(dragRi, 1)[0];
+          var ebCopy  = rowEndBars.splice(dragRi, 1)[0];
+          rows.splice(dropIdx, 0, rowCopy);
+          rowStartBars.splice(dropIdx, 0, sbCopy);
+          rowEndBars.splice(dropIdx, 0, ebCopy);
+          render();
+        }
+      }
+
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
     });
   });
 
