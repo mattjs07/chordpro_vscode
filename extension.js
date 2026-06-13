@@ -6986,7 +6986,7 @@ pctBtn.addEventListener('click', function() {
 paletteDiv.appendChild(pctBtn);
 
 function buildChordButtons() {
-  paletteDiv.querySelectorAll('.chord-btn, .no-chords-msg').forEach(function(b) { b.remove(); });
+  paletteDiv.querySelectorAll('.chord-btn:not(.stack-btn):not(.special-btn), .no-chords-msg').forEach(function(b) { b.remove(); });
   if (SONG_CHORDS.length) {
     SONG_CHORDS.forEach(function(ch) {
       var btn = document.createElement('button');
