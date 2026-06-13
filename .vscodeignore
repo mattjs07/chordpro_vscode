@@ -18,5 +18,4 @@ test_out.txt
 test_webview.js
 webview_test.js
 webview_test2.js
-cTempext_orig.js
-c??Tempext_orig.js
+*Tempext_orig.js
