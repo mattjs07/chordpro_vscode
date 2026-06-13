@@ -1394,13 +1394,20 @@ window.addEventListener('message', e => {
     const div = document.getElementById('suggestions');
     div.innerHTML = '';
 
-    // Custom remembered name — show star badge(s) + forget button
+    // Custom remembered name — primary on top, enharmonic below, stacked vertically
     if (msg.customName) {
         const wrap = document.createElement('div');
         wrap.style.cssText = 'display:flex;align-items:center;gap:3px;';
-        wrap.appendChild(_makeSuggBtn(msg.customName, 'custom-suggestion'));
         const enh = _enharmonicName(msg.customName);
-        if (enh) wrap.appendChild(_makeSuggBtn(enh, 'custom-suggestion'));
+        if (enh) {
+            const stack = document.createElement('div');
+            stack.style.cssText = 'display:flex;flex-direction:column;gap:2px;';
+            stack.appendChild(_makeSuggBtn(msg.customName, 'custom-suggestion'));
+            stack.appendChild(_makeSuggBtn(enh, 'custom-suggestion'));
+            wrap.appendChild(stack);
+        } else {
+            wrap.appendChild(_makeSuggBtn(msg.customName, 'custom-suggestion'));
+        }
         const rem = document.createElement('span');
         rem.className = 'remove-shape';
         rem.title = 'Forget this shape';
@@ -1431,10 +1438,10 @@ window.addEventListener('message', e => {
         }
     });
 
-    // Re-apply selected highlight if a name was manually chosen
-    if (manualChordName) {
-        const chosen = document.getElementById('chordName').value;
-        div.querySelectorAll('.suggestion').forEach(b => b.classList.toggle('selected', b.dataset.name === chosen));
+    // Highlight whichever badge matches the current chord name
+    const currentName = document.getElementById('chordName').value;
+    if (currentName) {
+        div.querySelectorAll('.suggestion').forEach(b => b.classList.toggle('selected', b.dataset.name === currentName));
     }
 });
 
