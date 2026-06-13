@@ -1023,6 +1023,7 @@ class ChordBuilderViewProvider {
 
             if (message.command === 'forceInsert') {
                 const { cmd, chord } = message;
+                addSavedVoicing(this.context, chord);
                 await _performInsert(cmd, chord, this.context, true);
             }
 
@@ -1225,7 +1226,7 @@ for (let s = 0; s < NUM_STRINGS; s++) {
     const indicator = document.createElement('div');
     indicator.className = 'string-indicator muted';
     indicator.innerText = 'X';
-    indicator.addEventListener('click', () => { builderPushUndo(); fretsArray[s] = (fretsArray[s] === 0) ? -1 : 0; fingersOverride[s] = null; updateDisplay(); });
+    indicator.addEventListener('click', () => { builderPushUndo(); fretsArray[s] = (fretsArray[s] === 0) ? -1 : 0; fingersOverride[s] = null; manualChordName = false; updateDisplay(); });
     row.appendChild(indicator);
     for (let f = 1; f <= NUM_FRETS; f++) {
         const cell = document.createElement('div');
@@ -1244,12 +1245,14 @@ for (let s = 0; s < NUM_STRINGS; s++) {
             fingersOverride[s] = null;
             isDragging = (next === f);
             dragFret = f;
+            manualChordName = false;
             updateDisplay();
         });
         cell.addEventListener('mouseenter', () => {
             if (!isDragging || f !== dragFret) return;
             fretsArray[s] = f;
             fingersOverride[s] = null;
+            manualChordName = false;
             updateDisplay();
         });
         row.appendChild(cell);
@@ -1361,7 +1364,7 @@ function updateDisplay() {
 
 function pickName(name) {
     document.getElementById('chordName').value = name;
-    manualChordName = false;
+    manualChordName = true;
     updateDisplay();
 }
 
