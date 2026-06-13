@@ -6480,6 +6480,50 @@ function registerGridEditor(context) {
                 }
             }
         });
+
+        // Refresh palette when the source document changes
+        let _gridDocDebounce = null;
+        const _gridDocWatcher = targetEditor && vscode.workspace.onDidChangeTextDocument(e => {
+            if (e.document !== targetEditor.document) return;
+            clearTimeout(_gridDocDebounce);
+            _gridDocDebounce = setTimeout(() => {
+                const text = targetEditor.document.getText();
+                const seen = new Set();
+                const newChords = [];
+                const addCh = ch => { ch = ch.trim(); if (ch && !seen.has(ch)) { seen.add(ch); newChords.push(ch); } };
+                let m;
+                const reDefine2 = /\{define:\s*([A-G][^\s}]*)/gi;
+                while ((m = reDefine2.exec(text)) !== null) addCh(m[1]);
+                const reInline2 = /\[([A-G][^\[\]]*)\]/g;
+                while ((m = reInline2.exec(text)) !== null) addCh(m[1]);
+                const newFullChordData = Object.assign({}, CHORD_DB);
+                for (const v of (context.globalState.get('savedVoicings') || [])) {
+                    if (!newFullChordData[v.name] && v.frets) newFullChordData[v.name] = [...v.frets].reverse();
+                }
+                Object.assign(newFullChordData, parseDocumentDefines(targetEditor.document));
+                const newSvgMap = {};
+                new Set(newChords).forEach(name => {
+                    const base = name.replace(/\/[A-G][b#]?$/, '');
+                    let frets = newFullChordData[name] || newFullChordData[base];
+                    if (!frets) {
+                        const mm = base.match(/^([A-G][b#]?)(.*)/);
+                        if (mm) {
+                            const si = _SH.indexOf(mm[1]), fi = _FL.indexOf(mm[1]);
+                            const alt = si >= 0 ? _FL[si] + mm[2] : fi >= 0 ? _SH[fi] + mm[2] : null;
+                            if (alt) frets = newFullChordData[alt + name.slice(base.length)] || newFullChordData[alt];
+                        }
+                    }
+                    if (frets) newSvgMap[name] = generateChordSvg(frets, name);
+                });
+                panel.webview.postMessage({ command: 'updateChords', songChords: newChords, chordSvgs: newSvgMap });
+            }, 400);
+        });
+
+        panel.onDidDispose(() => {
+            gridEditorPanel = null;
+            if (_gridDocWatcher) _gridDocWatcher.dispose();
+            clearTimeout(_gridDocDebounce);
+        });
     });
 }
 
@@ -6941,37 +6985,51 @@ pctBtn.addEventListener('click', function() {
 });
 paletteDiv.appendChild(pctBtn);
 
-if (SONG_CHORDS.length) {
-  SONG_CHORDS.forEach(function(ch) {
-    var btn = document.createElement('button');
-    btn.className = 'chord-btn';
-    btn.textContent = ch;
-    btn.addEventListener('mousedown', function(e) { e.preventDefault(); });
-    btn.addEventListener('click', function() {
-      if (!lastFocused) return;
-      gridPushUndo();
-      var r = lastFocused.r, b = lastFocused.b, k = lastFocused.k;
-      var current = rows[r][b][k];
-      var newVal;
-      if (stackMode) {
-        newVal = current ? (current.endsWith('~') ? current + ch : current + '~' + ch) : ch;
-      } else {
-        newVal = ch;
-      }
-      rows[r][b][k] = newVal;
-      var inp = document.querySelector('.beat-input[data-r="'+r+'"][data-b="'+b+'"][data-k="'+k+'"]');
-      if (inp) inp.value = newVal;
-      updatePreview();
-      if (!stackMode) advance(r, b, k, 1);
+function buildChordButtons() {
+  paletteDiv.querySelectorAll('.chord-btn, .no-chords-msg').forEach(function(b) { b.remove(); });
+  if (SONG_CHORDS.length) {
+    SONG_CHORDS.forEach(function(ch) {
+      var btn = document.createElement('button');
+      btn.className = 'chord-btn';
+      btn.textContent = ch;
+      btn.addEventListener('mousedown', function(e) { e.preventDefault(); });
+      btn.addEventListener('click', function() {
+        if (!lastFocused) return;
+        gridPushUndo();
+        var r = lastFocused.r, b = lastFocused.b, k = lastFocused.k;
+        var current = rows[r][b][k];
+        var newVal;
+        if (stackMode) {
+          newVal = current ? (current.endsWith('~') ? current + ch : current + '~' + ch) : ch;
+        } else {
+          newVal = ch;
+        }
+        rows[r][b][k] = newVal;
+        var inp = document.querySelector('.beat-input[data-r="'+r+'"][data-b="'+b+'"][data-k="'+k+'"]');
+        if (inp) inp.value = newVal;
+        updatePreview();
+        if (!stackMode) advance(r, b, k, 1);
+      });
+      paletteDiv.appendChild(btn);
     });
-    paletteDiv.appendChild(btn);
-  });
-} else {
-  var noChords = document.createElement('span');
-  noChords.style.cssText = 'color:#444;font-size:11px;margin-left:6px';
-  noChords.textContent = 'No chords found in document';
-  paletteDiv.appendChild(noChords);
+  } else {
+    var noChords = document.createElement('span');
+    noChords.className = 'no-chords-msg';
+    noChords.style.cssText = 'color:#444;font-size:11px;margin-left:6px';
+    noChords.textContent = 'No chords found in document';
+    paletteDiv.appendChild(noChords);
+  }
 }
+buildChordButtons();
+
+window.addEventListener('message', function(e) {
+  var msg = e.data;
+  if (msg.command === 'updateChords') {
+    SONG_CHORDS = msg.songChords;
+    Object.assign(CHORD_SVGS, msg.chordSvgs);
+    buildChordButtons();
+  }
+});
 
 if (INIT_DATA) setBeatsSelect(beats);
 render();
