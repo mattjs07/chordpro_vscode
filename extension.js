@@ -726,9 +726,18 @@ function validateChordName(name, frets) {
     }
     const voicingPcs = new Set(frets.map((f, i) => f === -1 ? null : (OPEN_MIDI[i] + f) % 12).filter(n => n !== null));
     const chordPcs = chord.notes.map(n => Note.midi(n + '4') % 12);
-    const tonicPc = Note.midi(chord.tonic + '4') % 12;
-    const fifthPc = chord.intervals.includes('5P') ? (tonicPc + 7) % 12 : -1;
-    const missing = chordPcs.filter(pc => pc !== fifthPc && !voicingPcs.has(pc));
+    const intervals = chord.intervals || [];
+    const has13 = intervals.some(iv => /^13/.test(iv));
+    const has11 = intervals.some(iv => /^11/.test(iv));
+    // 5th is always optional; in extended chords, intermediate extensions are too:
+    // 9th is optional when chord has 11th or 13th; 11th is optional when chord has 13th
+    const optIntervals = new Set(['5P', '5d', '5A']);
+    if (has11 || has13) { optIntervals.add('9M'); optIntervals.add('9m'); optIntervals.add('9A'); }
+    if (has13)          { optIntervals.add('11P'); optIntervals.add('11A'); }
+    const optionalPcs = new Set(
+        intervals.map((iv, i) => optIntervals.has(iv) ? Note.midi(chord.notes[i] + '4') % 12 : -1).filter(pc => pc >= 0)
+    );
+    const missing = chordPcs.filter(pc => !voicingPcs.has(pc) && !optionalPcs.has(pc));
     if (missing.length) {
         const SH = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
         return { status: 'mismatch', chordNotes: chord.notes, missingNotes: missing.map(pc => SH[pc]), voicingNotes: [...voicingPcs].map(pc => SH[pc]) };
