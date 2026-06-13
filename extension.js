@@ -7135,17 +7135,29 @@ paletteDiv.appendChild(pctBtn);
 var paletteLabel = document.getElementById('palette-label');
 var paletteLabelOrig = paletteLabel ? paletteLabel.innerHTML : '';
 var palFilter = '';
-function fuzzyChord(name, q) {
-  var fi = 0, f = q.toLowerCase(), n = name.toLowerCase();
-  for (var i = 0; i < n.length && fi < f.length; i++) { if (n[i] === f[fi]) fi++; }
-  return fi === f.length;
+function matchChord(name, q) {
+  if (!q) return true;
+  var rm = q.match(/^([A-G][b#]?)(.*)/);
+  if (rm) {
+    // Query starts with a note root — do root-prefix + quality-substring match
+    var qRoot = rm[1], qQual = rm[2].toLowerCase();
+    var nm = name.match(/^([A-G][b#]?)(.*)/);
+    if (!nm) return false;
+    if (!nm[1].startsWith(qRoot)) return false;
+    if (qQual && nm[2].toLowerCase().indexOf(qQual) === -1) return false;
+    return true;
+  }
+  // Lowercase-only query — match as substring of the quality part only
+  var nm2 = name.match(/^[A-G][b#]?(.*)/);
+  var qual = nm2 ? nm2[1].toLowerCase() : name.toLowerCase();
+  return qual.indexOf(q.toLowerCase()) !== -1;
 }
 function filterPalette(q) {
   palFilter = q;
   var lq = q.trim();
   var visible = 0;
   paletteDiv.querySelectorAll('.chord-btn:not(.stack-btn):not(.special-btn)').forEach(function(btn) {
-    var show = !lq || fuzzyChord(btn.textContent, lq);
+    var show = !lq || matchChord(btn.textContent, lq);
     btn.style.display = show ? '' : 'none';
     if (show) visible++;
   });
