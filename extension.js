@@ -518,6 +518,7 @@ function renderChordProLogic(context, onSuccess) {
     let suffix = '';
     let outputFile = '';
     let config_path = '';
+    let hasOutputDirective = false;
 
     // Iterate over all lines in the document
     for (let i = 0; i < Math.min(25, document.lineCount); i++) {
@@ -539,6 +540,7 @@ function renderChordProLogic(context, onSuccess) {
         const outputMatch = line.match(/^#'? {?\s*output\s*=\s*(["']?)(\S+)\1\s*}/);
         if (outputMatch) {
             outputFile = outputMatch[2].trim();
+            hasOutputDirective = true;
         }
         
         // Match for config
@@ -571,7 +573,23 @@ function renderChordProLogic(context, onSuccess) {
         return;
     }
 
-    const fullOutputPath = path.resolve(fileDirname, outputFile);
+    // Determine output directory: explicit `output =` in file → use fileDirname as before.
+    // Otherwise apply the configured pdfOutputFolder setting.
+    let outputDir = fileDirname;
+    if (!hasOutputDirective) {  // only redirect when no per-file output directive
+        const folderSetting = vscode.workspace.getConfiguration('chordpro').get('pdfOutputFolder', '').trim();
+        if (folderSetting) {
+            outputDir = path.isAbsolute(folderSetting)
+                ? folderSetting
+                : path.join(fileDirname, folderSetting);
+            if (!fs.existsSync(outputDir)) {
+                fs.mkdirSync(outputDir, { recursive: true });
+            }
+        }
+    }
+    const fullOutputPath = path.isAbsolute(outputFile)
+        ? outputFile
+        : path.resolve(outputDir, outputFile);
 
     // Build the command string to execute the bash script
     let command = `bash "${scriptPath}" "${filePath}" "${fullOutputPath}" "${config_path}"`;

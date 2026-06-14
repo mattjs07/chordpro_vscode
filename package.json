@@ -374,6 +374,11 @@
           "type": "string",
           "default": "",
           "description": "Folder for your personal ChordPro config JSON files. Leave empty to use the default VS Code storage location. Set to any folder (e.g. a Dropbox path) to keep configs portable."
+        },
+        "chordpro.pdfOutputFolder": {
+          "type": "string",
+          "default": "",
+          "description": "Folder where rendered PDFs are saved. Leave empty to save next to the source file (default). Use a relative path like 'output' to save into a subfolder of the song's directory (e.g. FILE_DIR/output). Use an absolute path for a fixed location. A per-file 'output =' directive always takes priority over this setting."
         }
       }
     }
