@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.2.5 — 2026-06-27
+
+### Quick Actions
+- **New song file button**: a "New song file" button in the sidebar panel prompts for song title and artist, then opens a save dialog pre-filled with `artist_song_name.chordpro` (lowercase, spaces converted to underscores). The file is created with a `{artist}` / `{title}` header and opened immediately.
+
+### Grid Editor
+- **Smarter palette filter**: the live palette filter is now chord-aware — an uppercase letter (e.g. `A`) filters by root note only, so `A` shows Am/Am7/Amaj7 but not Emaj7. A lowercase-only query (e.g. `maj`, `dim`, `13`) matches as a substring of the chord quality. A combined query like `Am` filters to root A with quality containing "m".
+
+### PDF Rendering
+- **Configurable output folder** (`chordpro.pdfOutputFolder`): set a relative path (e.g. `output`) to save PDFs into a subfolder of the song's directory, or an absolute path for a fixed destination. Leave empty to keep the current behaviour (PDF saved next to the source file). A per-file `output =` directive always takes priority.
+
 ## 2.2.4 — 2026-06-13
 
 ### Grid Editor
