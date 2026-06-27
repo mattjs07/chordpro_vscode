@@ -1856,7 +1856,7 @@ class ChordProActionsViewProvider {
     resolveWebviewView(view) {
         view.webview.options = { enableScripts: true };
         view.webview.html = this._buildHtml();
-        view.webview.onDidReceiveMessage(msg => {
+        view.webview.onDidReceiveMessage(async msg => {
             if (msg.command === 'runAction') {
                 const cmds = {
                     'perf':    'extension.autoScrollPreview',
@@ -1867,7 +1867,50 @@ class ChordProActionsViewProvider {
                     'grid':    'extension.openGridEditor',
                     'oolimo':  'extension.openChordAnalyzer',
                 };
-                if (cmds[msg.action]) vscode.commands.executeCommand(cmds[msg.action]);
+                if (cmds[msg.action]) {
+                    vscode.commands.executeCommand(cmds[msg.action]);
+                } else if (msg.action === 'newfile') {
+                    const songName = await vscode.window.showInputBox({
+                        title: 'New ChordPro file',
+                        prompt: 'Song title',
+                        placeHolder: 'e.g. Blackbird',
+                        ignoreFocusOut: true,
+                    });
+                    if (!songName) return;
+                    const artistName = await vscode.window.showInputBox({
+                        title: 'New ChordPro file',
+                        prompt: 'Artist',
+                        placeHolder: 'e.g. The Beatles',
+                        ignoreFocusOut: true,
+                    });
+                    if (artistName === undefined) return; // cancelled (empty string is OK)
+                    const toSlug = s => s.trim().toLowerCase().replace(/\s+/g, '_');
+                    const parts = [artistName && toSlug(artistName), toSlug(songName)].filter(Boolean);
+                    const defaultName = parts.join('_') + '.chordpro';
+                    const activeEd = vscode.window.activeTextEditor;
+                    const defaultDir = activeEd
+                        ? vscode.Uri.file(path.dirname(activeEd.document.uri.fsPath))
+                        : vscode.workspace.workspaceFolders?.[0]?.uri;
+                    const defaultUri = defaultDir
+                        ? vscode.Uri.joinPath(defaultDir, defaultName)
+                        : vscode.Uri.file(defaultName);
+                    const uri = await vscode.window.showSaveDialog({
+                        defaultUri,
+                        filters: { 'ChordPro': ['chordpro', 'cho', 'chopro'] },
+                        saveLabel: 'Create',
+                        title: 'Save new ChordPro file',
+                    });
+                    if (!uri) return;
+                    const header = [
+                        artistName ? `{artist: ${artistName}}` : null,
+                        `{title: ${songName}}`,
+                        '',
+                        '',
+                    ].filter(l => l !== null).join('\n');
+                    await vscode.workspace.fs.writeFile(uri, Buffer.from(header, 'utf8'));
+                    const doc = await vscode.workspace.openTextDocument(uri);
+                    await vscode.window.showTextDocument(doc);
+                }
             }
         });
     }
@@ -1905,6 +1948,8 @@ body { background: var(--bg); color: var(--text); font-family: var(--vscode-font
 .act-btn:hover { background: var(--surf-hi); border-color: var(--accent); color: var(--accent); }
 .act-btn svg { display: block; flex-shrink: 0; }
 .act-btn.wide { grid-column: span 2; flex-direction: row; gap: 5px; padding: 5px 8px; font-size: 10px; }
+.act-btn.full { grid-column: 1 / -1; flex-direction: row; gap: 6px; padding: 6px 10px; font-size: 10px; }
+.separator { grid-column: 1 / -1; border: none; border-top: 1px solid var(--border); margin: 1px 0; }
 </style>
 </head><body>
 <div id="action-bar">
@@ -1928,6 +1973,10 @@ body { background: var(--bg); color: var(--text); font-family: var(--vscode-font
   </button>
   <button class="act-btn wide" data-action="oolimo" title="Open Oolimo chord analyzer">
     <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M9 1h6v6l-2-2-5 5-2-2 5-5L9 1zm-7 3h4v2H4v8h8v-4h2v6H2V4z"/></svg>Oolimo
+  </button>
+  <hr class="separator">
+  <button class="act-btn full" data-action="newfile" title="Create a new ChordPro file">
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M9 1L14 6v9H2V1h7zm-1 1H3v12h10V7H8V2zm1 .7V6h3.3L9 2.7z"/><path d="M5 9h6v1H5V9zm0 2h4v1H5v-1z"/></svg>New song file
   </button>
 </div>
 <script>
