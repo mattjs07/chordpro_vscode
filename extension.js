@@ -2642,7 +2642,7 @@ body.vscode-light, body.vscode-high-contrast-light {
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { background: var(--bg); color: var(--text); font-family: var(--vscode-font-family); font-size: 13px; overflow-x: hidden; }
-#filter-wrap { padding: 6px 7px 5px; border-bottom: 1px solid var(--border); }
+#filter-wrap { padding: 6px 7px 5px; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; background: var(--bg); }
 #filter-input {
     width: 100%; background: var(--surf); border: 1px solid var(--border);
     color: var(--text); border-radius: 4px; padding: 3px 7px; font-size: 11px;
@@ -2830,7 +2830,7 @@ const SHARED_SONG_CSS = `
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #1e1e1e; --fg: #d4d4d4; --fg-dim: #999; --fg-muted: #666;
-    --border: #444; --chord: #ece9ff;
+    --border: #444; --chord: #a89ef8;
     --sec-chorus-bg: #1e2a4a; --sec-chorus-fg: #79b8ff;
     --sec-verse-bg: #2a2a2a;  --sec-verse-fg: #aaa;
     --sec-bridge-bg: #3a2a10; --sec-bridge-fg: #e8a050;
@@ -2858,7 +2858,7 @@ const SHARED_SONG_CSS = `
 }
 :root[data-theme="dark"] {
   --bg: #1e1e1e; --fg: #d4d4d4; --fg-dim: #999; --fg-muted: #666;
-  --border: #444; --chord: #ece9ff;
+  --border: #444; --chord: #a89ef8;
   --sec-chorus-bg: #1e2a4a; --sec-chorus-fg: #79b8ff;
   --sec-verse-bg: #2a2a2a;  --sec-verse-fg: #aaa;
   --sec-bridge-bg: #3a2a10; --sec-bridge-fg: #e8a050;
