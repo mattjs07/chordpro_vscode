@@ -6596,11 +6596,33 @@ function registerGridEditor(context) {
                 const gridTitle = (msg.title || '').trim();
                 const newText = (gridTitle ? '{start_of_grid: ' + gridTitle + '}' : '{start_of_grid}') + '\n' + msg.grid + '\n{end_of_grid}';
                 if (existingBlock) {
-                    const range = new vscode.Range(
-                        new vscode.Position(existingBlock.startLine, 0),
-                        new vscode.Position(existingBlock.endLine, editor.document.lineAt(existingBlock.endLine).text.length)
-                    );
-                    editor.edit(eb => eb.replace(range, newText));
+                    // Re-scan the document to find the current position of the grid block —
+                    // the stored line numbers go stale whenever lines are added/removed above.
+                    const lines = editor.document.getText().split('\n');
+                    const blocks = [];
+                    for (let i = 0; i < lines.length; i++) {
+                        if (/\{start_of_grid\b/i.test(lines[i])) {
+                            let j = i + 1;
+                            while (j < lines.length && !/\{end_of_grid\b/i.test(lines[j])) j++;
+                            if (j < lines.length) {
+                                const tm = lines[i].match(/\{start_of_grid\s*:\s*(.*?)\}/i);
+                                blocks.push({ startLine: i, endLine: j, title: tm ? tm[1].trim() : '' });
+                            }
+                        }
+                    }
+                    let target = blocks.find(b => b.title && b.title === existingTitle)
+                        || blocks.reduce((best, b) =>
+                            best === null || Math.abs(b.startLine - existingBlock.startLine) < Math.abs(best.startLine - existingBlock.startLine)
+                            ? b : best, null);
+                    if (target) {
+                        const range = new vscode.Range(
+                            new vscode.Position(target.startLine, 0),
+                            new vscode.Position(target.endLine, editor.document.lineAt(target.endLine).text.length)
+                        );
+                        editor.edit(eb => eb.replace(range, newText));
+                    } else {
+                        editor.insertSnippet(new vscode.SnippetString(newText));
+                    }
                 } else {
                     editor.insertSnippet(new vscode.SnippetString(newText));
                 }
@@ -6727,6 +6749,10 @@ td { padding: 1px 1px; vertical-align: middle; }
 tr.drag-over-above td { border-top: 2px solid var(--accent); }
 tr.drag-over-below td { border-bottom: 2px solid var(--accent); }
 tr.dragging { opacity: 0.35; }
+.row-del { padding: 0 0 0 4px; white-space: nowrap; user-select: none; }
+.row-del-btn { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: var(--danger, #e5534b); opacity: 0.18; padding: 2px 3px; border-radius: 3px; vertical-align: middle; line-height: 1; transition: opacity 0.12s, background 0.12s; }
+tr:hover .row-del-btn { opacity: 0.55; }
+.row-del-btn:hover { opacity: 1 !important; background: rgba(229,83,75,0.15); }
 .bar-sep { width: 6px; }
 .bar-sep-inner { width: 2px; height: 28px; background: var(--border); margin: 0 auto; }
 .beat-gap { width: 3px; }
@@ -6966,6 +6992,12 @@ function render() {
     html += '<td class="clickable-bar" data-side="end" data-ri="' + ri
           + '" title="' + escAttr((BAR_LABEL[eb] || eb) + ' \u2014 click to cycle') + '">'
           + escHtml(eb) + '</td>';
+    html += '<td class="row-del">'
+          + (rows.length > 1 ? '<span class="row-del-btn" data-ri="' + ri + '" title="Delete line">'
+          + '<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">'
+          + '<path d="M6 2h4v1h3v1H3V3h3V2zM4 5h8l-.8 9H4.8L4 5zm2 2v5h1V7H6zm3 0v5h1V7H9z"/>'
+          + '</svg></span>' : '')
+          + '</td>';
     html += '</tr>';
   });
   document.querySelector('#grid tbody').innerHTML = html;
@@ -7003,6 +7035,19 @@ function render() {
       rows.splice(ri + 1, 0, JSON.parse(JSON.stringify(rows[ri])));
       rowStartBars.splice(ri + 1, 0, rowStartBars[ri] || '|');
       rowEndBars.splice(ri + 1, 0, rowEndBars[ri] || '|');
+      render();
+    });
+  });
+
+  document.querySelectorAll('.row-del-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var ri = +btn.dataset.ri;
+      if (rows.length <= 1) return;
+      gridPushUndo();
+      rows.splice(ri, 1);
+      rowStartBars.splice(ri, 1);
+      rowEndBars.splice(ri, 1);
+      if (lastFocused && lastFocused.r >= rows.length) lastFocused = null;
       render();
     });
   });
