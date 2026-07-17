@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.2.6 — 2026-07-17
+
+### Tab Editor
+- **Redesigned toolbar**: controls now use grouped `[− Col +]` and `[− Bar +]` steppers matching the Grid Editor style, plus a clearly styled red Clear button.
+- **Column controls at cursor**: `+ Col` inserts an empty note column immediately after the focused cell; `− Col` removes the column at the cursor (falls back to the last note column when nothing is focused).
+- **Bar controls at end**: `+ Bar` appends a full bar — same width as the last existing bar — after all current content; `− Bar` removes the last bar separator and its trailing note columns.
+- **Drag-to-select**: click and drag across cells to select a rectangular region (strings × columns); bar separators are skipped. Shift+click or Shift+Arrow extends an existing selection.
+- **Copy / Cut / Paste**: `Ctrl+C` / `Ctrl+X` / `Ctrl+V` operate on the selected rectangle. Paste inserts at the focused cell, skipping over bar separators; the tab auto-extends if the pasted content is longer than the remaining columns.
+- **Backspace on selection**: clears all values in the selected rectangle in one keystroke.
+
 ## 2.2.5 — 2026-06-27
 
 ### Quick Actions

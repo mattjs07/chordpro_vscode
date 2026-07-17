@@ -6282,8 +6282,19 @@ body {
 .btn:hover { background: var(--surf-hi); border-color: var(--accent); color: var(--accent); }
 .btn-insert { background: var(--accent); border-color: transparent; color: #fff; }
 .btn-insert:hover { background: var(--accent); border-color: transparent; filter: brightness(1.12); color: #fff; }
+.btn-group { display: flex; align-items: stretch; }
+.btn-group .btn:first-child { border-radius: 5px 0 0 5px; border-right-color: transparent; padding: 4px 10px; }
+.btn-group .btn:last-child  { border-radius: 0 5px 5px 0; padding: 4px 10px; }
+.btn-group-lbl {
+  display: flex; align-items: center; font-size: 11px; color: var(--muted);
+  background: var(--bg); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  padding: 0 7px;
+}
+.tsep { color: var(--border); font-size: 14px; }
+.btn-danger { color: var(--danger); border-color: var(--danger); }
+.btn-danger:hover { background: var(--danger); color: var(--bg); border-color: var(--danger); }
 
-#grid-wrap { overflow-x: auto; flex-shrink: 0; }
+#grid-wrap { overflow-x: auto; flex-shrink: 0; user-select: none; }
 
 table { border-collapse: collapse; }
 .str-label {
@@ -6312,6 +6323,7 @@ table { border-collapse: collapse; }
   position: relative; z-index: 1; background: var(--bg);
   padding: 0 3px; min-width: 14px; display: inline-block;
 }
+.cell.in-sel { background: rgba(124,106,246,0.18); }
 .cell.selected span {
   background: var(--accent); color: #fff;
   border-radius: 3px; outline: 2px solid var(--accent-soft);
@@ -6342,10 +6354,18 @@ table { border-collapse: collapse; }
 </head>
 <body>
 <div id="toolbar">
-  <button class="btn" id="btn-col">+ Column</button>
-  <button class="btn" id="btn-bar">| Bar</button>
-  <button class="btn" id="btn-del">Delete last</button>
+  <div class="btn-group">
+    <button class="btn" id="btn-del-col">&#8722;</button>
+    <span class="btn-group-lbl">Col</span>
+    <button class="btn" id="btn-add-col">+</button>
+  </div>
+  <div class="btn-group">
+    <button class="btn" id="btn-del-bar">&#8722;</button>
+    <span class="btn-group-lbl">Bar</span>
+    <button class="btn" id="btn-add-bar">+</button>
+  </div>
   <button class="btn btn-danger" id="btn-clear">Clear</button>
+  <span class="tsep">|</span>
   <button class="btn btn-insert" id="btn-insert">${btnLabel}</button>
 </div>
 <div id="grid-wrap"><table id="grid"></table></div>
@@ -6361,6 +6381,7 @@ const NS = 6;
 const INIT_COLS = ${initColsJson};
 let cols = INIT_COLS ? INIT_COLS.map(c => c.type === 'bar' ? {type:'bar'} : {type:'notes', values:c.values.slice()}) : [];
 let selC = -1, selS = -1, inputBuf = '';
+let selAnchor = null, selHead = null, isDragging = false, _clipboard = null;
 let tabUndoStack = [];
 let tabRedoStack = [];
 function tabPushUndo() { tabUndoStack.push(JSON.parse(JSON.stringify(cols))); if (tabUndoStack.length > 50) tabUndoStack.shift(); tabRedoStack = []; }
@@ -6373,6 +6394,22 @@ if (!INIT_COLS) {
 
 function addNote() { cols.push({ type: 'notes', values: Array(NS).fill('') }); }
 function addBar()  { cols.push({ type: 'bar' }); }
+
+function barWidth() {
+  const barPos = cols.reduce((acc, c, i) => (c.type === 'bar' ? [...acc, i] : acc), []);
+  if (barPos.length === 0) {
+    const n = cols.filter(c => c.type === 'notes').length;
+    return n || 8;
+  }
+  const last = barPos[barPos.length - 1];
+  let after = 0;
+  for (let i = last + 1; i < cols.length; i++) if (cols[i].type === 'notes') after++;
+  if (after > 0) return after;
+  const prev = barPos.length >= 2 ? barPos[barPos.length - 2] : -1;
+  let between = 0;
+  for (let i = prev + 1; i < last; i++) if (cols[i].type === 'notes') between++;
+  return between || 8;
+}
 
 function colWidth(c) {
   if (cols[c].type === 'bar') return 0;
@@ -6403,9 +6440,9 @@ function render() {
         row += '<td class="bar-col"></td>';
       } else {
         const v = cols[c].values[s];
-        const isSel = (c === selC && s === selS);
-        const display = isSel && inputBuf ? inputBuf : v;
-        const cls = 'cell' + (isSel ? ' selected' : '') + (v && !isSel ? ' has-value' : '');
+        const isFoc = (c === selC && s === selS);
+        const display = isFoc && inputBuf ? inputBuf : v;
+        const cls = 'cell' + (isFoc ? ' selected' : '') + (v && !isFoc ? ' has-value' : '') + (isInSel(c, s) ? ' in-sel' : '');
         row += '<td class="' + cls + '" data-c="' + c + '" data-s="' + s + '">'
              + '<span>' + (display || '') + '</span></td>';
       }
@@ -6426,6 +6463,7 @@ function commit() {
 
 function moveSel(dc, ds) {
   commit();
+  selAnchor = null; selHead = null;
   let c = selC + dc, s = selStr_clamped(selS + ds);
   if (dc !== 0) {
     const dir = dc > 0 ? 1 : -1;
@@ -6438,69 +6476,182 @@ function moveSel(dc, ds) {
 
 function selStr_clamped(s) { return Math.max(0, Math.min(NS - 1, s)); }
 
-document.getElementById('grid').addEventListener('click', e => {
+function selBounds() {
+  if (!selAnchor || !selHead) return null;
+  return {
+    minC: Math.min(selAnchor.c, selHead.c), maxC: Math.max(selAnchor.c, selHead.c),
+    minS: Math.min(selAnchor.s, selHead.s), maxS: Math.max(selAnchor.s, selHead.s),
+  };
+}
+function isInSel(c, s) {
+  const b = selBounds();
+  if (!b || !cols[c] || cols[c].type !== 'notes') return false;
+  return c >= b.minC && c <= b.maxC && s >= b.minS && s <= b.maxS;
+}
+
+document.getElementById('grid').addEventListener('mousedown', e => {
   const td = e.target.closest('td[data-c]');
   if (!td) return;
   const c = +td.dataset.c, s = +td.dataset.s;
-  commit();
-  selC = c; selS = s; inputBuf = '';
+  commit(); inputBuf = '';
+  if (e.shiftKey && selC >= 0) {
+    if (!selAnchor) selAnchor = {c: selC, s: selS};
+    selHead = {c, s};
+  } else {
+    selC = c; selS = s; selAnchor = null; selHead = null;
+    isDragging = true;
+  }
   render();
 });
+document.getElementById('grid').addEventListener('mouseover', e => {
+  if (!isDragging) return;
+  const td = e.target.closest('td[data-c]');
+  if (!td) return;
+  const c = +td.dataset.c, s = +td.dataset.s;
+  if (!cols[c] || cols[c].type !== 'notes') return;
+  if (!selAnchor) selAnchor = {c: selC, s: selS};
+  if (!selHead || selHead.c !== c || selHead.s !== s) { selHead = {c, s}; render(); }
+});
+document.addEventListener('mouseup', () => { isDragging = false; });
 
 document.addEventListener('keydown', e => {
+  // Undo / Redo
   if (e.ctrlKey && !e.shiftKey && e.key === 'z') {
-    if (tabUndoStack.length) { tabRedoStack.push(JSON.parse(JSON.stringify(cols))); cols = tabUndoStack.pop(); selC = -1; selS = -1; inputBuf = ''; render(); }
+    if (tabUndoStack.length) { tabRedoStack.push(JSON.parse(JSON.stringify(cols))); cols = tabUndoStack.pop(); selC = -1; selS = -1; selAnchor = null; selHead = null; inputBuf = ''; render(); }
     e.preventDefault(); return;
   }
   if (e.ctrlKey && e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
-    if (tabRedoStack.length) { tabUndoStack.push(JSON.parse(JSON.stringify(cols))); cols = tabRedoStack.pop(); selC = -1; selS = -1; inputBuf = ''; render(); }
+    if (tabRedoStack.length) { tabUndoStack.push(JSON.parse(JSON.stringify(cols))); cols = tabRedoStack.pop(); selC = -1; selS = -1; selAnchor = null; selHead = null; inputBuf = ''; render(); }
     e.preventDefault(); return;
   }
+  // Copy / Cut
+  if (e.ctrlKey && (e.key === 'c' || e.key === 'x')) {
+    const b = selBounds();
+    if (!b) return;
+    e.preventDefault();
+    const clipCols = [];
+    for (let c = b.minC; c <= b.maxC; c++) {
+      if (!cols[c] || cols[c].type !== 'notes') continue;
+      clipCols.push(Array.from({length: b.maxS - b.minS + 1}, (_, i) => cols[c].values[b.minS + i] || ''));
+    }
+    _clipboard = { cols: clipCols, strCount: b.maxS - b.minS + 1 };
+    if (e.key === 'x') {
+      tabPushUndo();
+      for (let c = b.minC; c <= b.maxC; c++) {
+        if (cols[c] && cols[c].type === 'notes') for (let s = b.minS; s <= b.maxS; s++) cols[c].values[s] = '';
+      }
+      selAnchor = null; selHead = null; render();
+    }
+    return;
+  }
+  // Paste
+  if (e.ctrlKey && e.key === 'v') {
+    if (!_clipboard || selC < 0) return;
+    e.preventDefault();
+    tabPushUndo();
+    let ci = selC;
+    for (let pi = 0; pi < _clipboard.cols.length; pi++) {
+      while (ci < cols.length && cols[ci].type !== 'notes') ci++;
+      if (ci >= cols.length) cols.push({ type: 'notes', values: Array(NS).fill('') });
+      const clipCol = _clipboard.cols[pi];
+      for (let ds = 0; ds < _clipboard.strCount; ds++) {
+        const s = selS + ds;
+        if (s < NS) cols[ci].values[s] = clipCol[ds] || '';
+      }
+      ci++;
+    }
+    render(); return;
+  }
   if (selC < 0) return;
+  // Shift+Arrow: extend rectangular selection
+  if (e.shiftKey && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) {
+    e.preventDefault();
+    if (!selAnchor) selAnchor = {c: selC, s: selS};
+    const head = selHead || selAnchor;
+    let nc = head.c, ns = head.s;
+    if (e.key === 'ArrowRight') { nc++; while (nc < cols.length && cols[nc] && cols[nc].type === 'bar') nc++; }
+    else if (e.key === 'ArrowLeft') { nc--; while (nc >= 0 && cols[nc] && cols[nc].type === 'bar') nc--; }
+    else if (e.key === 'ArrowDown') ns = Math.min(NS - 1, ns + 1);
+    else if (e.key === 'ArrowUp')   ns = Math.max(0, ns - 1);
+    nc = Math.max(0, Math.min(cols.length - 1, nc));
+    if (cols[nc] && cols[nc].type === 'notes') selHead = {c: nc, s: ns};
+    render(); return;
+  }
+  // Digit input: clear selection
   if (e.key >= '0' && e.key <= '9') {
+    selAnchor = null; selHead = null;
     if (!inputBuf) tabPushUndo();
     const next = inputBuf + e.key;
     inputBuf = (+next <= 24 && next.length <= 2) ? next : e.key;
-    render(); e.preventDefault();
-  } else if (e.key === 'Backspace') {
-    tabPushUndo();
-    inputBuf = '';
-    if (cols[selC]) cols[selC].values[selS] = '';
-    render(); e.preventDefault();
-  } else if (e.key === 'ArrowRight' || e.key === 'Tab') {
-    moveSel(1, 0); e.preventDefault();
-  } else if (e.key === 'ArrowLeft') {
-    moveSel(-1, 0); e.preventDefault();
-  } else if (e.key === 'ArrowUp') {
-    moveSel(0, -1); e.preventDefault();
-  } else if (e.key === 'ArrowDown') {
-    moveSel(0, 1); e.preventDefault();
-  } else if (e.key === 'Enter') {
-    commit(); moveSel(1, 0); e.preventDefault();
-  } else if (e.key === 'Escape') {
-    commit(); selC = -1; selS = -1; render();
+    render(); e.preventDefault(); return;
+  }
+  // Backspace: clear selection rectangle or single cell
+  if (e.key === 'Backspace') {
+    e.preventDefault();
+    const b = selBounds();
+    if (b) {
+      tabPushUndo();
+      for (let c = b.minC; c <= b.maxC; c++) {
+        if (cols[c] && cols[c].type === 'notes') for (let s = b.minS; s <= b.maxS; s++) cols[c].values[s] = '';
+      }
+      selAnchor = null; selHead = null; inputBuf = ''; render();
+    } else {
+      tabPushUndo(); inputBuf = '';
+      if (cols[selC]) cols[selC].values[selS] = '';
+      render();
+    }
+    return;
+  }
+  // Navigation (clears selection)
+  if (e.key === 'ArrowRight' || e.key === 'Tab') { moveSel(1, 0); e.preventDefault(); return; }
+  if (e.key === 'ArrowLeft')  { moveSel(-1, 0); e.preventDefault(); return; }
+  if (e.key === 'ArrowUp')    { moveSel(0, -1); e.preventDefault(); return; }
+  if (e.key === 'ArrowDown')  { moveSel(0,  1); e.preventDefault(); return; }
+  if (e.key === 'Enter')      { commit(); moveSel(1, 0); e.preventDefault(); return; }
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    if (selAnchor) { selAnchor = null; selHead = null; render(); }
+    else { commit(); selC = -1; selS = -1; render(); }
   }
 });
 
-document.getElementById('btn-col').addEventListener('click', () => {
+document.getElementById('btn-add-col').addEventListener('click', () => {
   tabPushUndo(); commit();
-  if (selC >= 0) cols.splice(selC + 1, 0, { type: 'notes', values: Array(NS).fill('') });
-  else addNote();
+  const pos = selC >= 0 ? selC + 1 : cols.length;
+  cols.splice(pos, 0, { type: 'notes', values: Array(NS).fill('') });
+  selC = pos; selS = selS >= 0 ? selS : 0;
+  render();
+});
+document.getElementById('btn-del-col').addEventListener('click', () => {
+  let target = selC;
+  if (target < 0) {
+    for (let i = cols.length - 1; i >= 0; i--) { if (cols[i].type === 'notes') { target = i; break; } }
+  }
+  if (target < 0 || !cols[target] || cols[target].type !== 'notes') return;
+  tabPushUndo(); commit();
+  cols.splice(target, 1);
+  selC = Math.min(target, cols.length - 1);
+  while (selC >= 0 && cols[selC] && cols[selC].type === 'bar') selC--;
+  if (selC < 0 || !cols[selC]) { selC = -1; selS = -1; }
+  inputBuf = ''; render();
+});
+document.getElementById('btn-add-bar').addEventListener('click', () => {
+  tabPushUndo(); commit();
+  const w = barWidth();
+  cols.push({ type: 'bar' });
+  for (let i = 0; i < w; i++) cols.push({ type: 'notes', values: Array(NS).fill('') });
   selC = -1; selS = -1; render();
 });
-document.getElementById('btn-bar').addEventListener('click',    () => {
-  tabPushUndo(); commit();
-  if (selC >= 0) cols.splice(selC + 1, 0, { type: 'bar' });
-  else addBar();
-  selC = -1; selS = -1; render();
-});
-document.getElementById('btn-del').addEventListener('click',    () => {
-  if (!cols.length) return;
+document.getElementById('btn-del-bar').addEventListener('click', () => {
+  let last = -1;
+  for (let i = cols.length - 1; i >= 0; i--) { if (cols[i].type === 'bar') { last = i; break; } }
+  if (last < 0) return;
   tabPushUndo();
-  if (selC === cols.length - 1) { selC = -1; selS = -1; }
-  cols.pop(); render();
+  if (selC >= last) { selC = -1; selS = -1; }
+  cols.splice(last, cols.length - last);
+  inputBuf = ''; render();
 });
-document.getElementById('btn-clear').addEventListener('click',  () => {
+document.getElementById('btn-clear').addEventListener('click', () => {
   tabPushUndo();
   cols.forEach(col => { if (col.type === 'notes') col.values = Array(NS).fill(''); });
   selC = -1; selS = -1; inputBuf = ''; render();
