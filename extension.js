@@ -1,4 +1,4 @@
-const vscode = require('vscode');
+﻿const vscode = require('vscode');
 const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -567,12 +567,6 @@ function renderChordProLogic(context, onSuccess) {
         outputFile = suffix ? `${fileBasenameNoExtension}_${suffix}.pdf` : `${fileBasenameNoExtension}.pdf`;
     }
 
-    const scriptPath = path.join(context.extensionPath, 'resources', 'bash_for_chordpro_task.sh');
-    if (!fs.existsSync(scriptPath)) {
-        vscode.window.showErrorMessage("Bash script not found!");
-        return;
-    }
-
     // Determine output directory: explicit `output =` in file → use fileDirname as before.
     // Otherwise apply the configured pdfOutputFolder setting.
     let outputDir = fileDirname;
@@ -591,11 +585,10 @@ function renderChordProLogic(context, onSuccess) {
         ? outputFile
         : path.resolve(outputDir, outputFile);
 
-    // Build the command string to execute the bash script
-    let command = `bash "${scriptPath}" "${filePath}" "${fullOutputPath}" "${config_path}"`;
+    // Call chordpro CLI directly — works on all platforms without a bash wrapper
+    let command = `chordpro "${filePath}" --output "${fullOutputPath}" --config="${config_path}"`;
     if (options) {
-        // Ensure options are quoted in case they contain spaces
-        command += ` "${options}"`;
+        command += ` ${options}`;
     }
 
     console.log('File Directory:', fileDirname);
@@ -604,15 +597,13 @@ function renderChordProLogic(context, onSuccess) {
     // Execute the command
     exec(command, (error, stdout, stderr) => {
         if (error) {
-            vscode.window.showErrorMessage(`Error: ${error.message}`);
+            // Non-zero exit: real failure — prefer stderr for the message as it has details
+            vscode.window.showErrorMessage(`ChordPro error: ${stderr || error.message}`);
             return;
         }
-        if (stderr) {
-            vscode.window.showErrorMessage(`stderr: ${stderr}`);
-            return;
-        }
-
-        vscode.window.showInformationMessage(`ChordPro PDF rendered.`);
+        // stderr with exit code 0 = warnings only (e.g. unknown chords in strumming rows)
+        if (stderr) { console.warn('ChordPro warnings:', stderr); }
+        vscode.window.showInformationMessage(stderr ? 'ChordPro PDF rendered (with warnings — check Output panel).' : 'ChordPro PDF rendered.');
         if (onSuccess) { onSuccess(fullOutputPath); }
     });
 }
@@ -2980,6 +2971,29 @@ input:checked ~ .set-switch-track::before { transform: translateX(14px); }
 .cg-beat-rep { background: rgba(128,128,128,0.06); }
 .cg-rep-sym { font-size: 1.3em; font-weight: 700; color: var(--fg-muted); opacity: 0.45; }
 .cg-beat-split { flex-direction: column; align-items: stretch; justify-content: center; padding: 2px 1px 20px; gap: 0; overflow: hidden; }
+.cg-margin-l { opacity: 0.65; border-right: 2px solid var(--border); margin-right: 2px; }
+.cg-margin-r { opacity: 0.65; border-left: 2px solid var(--border); margin-left: 2px; }
+.cg-margin-beat { min-height: 32px; align-items: center; }
+.cg-margin-text { font-size: 0.72em; color: var(--fg-muted); white-space: nowrap; text-align: center; line-height: 1.2; }
+.cg-beat-empty { background: transparent; }
+.cg-bl-double { border-left: 4px double var(--chord); }
+.cg-bl-rstart { border-left: 3px solid var(--chord); }
+.cg-bl-rstop  { border-left: 3px solid var(--chord); }
+.cg-bl-both   { border-left: 3px solid var(--chord); }
+.cg-bl-r-double { border-right: 4px double var(--chord); }
+.cg-bl-r-end    { border-right: 4px solid var(--chord); }
+.cg-bl-r-rstop  { border-right: 3px solid var(--chord); }
+.cg-bl-r-both   { border-right: 3px solid var(--chord); }
+.cg-strum-row { margin-bottom: 1px; margin-top: -4px; }
+.cg-strum-label { background: transparent; opacity: 0.5; font-style: italic; }
+.cg-beat-strum { min-height: 28px; flex-direction: row; align-items: center; gap: 2px; padding: 2px 3px; }
+.cg-beat-muted { opacity: 0.42; }
+@font-face { font-family:'ChordProSymbols'; src:url('data:font/truetype;base64,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Q2hvcmRQcm9TeW1ib2xzAABSAGUAZwB1AGwAYQByAABSZWd1bGFyAABGAG8AbgB0AEYAbwByAGcAZQAgADIALgAwACAAOgAgAE0AdQBzAGkAYwBhAGwAIABTAHkAbQBiAG8AbABzACAARgBvAHIAIABDAGgAbwByAGQAUAByAG8AIAA6ACAAMQA4AC0ANgAtADIAMAAyADUAAEZvbnRGb3JnZSAyLjAgOiBNdXNpY2FsIFN5bWJvbHMgRm9yIENob3JkUHJvIDogMTgtNi0yMDI1AABNAHUAcwBpAGMAYQBsACAAUwB5AG0AYgBvAGwAcwAgAEYAbwByACAAQwBoAG8AcgBkAFAAcgBvAABNdXNpY2FsIFN5bWJvbHMgRm9yIENob3JkUHJvAABWAGUAcgBzAGkAbwBuACAAMAAwADAALgA0ADAAMAAAVmVyc2lvbiAwMDAuNDAwAABDAGgAbwByAGQAUAByAG8AUwB5AG0AYgBvAGwAcwAAQ2hvcmRQcm9TeW1ib2xzAAAAAAIAAAAAAAD/ZwBmAAAAAAAAAAAAAAAAAAAAAAAAAAAAUgAAAAEAAgECAQMBBAEFAQYBBwEIAQkBCgELAQwAEgENAQ4BDwEQAREBEgETARQBFQEWARcBGAEZARoBGwEcACQAJQAmACcAKAApACoAKwAsAC0ALgAvADAAMQAyADMANAA1ADYANwA4ADkAOgA7ADwAPQEdAR4BHwEgASEBIgEjASQBJQEmAScBKAEpASoBKwEsAS0BLgEvATABMQEyATMBNAE1BEZsYXQHTmF0dXJhbAVTaGFycAVkZWx0YQd1bmlFMDQwB3VuaUUwNDEHdW5pRTA0Mgd1bmlFMDQzCHVuaTFEMTBFCHVuaTFEMTBGCHVuaUUwNDJ4ATABMQEyATMBNAE1ATYBNwE4ATkHdW5pRTAzMAd1bmlFMDMxB3VuaUUwMzIHdW5pRTAzMwd1bmlFMDM0B3VuaUUwMzUNc3RydW1hcnJvdy11cBFzdHJ1bWFycm93LXVwLWFjYxVzdHJ1bWFycm93LXVwLWFjYy1hcnAVc3RydW1hcnJvdy11cC1hY2Mtc3RjEXN0cnVtYXJyb3ctdXAtYXJwEXN0cnVtYXJyb3ctdXAtbXV0FXN0cnVtYXJyb3ctdXAtbXV0LWFjYxlzdHJ1bWFycm93LXVwLW11dC1hY2MtYXJwGXN0cnVtYXJyb3ctdXAtbXh0LWFjYy1zdGMVc3RydW1hcnJvdy11cC1tdXQtYXJwFXN0cnVtYXJyb3ctdXAtbXh0LXN0YxFzdHJ1bWFycm93LXVwLXN0Yw9zdHJ1bWFycm93LWRvd24Tc3RydW1hcnJvdy1kb3duLWFjYxdzdHJ1bWFycm93LWRvd24tYWNjLWFycBdzdHJ1bWFycm93LWRvd24tYWNjLXN0YxNzdHJ1bWFycm93LWRvd24tYXJwE3N0cnVtYXJyb3ctZG93bi1tdXQXc3RydW1hcnJvdy1kb3duLW11dC1hY2Mbc3RydW1hcnJvdy1kb3duLW11dC1hY2MtYXJwG3N0cnVtYXJyb3ctZG93bi1teHQtYWNjLXN0YxdzdHJ1bWFycm93LWRvd24tbXV0LWFycBdzdHJ1bWFycm93LWRvd24tbXh0LXN0YxNzdHJ1bWFycm93LWRvd24tc3RjD3N0cnVtYXJyb3ctbXV0ZQAAAAAAAf//AAIAAAABAAAAAOOt/IAAAAAA5HhOVwAAAADkeE5X') format('truetype'); font-weight:normal; font-style:normal; }
+.strum-gl { display: inline-block; font-family: 'ChordProSymbols', sans-serif; font-size: 1.3em; line-height: 1; opacity: 0.75; }
+.strum-acc { opacity: 1; font-size: 1.6em; color: var(--chord); }
+.strum-rest { font-size: 0.7em; opacity: 0.25; }
+.strum-beat-num { font-size: 0.6em; opacity: 0.45; font-weight: 700; }
+.cg-opt-paren { opacity: 0.45; font-weight: 400; font-size: 0.8em; }
 .cg-chord-top { font-weight: 700; color: var(--chord); text-align: center; line-height: 1.2; cursor: help; white-space: nowrap; }
 .cg-chord-bot { font-weight: 700; color: var(--chord); text-align: center; line-height: 1.2; cursor: help; white-space: nowrap; }
 .cg-split-line { height: 0.5px; background: var(--border); margin: 2px 0; flex-shrink: 0; }
@@ -3267,12 +3281,13 @@ var PARSED = null;
 // ── Browser transpose helpers ─────────────────────────────────────────────
 var _SH = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 var _FL = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+var prefFlats = false;
 function _tn(root, n) {
   var fi = _FL.indexOf(root), si = _SH.indexOf(root);
-  var pf = fi !== -1 && si === -1;
+  var origPf = fi !== -1 && si === -1;
   var idx = si !== -1 ? si : fi;
   if (idx < 0) return root;
-  return (pf ? _FL : _SH)[((idx + n) % 12 + 12) % 12];
+  return (origPf || prefFlats ? _FL : _SH)[((idx + n) % 12 + 12) % 12];
 }
 function transposeChordName(chord, n) {
   if (!n) return chord;
@@ -3314,7 +3329,7 @@ function parse(text) {
     const dir = line.trim().match(/^\\{([^}]+)\\}$/);
     if (dir) {
       const ci = dir[1].indexOf(':');
-      const k = (ci >= 0 ? dir[1].slice(0, ci) : dir[1]).trim().toLowerCase();
+      const k = (ci >= 0 ? dir[1].slice(0, ci) : dir[1]).trim().toLowerCase().split(/\\s/)[0];
       const v = ci >= 0 ? dir[1].slice(ci + 1).trim() : '';
       if (k === 'title'  || k === 't')   { meta.title    = v; continue; }
       if (k === 'subtitle'||k === 'st')  { meta.subtitle = v; continue; }
@@ -3330,7 +3345,22 @@ function parse(text) {
       if (k === 'end_of_bridge'  ||k==='eob') { next('verse',      '',           false); continue; }
       if (k === 'start_of_tab'   ||k==='sot') { next('tab',        v||'Tab',     true);  continue; }
       if (k === 'end_of_tab'     ||k==='eot') { next('verse',      '',           false); continue; }
-      if (k === 'start_of_grid'  ||k==='sog') { next('grid',       v||'Grid',    true);  continue; }
+      if (k === 'start_of_grid'  ||k==='sog') {
+        var gShape = '', gLabel = '';
+        if (ci >= 0) {
+          var gvm = v.match(/^(\\d+(?:[+x]\\d+)*)(?:\\s+(.*))?$/);
+          if (gvm) { gShape = gvm[1]; gLabel = (gvm[2]||'').trim(); }
+          else { gLabel = v; }
+        } else {
+          var gsm = dir[1].match(/shape=["']?([^"'\\s}]+)["']?/);
+          if (gsm) gShape = gsm[1];
+          var glm = dir[1].match(/label=["']([^"']+)["']/);
+          if (glm) gLabel = glm[1];
+        }
+        next('grid', gLabel||'Grid', true);
+        if (gShape) cur.shape = gShape;
+        continue;
+      }
       if (k === 'end_of_grid'    ||k==='eog') { next('verse',      '',           false); continue; }
       if (k === 'x_start_section')            { next('x-section',  v||'Section', true);  continue; }
       if (k === 'x_end_section')              { next('verse',      '',           false); continue; }
@@ -3367,8 +3397,24 @@ function parse(text) {
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
-function safeFmt(s) {
-  return esc(s).replace(new RegExp('&lt;(\\/?(b|i|em|strong|u|s))&gt;', 'gi'), '\x3c$1\x3e');
+function safeFmt(s, transpose) {
+  // One-pass: handle <span color="...">, </span>, basic inline tags, and (ChordName) hovers.
+  // NOTE: regex literals inside a template literal need doubled backslashes (\\s not \s).
+  var PAT = /(<span\\s+colou?r=["']([^"']+)["']>)|(<\\/span>)|(<\\/?(b|i|em|strong|u|s)>)|\\(([A-G][b#]?[^\\s()]{0,15})\\)/gi;
+  var out = '', last = 0, m;
+  PAT.lastIndex = 0;
+  while ((m = PAT.exec(s)) !== null) {
+    out += esc(s.slice(last, m.index));
+    if (m[2])      out += '<span style="color:' + esc(m[2]) + '">';
+    else if (m[3]) out += '</span>';
+    else if (m[4]) out += m[4].toLowerCase();
+    else if (m[6]) {
+      var tc = transpose != null ? transposeChordName(m[6], transpose) : m[6];
+      out += '(<span class="chord" data-chord="' + esc(tc) + '">' + esc(dispChord(tc)) + '</span>)';
+    }
+    last = m.index + m[0].length;
+  }
+  return out + esc(s.slice(last));
 }
 function _spGroupsHtml(items, transpose) {
   var groups = [];
@@ -3396,32 +3442,60 @@ function parseGridRows(lines) {
   function isBl(t) { return !!KNOWN[t] || /^:?[|][1-9]$/.test(t); }
   var rows = [];
   for (var li = 0; li < lines.length; li++) {
-    var tokens = lines[li].trim().split(/\\s+/).filter(Boolean);
+    var raw = lines[li].trim().replace(/<span\\s+colou?r=["']([^"']+)["']>([^<]*)<\\/span>/gi, '\x01$1\x02$2\x03');
+    var tokens = raw.replace(/<[^>]+>/g, '').split(/\\s+/).filter(Boolean);
     if (!tokens.length) continue;
-    var bars = [], openBl = null, beats = [], ev = null;
+    var isStrum = false;
+    if (tokens[0] === '|s') { isStrum = true; tokens[0] = '|'; }
+    var bars = [], openBl = null, beats = [], ev = null, marginLeft = null;
     for (var ti = 0; ti < tokens.length; ti++) {
       var tok = tokens[ti];
       if (isBl(tok)) {
         if (ev) { beats.push(ev); ev = null; }
-        if (openBl !== null) { bars.push({ open: openBl, beats: beats, close: tok }); beats = []; }
+        if (openBl === null && marginLeft === null) {
+          marginLeft = beats.slice(); beats = [];
+        } else if (openBl !== null) {
+          bars.push({ open: openBl, beats: beats, close: tok }); beats = [];
+        }
         openBl = tok;
       } else if (tok === '.') {
-        if (ev) ev.span++;
+        if (ev) { ev.span++; }
+        else { beats.push({ chords: [''], span: 1 }); }
       } else {
         if (ev) beats.push(ev);
-        ev = { chords: tok.split('~'), span: 1 };
+        var tokColor = null, tokText = tok;
+        if (tok.charCodeAt(0) === 1) {
+          var cp = tok.indexOf('\x02');
+          tokColor = tok.slice(1, cp);
+          tokText = tok.slice(cp + 1).replace('\x03', '');
+        }
+        ev = { chords: tokText.split('~'), span: 1, color: tokColor };
       }
     }
     if (ev) beats.push(ev);
-    if (openBl !== null && beats.length) bars.push({ open: openBl, beats: beats, close: null });
-    if (bars.length) rows.push(bars);
+    var marginRight = (openBl !== null && beats.length) ? beats : [];
+    if (bars.length || (marginLeft && marginLeft.length) || marginRight.length) {
+      rows.push({ bars: bars, isStrum: isStrum, marginLeft: marginLeft || [], marginRight: marginRight });
+    }
   }
   return rows;
 }
 
-function renderChordGridHtml(lines, transpose) {
+function renderChordGridHtml(lines, transpose, shapeAttr) {
   var rows = parseGridRows(lines);
   if (!rows.length) return '';
+
+  function parseShape(s) {
+    if (!s) return { beats: 4, left: 0, right: 0 };
+    var parts = s.split('+');
+    var left = 0, right = 0, main = parts[0];
+    if (parts.length === 3) { left = parseInt(parts[0])||0; main = parts[1]; right = parseInt(parts[2])||0; }
+    else if (parts.length === 2) { left = parseInt(parts[0])||0; main = parts[1]; }
+    var xi = main.indexOf('x');
+    var beats = xi > 0 ? parseInt(main.slice(xi+1))||4 : parseInt(main)||4;
+    return { beats: beats, left: left, right: right };
+  }
+  var shape = parseShape(shapeAttr);
 
   function chordFS(len) {
     var c = len <= 2 ? 70 : len <= 4 ? 40 : len <= 6 ? 27 : len <= 8 ? 20 : 15;
@@ -3429,7 +3503,9 @@ function renderChordGridHtml(lines, transpose) {
   }
 
   function chordInner(raw) {
-    var tn = transposeChordName(raw, transpose || 0);
+    var isOpt = raw.charAt(0) === '(' && raw.charAt(raw.length-1) === ')';
+    var name = isOpt ? raw.slice(1,-1) : raw;
+    var tn = transposeChordName(name, transpose || 0);
     var _ui = tn.indexOf('_'), dn = _ui > 0 ? tn.slice(0, _ui) + (tn.indexOf('/') > _ui ? tn.slice(tn.indexOf('/')) : '') : tn;
     var slash = dn.lastIndexOf('/');
     var bass = slash > 0 ? dn.slice(slash) : '';
@@ -3449,12 +3525,13 @@ function renderChordGridHtml(lines, transpose) {
       else                      { base = root + qual; ext = rest; }
     }
     var _ui2 = tn.indexOf('_'), voicing = _ui2 > 0 ? tn.slice(_ui2 + 1) : '';
+    var innerHtml = esc(base) +
+      (ext  ? '<sup class="cg-ch-ext' + (usedMap ? ' ' + symClass(ext) : '') + '">' + esc(ext) + '</sup>' : '') +
+      (showVoicings && voicing ? '<span class="cg-ch-voicing">' + toSubDigits(voicing) + '</span>' : '') +
+      (bass ? '<span class="cg-ch-bass">' + esc(bass) + '</span>' : '');
     return {
       tn: tn,
-      html: esc(base) +
-        (ext  ? '<sup class="cg-ch-ext' + (usedMap ? ' ' + symClass(ext) : '') + '">' + esc(ext) + '</sup>' : '') +
-        (showVoicings && voicing ? '<span class="cg-ch-voicing">' + toSubDigits(voicing) + '</span>' : '') +
-        (bass ? '<span class="cg-ch-bass">' + esc(bass) + '</span>' : ''),
+      html: isOpt ? '<span class="cg-opt-paren">(</span>' + innerHtml + '<span class="cg-opt-paren">)</span>' : innerHtml,
       base: base,
       len: dn.length
     };
@@ -3465,6 +3542,12 @@ function renderChordGridHtml(lines, transpose) {
     var sp = beat.span > 1 ? ' style="grid-column:span ' + beat.span + '"' : '';
     var lc = isLast ? ' cg-last' : '';
     var dd = '<div class="cg-beat-dots">' + '<i></i>'.repeat(beat.span) + '</div>';
+    if (chords.length === 1 && chords[0] === '') {
+      return '<div class="cg-beat cg-beat-empty' + lc + '"' + sp + '>' + dd + '</div>';
+    }
+    if (chords.length === 1 && chords[0] === '%%') {
+      return '<div class="cg-beat cg-beat-rep' + lc + '"' + sp + '><span class="cg-rep-sym">%%</span>' + dd + '</div>';
+    }
     if (chords.length === 1 && chords[0] === '%') {
       return '<div class="cg-beat cg-beat-rep' + lc + '"' + sp + '><span class="cg-rep-sym">%</span>' + dd + '</div>';
     }
@@ -3478,25 +3561,85 @@ function renderChordGridHtml(lines, transpose) {
         dd + '</div>';
     }
     var c = chordInner(chords[0]);
-    return '<div class="cg-beat' + lc + '"' + sp + '><span class="cg-chord" style="' + chordFS(c.len) + '" data-chord="' + esc(c.tn) + '">' + c.html + '</span>' + dd + '</div>';
+    var colorCss = beat.color ? ';color:' + esc(beat.color) : '';
+    return '<div class="cg-beat' + lc + '"' + sp + '><span class="cg-chord" style="' + chordFS(c.len) + colorCss + '" data-chord="' + esc(c.tn) + '">' + c.html + '</span>' + dd + '</div>';
   }
 
-  var barCounter = 0;
+  function strumGlyph(tok) {
+    var GLYPHS = {
+      'u':'\u2190','up':'\u2190',
+      'ua':'\u2191','us':'\u2192',
+      'u+':'\u2193','up+':'\u2193',
+      'ua+':'\u2194','us+':'\u2195',
+      'ux':'\u2196','uxa':'\u2197',
+      'uxs':'\u2198','ux+':'\u2199',
+      'uxa+':'\u219a','uxs+':'\u219b',
+      'd':'\u21a0','dn':'\u21a0',
+      'da':'\u21a1','ds':'\u21a2',
+      'd+':'\u21a3','dn+':'\u21a3',
+      'da+':'\u21a4','ds+':'\u21a5',
+      'dx':'\u21a6','dxa':'\u21a7',
+      'dxs':'\u21a8','dx+':'\u21a9',
+      'dxa+':'\u21aa','dxs+':'\u21ab',
+      'x':'\u21b0'
+    };
+    var g = GLYPHS[tok.toLowerCase()];
+    if (!g) return '';
+    var cls = 'strum-gl' + (tok.indexOf('+') >= 0 ? ' strum-acc' : '');
+    return '<span class="' + cls + '">' + g + '</span>';
+  }
+
+  function strumBeatHtml(beat, isLast) {
+    var sp = beat.span > 1 ? ' style="grid-column:span ' + beat.span + '"' : '';
+    var lc = isLast ? ' cg-last' : '';
+    var parts = beat.chords, arrows = '';
+    for (var pi = 0; pi < parts.length; pi++) {
+      if (parts[pi] === '') continue;
+      if (/^\\*\\d+$/.test(parts[pi])) { arrows += '<span class="strum-beat-num">' + parts[pi].slice(1) + '</span>'; continue; }
+      arrows += strumGlyph(parts[pi]);
+    }
+    return '<div class="cg-beat cg-beat-strum' + lc + '"' + sp + '>' + (arrows || '<span class="strum-rest">·</span>') + '</div>';
+  }
+
+  var BL_L = { '||': ' cg-bl-double', '|:': ' cg-bl-rstart', ':|': ' cg-bl-rstop', ':|:': ' cg-bl-both', '|.': '' };
+  var BL_R = { '||': ' cg-bl-r-double', '|.': ' cg-bl-r-end', ':|': ' cg-bl-r-rstop', ':|:': ' cg-bl-r-both' };
+  function marginBeatHtml(beat) {
+    var text = beat.chords.filter(function(c) { return c !== ''; }).join(' ');
+    var sp = beat.span > 1 ? ' style="grid-column:span ' + beat.span + '"' : '';
+    return '<div class="cg-beat cg-margin-beat"' + sp + '>' + (text ? '<span class="cg-margin-text">' + esc(text) + '</span>' : '') + '</div>';
+  }
+
+  var barCounter = 0, rowLabel = 0;
   var html = '<div class="chord-grid">';
   for (var ri = 0; ri < rows.length; ri++) {
-    var bars = rows[ri];
-    html += '<div class="cg-row"><span class="cg-row-label">' + String.fromCharCode(65 + ri) + '</span>';
+    var row = rows[ri], bars = row.bars, isStrum = row.isStrum;
+    html += '<div class="cg-row' + (isStrum ? ' cg-strum-row' : '') + '">';
+    html += '<span class="cg-row-label' + (isStrum ? ' cg-strum-label' : '') + '">' + (isStrum ? 's' : String.fromCharCode(65 + rowLabel++)) + '</span>';
+    if (shape.left > 0) {
+      var mlPx = shape.left * 44;
+      html += '<div class="cg-bar cg-margin-l" style="--beats:' + shape.left + '; flex: 0 0 ' + mlPx + 'px; width: ' + mlPx + 'px;">';
+      for (var mi = 0; mi < row.marginLeft.length; mi++) html += marginBeatHtml(row.marginLeft[mi]);
+      html += '</div>';
+    }
     for (var bi = 0; bi < bars.length; bi++) {
-      barCounter++;
-      var bar = bars[bi];
-      var beats = bar.beats;
-      var totalBeats = 0;
+      if (!isStrum) barCounter++;
+      var bar = bars[bi], beats = bar.beats, totalBeats = 0;
       beats.forEach(function(b) { totalBeats += b.span; });
-      if (!totalBeats) totalBeats = 4;
-      html += '<div class="cg-bar" style="--beats:' + totalBeats + '"><span class="cg-bar-num">' + barCounter + '</span>';
+      if (!totalBeats) totalBeats = shape.beats;
+      var dispBeats = Math.max(totalBeats, shape.beats);
+      var blL = BL_L[bar.open] !== undefined ? BL_L[bar.open] : '';
+      var blR = (bar.close && BL_R[bar.close]) ? BL_R[bar.close] : '';
+      html += '<div class="cg-bar' + blL + blR + '" style="--beats:' + dispBeats + '">';
+      if (!isStrum) html += '<span class="cg-bar-num">' + barCounter + '</span>';
       for (var bii = 0; bii < beats.length; bii++) {
-        html += beatHtml(beats[bii], bii === beats.length - 1);
+        html += isStrum ? strumBeatHtml(beats[bii], bii === beats.length - 1) : beatHtml(beats[bii], bii === beats.length - 1);
       }
+      html += '</div>';
+    }
+    if (shape.right > 0) {
+      var mrPx = shape.right * 44;
+      html += '<div class="cg-bar cg-margin-r" style="--beats:' + shape.right + '; flex: 0 0 ' + mrPx + 'px; width: ' + mrPx + 'px;">';
+      for (var mi = 0; mi < row.marginRight.length; mi++) html += marginBeatHtml(row.marginRight[mi]);
       html += '</div>';
     }
     html += '</div>';
@@ -3544,7 +3687,7 @@ function render({ meta, sections }, transpose) {
       out.push('</pre>');
     } else if (sec.type === 'grid') {
       var gridLines = sec.lines.filter(function(l) { return l.type === 'grid-line'; }).map(function(l) { return l.text; });
-      out.push(renderChordGridHtml(gridLines, transpose));
+      out.push(renderChordGridHtml(gridLines, transpose, sec.shape));
     } else {
       for (const l of sec.lines) {
         if (l.type === 'chord-line') {
@@ -3555,13 +3698,13 @@ function render({ meta, sections }, transpose) {
             out.push('<span class="pair' + (tight ? ' tight' : '') + '">'
               + '<span class="chord"' + (dc ? ' data-chord="' + esc(dc) + '"' : '') + '>'
               + (dc ? esc(dispChord(dc)) : '&nbsp;') + '</span>'
-              + '<span class="lyric">'  + esc(s.lyric || ' ') + '</span>'
+              + '<span class="lyric">'  + safeFmt(s.lyric || ' ', transpose) + '</span>'
               + '</span>');
           }
           out.push('</div>');
-        } else if (l.type === 'lyric')        out.push('<div class="lyric-line">'  + safeFmt(l.text) + '</div>');
-        else if   (l.type === 'comment')      out.push('<div class="comment">'      + safeFmt(l.text) + '</div>');
-        else if   (l.type === 'comment-box')  out.push('<div class="comment comment-box">' + safeFmt(l.text) + '</div>');
+        } else if (l.type === 'lyric')        out.push('<div class="lyric-line">'  + safeFmt(l.text, transpose) + '</div>');
+        else if   (l.type === 'comment')      out.push('<div class="comment">'      + safeFmt(l.text, transpose) + '</div>');
+        else if   (l.type === 'comment-box')  out.push('<div class="comment comment-box">' + safeFmt(l.text, transpose) + '</div>');
         else if   (l.type === 'chorus-ref')   out.push('<div class="chorus-ref">[ Chorus ]</div>');
         else if   (l.type === 'empty')        out.push('<div class="empty-line"></div>');
         else if   (l.type === 'page-break')   out.push('<hr class="page-break">');
@@ -3892,6 +4035,11 @@ document.getElementById('trans-down').addEventListener('click', function() {
 });
 document.getElementById('trans-up').addEventListener('click', function() {
   previewTranspose++; _updateTransLabel(); rerender();
+});
+document.getElementById('trans-flat').addEventListener('click', function() {
+  prefFlats = !prefFlats;
+  this.classList.toggle('active', prefFlats);
+  rerender();
 });
 `;
 
@@ -4497,7 +4645,7 @@ function activate(context) {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src data:;">
 <style>
 ${SHARED_SONG_CSS}
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -4619,6 +4767,8 @@ body {
 #trans-down, #trans-up { font-size: 13px; }
 #trans-label { min-width: 28px; text-align: center; font-size: 12px; color: #aaa; padding: 0 2px; }
 #trans-label.active { color: #ffd700; }
+#trans-flat { font-size: 11px; font-family: sans-serif; border-radius: 6px !important; width: auto !important; padding: 0 6px !important; opacity: 0.55; }
+#trans-flat.active { opacity: 1; color: #ffd700; border-color: #ffd700; }
 #tap-btn    { font-size: 11px; font-family: sans-serif; border-radius: 6px !important; width: auto !important; padding: 0 7px !important; }
 #lyrics-btn { font-size: 11px; font-family: sans-serif; border-radius: 6px !important; width: auto !important; padding: 0 7px !important; }
 #lyrics-btn.active { color: #ffd700; border-color: #ffd700; }
@@ -4691,6 +4841,7 @@ ${SHARED_SONG_HTML}
       <button id="trans-down" title="Transpose down (♭)">♭</button>
       <span   id="trans-label">0</span>
       <button id="trans-up"   title="Transpose up (♯)">♯</button>
+      <button id="trans-flat" title="Prefer flats (e.g. Bb instead of A#)">♭/♯</button>
     </div>
   </div>
   <button id="font-smaller" title="Smaller text (A−)">A−</button>
@@ -5033,7 +5184,7 @@ setTimeout(function() {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data:;">
 <meta name="color-scheme" content="dark light">
 <style>
 ${SHARED_SONG_CSS}
@@ -5116,6 +5267,8 @@ body { padding-top: 52px; padding-bottom: 80px; }
 #trans-down, #trans-up { font-size: 13px; }
 #trans-label { min-width: 28px; text-align: center; font-size: 12px; color: #aaa; padding: 0 2px; }
 #trans-label.active { color: #ffd700; }
+#trans-flat { font-size: 11px; font-family: sans-serif; border-radius: 6px !important; width: auto !important; padding: 0 6px !important; opacity: 0.55; }
+#trans-flat.active { opacity: 1; color: #ffd700; border-color: #ffd700; }
 #save-btn    { font-size: 14px; opacity: 0.7; }
 #save-btn:hover { opacity: 1; }
 #lyrics-btn { font-size: 11px; font-family: sans-serif; border-radius: 6px !important; width: auto !important; padding: 0 7px !important; }
@@ -5140,6 +5293,7 @@ ${SHARED_SONG_HTML}
   <button id="trans-down"   title="Transpose down (♭)">♭</button>
   <span   id="trans-label">0</span>
   <button id="trans-up"     title="Transpose up (♯)">♯</button>
+  <button id="trans-flat"   title="Prefer flats (e.g. Bb instead of A#)">♭/♯</button>
   <button id="slower-btn"   title="Slower">−</button>
   <button id="play-btn"     title="Play / Pause (Space)">▶</button>
   <button id="faster-btn"   title="Faster">+</button>
